@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { ordersTable, orderItemsTable } from "@workspace/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, count, inArray } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
 
 const router = Router();
@@ -33,6 +33,11 @@ router.get("/orders", requireAuth, async (req, res) => {
       );
     }
 
+    const [totalRow] = await db
+      .select({ count: count() })
+      .from(ordersTable)
+      .where(and(...conditions));
+
     const orders = await db
       .select()
       .from(ordersTable)
@@ -41,7 +46,34 @@ router.get("/orders", requireAuth, async (req, res) => {
       .limit(limitNum)
       .offset(offset);
 
-    res.json({ orders, page: pageNum, limit: limitNum });
+    const orderIds = orders.map((o) => o.id);
+    const itemCounts =
+      orderIds.length > 0
+        ? await db
+            .select({ orderId: orderItemsTable.orderId, itemCount: count() })
+            .from(orderItemsTable)
+            .where(inArray(orderItemsTable.orderId, orderIds))
+            .groupBy(orderItemsTable.orderId)
+        : [];
+
+    const itemCountMap: Record<string, number> = {};
+    for (const ic of itemCounts) {
+      itemCountMap[ic.orderId] = ic.itemCount;
+    }
+
+    res.json({
+      orders: orders.map((o) => ({
+        id: o.id,
+        customerContact: o.customerContact,
+        status: o.status,
+        totalAmount: parseFloat(o.totalAmount as unknown as string),
+        itemCount: itemCountMap[o.id] ?? 0,
+        createdAt: o.createdAt,
+      })),
+      total: totalRow.count,
+      page: pageNum,
+      limit: limitNum,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to list orders" });
@@ -50,12 +82,13 @@ router.get("/orders", requireAuth, async (req, res) => {
 
 router.get("/orders/:orderId", requireAuth, async (req, res) => {
   try {
+    const orderId = String(req.params.orderId);
     const [order] = await db
       .select()
       .from(ordersTable)
       .where(
         and(
-          eq(ordersTable.id, req.params.orderId),
+          eq(ordersTable.id, orderId),
           eq(ordersTable.sellerId, req.seller!.sellerId)
         )
       )
@@ -68,7 +101,21 @@ router.get("/orders/:orderId", requireAuth, async (req, res) => {
       .select()
       .from(orderItemsTable)
       .where(eq(orderItemsTable.orderId, order.id));
-    res.json({ order: { ...order, items } });
+    res.json({
+      id: order.id,
+      customerContact: order.customerContact,
+      status: order.status,
+      totalAmount: parseFloat(order.totalAmount as unknown as string),
+      itemCount: items.length,
+      createdAt: order.createdAt,
+      items: items.map((item) => ({
+        id: item.id,
+        productNameSnapshot: item.productNameSnapshot,
+        priceSnapshot: parseFloat(item.priceSnapshot as unknown as string),
+        variantSnapshot: item.variantSnapshot,
+        quantity: item.quantity,
+      })),
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to get order" });
@@ -123,15 +170,30 @@ router.post("/orders", requireAuth, async (req, res) => {
       )
       .returning();
 
-    res.status(201).json({ order: { ...order, items } });
+    res.status(201).json({
+      id: order.id,
+      customerContact: order.customerContact,
+      status: order.status,
+      totalAmount: parseFloat(order.totalAmount as unknown as string),
+      itemCount: items.length,
+      createdAt: order.createdAt,
+      items: items.map((item) => ({
+        id: item.id,
+        productNameSnapshot: item.productNameSnapshot,
+        priceSnapshot: parseFloat(item.priceSnapshot as unknown as string),
+        variantSnapshot: item.variantSnapshot,
+        quantity: item.quantity,
+      })),
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to create order" });
   }
 });
 
-router.put("/orders/:orderId/status", requireAuth, async (req, res) => {
+router.patch("/orders/:orderId/status", requireAuth, async (req, res) => {
   try {
+    const orderId = String(req.params.orderId);
     const { status } = req.body as {
       status: "pending" | "confirmed" | "fulfilled";
     };
@@ -140,7 +202,7 @@ router.put("/orders/:orderId/status", requireAuth, async (req, res) => {
       .set({ status, updatedAt: new Date() })
       .where(
         and(
-          eq(ordersTable.id, req.params.orderId),
+          eq(ordersTable.id, orderId),
           eq(ordersTable.sellerId, req.seller!.sellerId)
         )
       )
@@ -149,7 +211,14 @@ router.put("/orders/:orderId/status", requireAuth, async (req, res) => {
       res.status(404).json({ error: "Order not found" });
       return;
     }
-    res.json({ order: updated });
+    res.json({
+      id: updated.id,
+      customerContact: updated.customerContact,
+      status: updated.status,
+      totalAmount: parseFloat(updated.totalAmount as unknown as string),
+      itemCount: 0,
+      createdAt: updated.createdAt,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to update order status" });

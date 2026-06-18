@@ -1,4 +1,4 @@
-import { useGetMe } from "@workspace/api-client-react";
+import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 import { getToken } from "@/lib/auth";
@@ -12,6 +12,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
     query: {
       enabled: !!token,
       retry: false,
+      queryKey: getGetMeQueryKey(),
     },
   });
 

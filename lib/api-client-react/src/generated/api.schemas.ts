@@ -199,10 +199,13 @@ export interface OrderListResponse {
 }
 
 export interface DashboardStats {
+  totalProducts: number;
   activeProducts: number;
   outOfStockProducts: number;
   hiddenProducts: number;
   totalOrders: number;
+  pendingOrders: number;
+  totalRevenue: number;
   recentOrders: Order[];
 }
 

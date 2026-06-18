@@ -1082,6 +1082,8 @@ components:
     DashboardStats:
       type: object
       properties:
+        totalProducts:
+          type: integer
         activeProducts:
           type: integer
         outOfStockProducts:
@@ -1090,15 +1092,22 @@ components:
           type: integer
         totalOrders:
           type: integer
+        pendingOrders:
+          type: integer
+        totalRevenue:
+          type: number
         recentOrders:
           type: array
           items:
             $ref: "#/components/schemas/Order"
       required:
+        - totalProducts
         - activeProducts
         - outOfStockProducts
         - hiddenProducts
         - totalOrders
+        - pendingOrders
+        - totalRevenue
         - recentOrders
 
     # ── Storage ───────────────────────────────────────────────────────────

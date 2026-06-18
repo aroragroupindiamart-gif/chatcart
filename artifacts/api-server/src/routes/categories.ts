@@ -40,7 +40,7 @@ router.post("/categories", requireAuth, async (req, res) => {
 
 router.patch("/categories/:categoryId", requireAuth, async (req, res) => {
   try {
-    const categoryId = parseInt(req.params.categoryId);
+    const categoryId = parseInt(String(req.params.categoryId));
     const { name } = req.body as { name: string };
     if (!name?.trim()) {
       res.status(400).json({ error: "Category name required" });
@@ -69,7 +69,7 @@ router.patch("/categories/:categoryId", requireAuth, async (req, res) => {
 
 router.delete("/categories/:categoryId", requireAuth, async (req, res) => {
   try {
-    const categoryId = parseInt(req.params.categoryId);
+    const categoryId = parseInt(String(req.params.categoryId));
     await db
       .delete(categoriesTable)
       .where(

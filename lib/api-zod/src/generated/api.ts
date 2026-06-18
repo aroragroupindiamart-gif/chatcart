@@ -439,10 +439,13 @@ export const GetOrderResponse = zod.object({
  * @summary Get dashboard summary stats
  */
 export const GetDashboardStatsResponse = zod.object({
+  "totalProducts": zod.number(),
   "activeProducts": zod.number(),
   "outOfStockProducts": zod.number(),
   "hiddenProducts": zod.number(),
   "totalOrders": zod.number(),
+  "pendingOrders": zod.number(),
+  "totalRevenue": zod.number(),
   "recentOrders": zod.array(zod.object({
   "id": zod.string().describe('e.g. ORD-00001'),
   "customerContact": zod.string().optional(),

@@ -117,7 +117,7 @@ router.post("/products", requireAuth, async (req, res) => {
 
 router.get("/products/:productId", requireAuth, async (req, res) => {
   try {
-    const productId = parseInt(req.params.productId);
+    const productId = parseInt(String(req.params.productId));
     const [product] = await db
       .select()
       .from(productsTable)
@@ -153,7 +153,7 @@ router.get("/products/:productId", requireAuth, async (req, res) => {
 
 router.patch("/products/:productId", requireAuth, async (req, res) => {
   try {
-    const productId = parseInt(req.params.productId);
+    const productId = parseInt(String(req.params.productId));
     const body = req.body as {
       name?: string;
       description?: string;
@@ -212,7 +212,7 @@ router.patch("/products/:productId", requireAuth, async (req, res) => {
 
 router.delete("/products/:productId", requireAuth, async (req, res) => {
   try {
-    const productId = parseInt(req.params.productId);
+    const productId = parseInt(String(req.params.productId));
     const affected = await db
       .update(productsTable)
       .set({ status: "deleted", deletedAt: new Date(), updatedAt: new Date() })
@@ -234,7 +234,7 @@ router.delete("/products/:productId", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/products/reorder", requireAuth, async (req, res) => {
+router.patch("/products/reorder", requireAuth, async (req, res) => {
   try {
     const { items } = req.body as { items: Array<{ id: number; sortOrder: number }> };
     if (!Array.isArray(items)) {
@@ -263,7 +263,7 @@ router.post("/products/reorder", requireAuth, async (req, res) => {
 
 router.post("/products/:productId/images", requireAuth, async (req, res) => {
   try {
-    const productId = parseInt(req.params.productId);
+    const productId = parseInt(String(req.params.productId));
     if (!(await assertProductBelongsToSeller(productId, req.seller!.sellerId))) {
       res.status(403).json({ error: "Forbidden" });
       return;
@@ -292,8 +292,8 @@ router.delete(
   requireAuth,
   async (req, res) => {
     try {
-      const productId = parseInt(req.params.productId);
-      const imageId = parseInt(req.params.imageId);
+      const productId = parseInt(String(req.params.productId));
+      const imageId = parseInt(String(req.params.imageId));
       if (!(await assertProductBelongsToSeller(productId, req.seller!.sellerId))) {
         res.status(403).json({ error: "Forbidden" });
         return;
@@ -314,12 +314,12 @@ router.delete(
   }
 );
 
-router.post(
+router.patch(
   "/products/:productId/images/reorder",
   requireAuth,
   async (req, res) => {
     try {
-      const productId = parseInt(req.params.productId);
+      const productId = parseInt(String(req.params.productId));
       if (!(await assertProductBelongsToSeller(productId, req.seller!.sellerId))) {
         res.status(403).json({ error: "Forbidden" });
         return;
@@ -351,7 +351,7 @@ router.post(
   requireAuth,
   async (req, res) => {
     try {
-      const productId = parseInt(req.params.productId);
+      const productId = parseInt(String(req.params.productId));
       if (!(await assertProductBelongsToSeller(productId, req.seller!.sellerId))) {
         res.status(403).json({ error: "Forbidden" });
         return;
@@ -381,8 +381,8 @@ router.patch(
   requireAuth,
   async (req, res) => {
     try {
-      const productId = parseInt(req.params.productId);
-      const variantId = parseInt(req.params.variantId);
+      const productId = parseInt(String(req.params.productId));
+      const variantId = parseInt(String(req.params.variantId));
       if (!(await assertProductBelongsToSeller(productId, req.seller!.sellerId))) {
         res.status(403).json({ error: "Forbidden" });
         return;
@@ -421,8 +421,8 @@ router.delete(
   requireAuth,
   async (req, res) => {
     try {
-      const productId = parseInt(req.params.productId);
-      const variantId = parseInt(req.params.variantId);
+      const productId = parseInt(String(req.params.productId));
+      const variantId = parseInt(String(req.params.variantId));
       if (!(await assertProductBelongsToSeller(productId, req.seller!.sellerId))) {
         res.status(403).json({ error: "Forbidden" });
         return;

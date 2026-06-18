@@ -1,6 +1,10 @@
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Layout } from "@/components/Layout";
-import { useListProducts, ProductStatus } from "@workspace/api-client-react";
+import {
+  useListProducts,
+  getListProductsQueryKey,
+  type ListProductsParams,
+} from "@workspace/api-client-react";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -23,10 +27,15 @@ function ProductsContent() {
   const [search, setSearch] = useState("");
   const [statusTab, setStatusTab] = useState<string>("all");
 
-  const { data: products, isLoading } = useListProducts({
+  const params: ListProductsParams = {
+    status: statusTab === "all" ? undefined : (statusTab as ListProductsParams["status"]),
+    search: search || undefined,
+  };
+
+  const { data: products, isLoading } = useListProducts(params, {
     query: {
-      queryKey: ["products", { status: statusTab === "all" ? undefined : statusTab, search }]
-    }
+      queryKey: getListProductsQueryKey(params),
+    },
   });
 
   return (
