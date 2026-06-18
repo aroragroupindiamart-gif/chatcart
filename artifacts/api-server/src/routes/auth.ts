@@ -47,9 +47,9 @@ router.post("/auth/send-otp", async (req, res) => {
 
 router.post("/auth/verify-otp", async (req, res) => {
   try {
-    const { phone, code } = req.body as { phone: string; code: string };
-    if (!phone || !code) {
-      res.status(400).json({ error: "Phone and code required" });
+    const { phone, otp } = req.body as { phone: string; otp: string };
+    if (!phone || !otp) {
+      res.status(400).json({ error: "Phone and OTP required" });
       return;
     }
     const normalizedPhone = normalizePhone(phone);
@@ -61,7 +61,7 @@ router.post("/auth/verify-otp", async (req, res) => {
       .where(
         and(
           eq(otpCodesTable.phone, normalizedPhone),
-          eq(otpCodesTable.code, code),
+          eq(otpCodesTable.code, otp),
           eq(otpCodesTable.used, false),
           gt(otpCodesTable.expiresAt, now)
         )
@@ -118,7 +118,7 @@ router.get("/auth/me", requireAuth, async (req, res) => {
       res.status(404).json({ error: "Seller not found" });
       return;
     }
-    res.json({ seller });
+    res.json(seller);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch profile" });

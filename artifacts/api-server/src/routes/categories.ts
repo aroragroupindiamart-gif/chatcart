@@ -13,7 +13,7 @@ router.get("/categories", requireAuth, async (req, res) => {
       .from(categoriesTable)
       .where(eq(categoriesTable.sellerId, req.seller!.sellerId))
       .orderBy(categoriesTable.name);
-    res.json({ categories });
+    res.json(categories.map((c) => ({ ...c, productCount: 0 })));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to list categories" });
@@ -31,14 +31,14 @@ router.post("/categories", requireAuth, async (req, res) => {
       .insert(categoriesTable)
       .values({ sellerId: req.seller!.sellerId, name: name.trim() })
       .returning();
-    res.status(201).json({ category });
+    res.status(201).json({ ...category, productCount: 0 });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to create category" });
   }
 });
 
-router.put("/categories/:categoryId", requireAuth, async (req, res) => {
+router.patch("/categories/:categoryId", requireAuth, async (req, res) => {
   try {
     const categoryId = parseInt(req.params.categoryId);
     const { name } = req.body as { name: string };
@@ -60,7 +60,7 @@ router.put("/categories/:categoryId", requireAuth, async (req, res) => {
       res.status(404).json({ error: "Category not found" });
       return;
     }
-    res.json({ category: updated });
+    res.json({ ...updated, productCount: 0 });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to update category" });

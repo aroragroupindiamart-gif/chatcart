@@ -63,7 +63,7 @@ export default function LoginScreen() {
   async function handleVerifyOtp() {
     const normalized = normalizePhone(phone.trim());
     verifyOtpMutation.mutate(
-      { data: { phone: normalized, code: otp.trim() } },
+      { data: { phone: normalized, otp: otp.trim() } },
       {
         onSuccess: (data) => {
           const d = data as { token: string; seller: { id: number; phone: string; storeName: string; subdomain: string; whatsappNumber: string } };

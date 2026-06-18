@@ -5,16 +5,35 @@ import {
   productImagesTable,
   productVariantsTable,
 } from "@workspace/db/schema";
-import { eq, and, ne, asc } from "drizzle-orm";
+import { eq, and, ne, asc, desc, ilike, inArray } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
 
 const router = Router();
 
+function formatProduct(product: typeof productsTable.$inferSelect, images: typeof productImagesTable.$inferSelect[], variants: typeof productVariantsTable.$inferSelect[]) {
+  return {
+    ...product,
+    price: parseFloat(product.price as unknown as string),
+    images: images.filter((i) => i.productId === product.id),
+    variants: variants.filter((v) => v.productId === product.id),
+  };
+}
+
+async function assertProductBelongsToSeller(productId: number, sellerId: number): Promise<boolean> {
+  const [product] = await db
+    .select({ id: productsTable.id })
+    .from(productsTable)
+    .where(and(eq(productsTable.id, productId), eq(productsTable.sellerId, sellerId)))
+    .limit(1);
+  return !!product;
+}
+
 router.get("/products", requireAuth, async (req, res) => {
   try {
-    const { categoryId, status } = req.query as {
+    const { categoryId, status, search } = req.query as {
       categoryId?: string;
       status?: string;
+      search?: string;
     };
     const conditions = [
       eq(productsTable.sellerId, req.seller!.sellerId),
@@ -26,46 +45,35 @@ router.get("/products", requireAuth, async (req, res) => {
     if (status) {
       conditions.push(eq(productsTable.status, status as "active" | "out_of_stock" | "hidden"));
     }
+    if (search?.trim()) {
+      conditions.push(ilike(productsTable.name, `%${search.trim()}%`));
+    }
 
     const products = await db
       .select()
       .from(productsTable)
       .where(and(...conditions))
-      .orderBy(asc(productsTable.sortOrder), asc(productsTable.createdAt));
+      .orderBy(asc(productsTable.sortOrder), desc(productsTable.createdAt));
 
     const productIds = products.map((p) => p.id);
-    const images =
-      productIds.length > 0
-        ? await db
-            .select()
-            .from(productImagesTable)
-            .where(
-              productIds.length === 1
-                ? eq(productImagesTable.productId, productIds[0])
-                : undefined
-            )
-            .orderBy(asc(productImagesTable.displayOrder))
-        : [];
+    if (productIds.length === 0) {
+      res.json([]);
+      return;
+    }
 
-    const variants =
-      productIds.length > 0
-        ? await db
-            .select()
-            .from(productVariantsTable)
-            .where(
-              productIds.length === 1
-                ? eq(productVariantsTable.productId, productIds[0])
-                : undefined
-            )
-        : [];
+    const [images, variants] = await Promise.all([
+      db
+        .select()
+        .from(productImagesTable)
+        .where(inArray(productImagesTable.productId, productIds))
+        .orderBy(asc(productImagesTable.displayOrder)),
+      db
+        .select()
+        .from(productVariantsTable)
+        .where(inArray(productVariantsTable.productId, productIds)),
+    ]);
 
-    const result = products.map((p) => ({
-      ...p,
-      images: images.filter((i) => i.productId === p.id),
-      variants: variants.filter((v) => v.productId === p.id),
-    }));
-
-    res.json({ products: result });
+    res.json(products.map((p) => formatProduct(p, images, variants)));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to list products" });
@@ -77,13 +85,13 @@ router.post("/products", requireAuth, async (req, res) => {
     const body = req.body as {
       name: string;
       description?: string;
-      price: string;
+      price: number;
       categoryId?: number;
       status?: "active" | "out_of_stock" | "hidden";
       stockCount?: number;
       showWhenOutOfStock?: boolean;
     };
-    if (!body.name?.trim() || !body.price) {
+    if (!body.name?.trim() || body.price == null) {
       res.status(400).json({ error: "Name and price required" });
       return;
     }
@@ -93,14 +101,14 @@ router.post("/products", requireAuth, async (req, res) => {
         sellerId: req.seller!.sellerId,
         name: body.name.trim(),
         description: body.description,
-        price: body.price,
+        price: String(body.price),
         categoryId: body.categoryId ?? null,
         status: body.status ?? "active",
         stockCount: body.stockCount ?? 1,
         showWhenOutOfStock: body.showWhenOutOfStock ?? false,
       })
       .returning();
-    res.status(201).json({ product: { ...product, images: [], variants: [] } });
+    res.status(201).json(formatProduct(product, [], []));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to create product" });
@@ -136,20 +144,20 @@ router.get("/products/:productId", requireAuth, async (req, res) => {
         .from(productVariantsTable)
         .where(eq(productVariantsTable.productId, productId)),
     ]);
-    res.json({ product: { ...product, images, variants } });
+    res.json(formatProduct(product, images, variants));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to get product" });
   }
 });
 
-router.put("/products/:productId", requireAuth, async (req, res) => {
+router.patch("/products/:productId", requireAuth, async (req, res) => {
   try {
     const productId = parseInt(req.params.productId);
     const body = req.body as {
       name?: string;
       description?: string;
-      price?: string;
+      price?: number;
       categoryId?: number | null;
       status?: "active" | "out_of_stock" | "hidden";
       stockCount?: number;
@@ -162,7 +170,7 @@ router.put("/products/:productId", requireAuth, async (req, res) => {
     };
     if (body.name !== undefined) updates.name = body.name.trim();
     if (body.description !== undefined) updates.description = body.description;
-    if (body.price !== undefined) updates.price = body.price;
+    if (body.price !== undefined) updates.price = String(body.price);
     if (body.categoryId !== undefined) updates.categoryId = body.categoryId;
     if (body.status !== undefined) updates.status = body.status;
     if (body.stockCount !== undefined) updates.stockCount = body.stockCount;
@@ -195,7 +203,7 @@ router.put("/products/:productId", requireAuth, async (req, res) => {
         .from(productVariantsTable)
         .where(eq(productVariantsTable.productId, productId)),
     ]);
-    res.json({ product: { ...updated, images, variants } });
+    res.json(formatProduct(updated, images, variants));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to update product" });
@@ -205,7 +213,7 @@ router.put("/products/:productId", requireAuth, async (req, res) => {
 router.delete("/products/:productId", requireAuth, async (req, res) => {
   try {
     const productId = parseInt(req.params.productId);
-    await db
+    const affected = await db
       .update(productsTable)
       .set({ status: "deleted", deletedAt: new Date(), updatedAt: new Date() })
       .where(
@@ -213,7 +221,12 @@ router.delete("/products/:productId", requireAuth, async (req, res) => {
           eq(productsTable.id, productId),
           eq(productsTable.sellerId, req.seller!.sellerId)
         )
-      );
+      )
+      .returning();
+    if (!affected.length) {
+      res.status(404).json({ error: "Product not found" });
+      return;
+    }
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -223,19 +236,19 @@ router.delete("/products/:productId", requireAuth, async (req, res) => {
 
 router.post("/products/reorder", requireAuth, async (req, res) => {
   try {
-    const { productIds } = req.body as { productIds: number[] };
-    if (!Array.isArray(productIds)) {
-      res.status(400).json({ error: "productIds array required" });
+    const { items } = req.body as { items: Array<{ id: number; sortOrder: number }> };
+    if (!Array.isArray(items)) {
+      res.status(400).json({ error: "items array required" });
       return;
     }
     await Promise.all(
-      productIds.map((id, index) =>
+      items.map((item) =>
         db
           .update(productsTable)
-          .set({ sortOrder: index, updatedAt: new Date() })
+          .set({ sortOrder: item.sortOrder, updatedAt: new Date() })
           .where(
             and(
-              eq(productsTable.id, id),
+              eq(productsTable.id, item.id),
               eq(productsTable.sellerId, req.seller!.sellerId)
             )
           )
@@ -251,6 +264,10 @@ router.post("/products/reorder", requireAuth, async (req, res) => {
 router.post("/products/:productId/images", requireAuth, async (req, res) => {
   try {
     const productId = parseInt(req.params.productId);
+    if (!(await assertProductBelongsToSeller(productId, req.seller!.sellerId))) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
     const { url, displayOrder } = req.body as {
       url: string;
       displayOrder?: number;
@@ -263,7 +280,7 @@ router.post("/products/:productId/images", requireAuth, async (req, res) => {
       .insert(productImagesTable)
       .values({ productId, url, displayOrder: displayOrder ?? 0 })
       .returning();
-    res.status(201).json({ image });
+    res.status(201).json(image);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to add image" });
@@ -275,10 +292,20 @@ router.delete(
   requireAuth,
   async (req, res) => {
     try {
+      const productId = parseInt(req.params.productId);
       const imageId = parseInt(req.params.imageId);
+      if (!(await assertProductBelongsToSeller(productId, req.seller!.sellerId))) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
       await db
         .delete(productImagesTable)
-        .where(eq(productImagesTable.id, imageId));
+        .where(
+          and(
+            eq(productImagesTable.id, imageId),
+            eq(productImagesTable.productId, productId)
+          )
+        );
       res.json({ success: true });
     } catch (err) {
       console.error(err);
@@ -292,13 +319,23 @@ router.post(
   requireAuth,
   async (req, res) => {
     try {
+      const productId = parseInt(req.params.productId);
+      if (!(await assertProductBelongsToSeller(productId, req.seller!.sellerId))) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
       const { imageIds } = req.body as { imageIds: number[] };
       await Promise.all(
         imageIds.map((id, index) =>
           db
             .update(productImagesTable)
             .set({ displayOrder: index })
-            .where(eq(productImagesTable.id, id))
+            .where(
+              and(
+                eq(productImagesTable.id, id),
+                eq(productImagesTable.productId, productId)
+              )
+            )
         )
       );
       res.json({ success: true });
@@ -315,6 +352,10 @@ router.post(
   async (req, res) => {
     try {
       const productId = parseInt(req.params.productId);
+      if (!(await assertProductBelongsToSeller(productId, req.seller!.sellerId))) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
       const { variantType, options } = req.body as {
         variantType: string;
         options: string[];
@@ -327,7 +368,7 @@ router.post(
         .insert(productVariantsTable)
         .values({ productId, variantType, options })
         .returning();
-      res.status(201).json({ variant });
+      res.status(201).json(variant);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to add variant" });
@@ -335,12 +376,17 @@ router.post(
   }
 );
 
-router.put(
+router.patch(
   "/products/:productId/variants/:variantId",
   requireAuth,
   async (req, res) => {
     try {
+      const productId = parseInt(req.params.productId);
       const variantId = parseInt(req.params.variantId);
+      if (!(await assertProductBelongsToSeller(productId, req.seller!.sellerId))) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
       const { variantType, options } = req.body as {
         variantType?: string;
         options?: string[];
@@ -351,13 +397,18 @@ router.put(
       const [updated] = await db
         .update(productVariantsTable)
         .set(updates)
-        .where(eq(productVariantsTable.id, variantId))
+        .where(
+          and(
+            eq(productVariantsTable.id, variantId),
+            eq(productVariantsTable.productId, productId)
+          )
+        )
         .returning();
       if (!updated) {
         res.status(404).json({ error: "Variant not found" });
         return;
       }
-      res.json({ variant: updated });
+      res.json(updated);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to update variant" });
@@ -370,10 +421,20 @@ router.delete(
   requireAuth,
   async (req, res) => {
     try {
+      const productId = parseInt(req.params.productId);
       const variantId = parseInt(req.params.variantId);
+      if (!(await assertProductBelongsToSeller(productId, req.seller!.sellerId))) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
       await db
         .delete(productVariantsTable)
-        .where(eq(productVariantsTable.id, variantId));
+        .where(
+          and(
+            eq(productVariantsTable.id, variantId),
+            eq(productVariantsTable.productId, productId)
+          )
+        );
       res.json({ success: true });
     } catch (err) {
       console.error(err);

@@ -6,7 +6,7 @@ import { requireAuth } from "../middleware/auth.js";
 
 const router = Router();
 
-router.put("/sellers/me", requireAuth, async (req, res) => {
+router.patch("/sellers/me", requireAuth, async (req, res) => {
   try {
     const { storeName, whatsappNumber } = req.body as {
       storeName?: string;
@@ -25,7 +25,7 @@ router.put("/sellers/me", requireAuth, async (req, res) => {
       .where(eq(sellersTable.id, req.seller!.sellerId))
       .returning();
 
-    res.json({ seller: updated });
+    res.json(updated);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to update seller" });

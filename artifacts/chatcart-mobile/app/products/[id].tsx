@@ -5,6 +5,7 @@ import {
   useAddProductImage,
   useDeleteProductImage,
 } from "@workspace/api-client-react";
+import type { Product, Category } from "@workspace/api-client-react";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -12,8 +13,10 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Switch,
   Text,
@@ -23,29 +26,18 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
-
-interface ProductImage { id: number; url: string; displayOrder: number }
-interface Product {
-  id: number;
-  name: string;
-  description: string | null;
-  price: string;
-  status: "active" | "out_of_stock" | "hidden";
-  stockCount: number;
-  showWhenOutOfStock: boolean;
-  categoryId: number | null;
-  images: ProductImage[];
-}
+import { useAuth } from "@/context/AuthContext";
 
 export default function ProductDetailScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { seller } = useAuth();
   const { id } = useLocalSearchParams<{ id: string }>();
   const productId = parseInt(id ?? "0");
 
   const { data, isLoading, refetch } = useGetProduct(productId);
-  const product: Product | undefined = (data as { product?: Product })?.product;
+  const product = data as Product | undefined;
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -57,8 +49,7 @@ export default function ProductDetailScreen() {
   const [saved, setSaved] = useState(false);
 
   const { data: catData } = useListCategories();
-  const categories: Array<{ id: number; name: string }> =
-    (catData as { categories?: Array<{ id: number; name: string }> })?.categories ?? [];
+  const categories: Category[] = (catData as Category[]) ?? [];
 
   const updateProduct = useUpdateProduct();
   const addImage = useAddProductImage();
@@ -68,11 +59,11 @@ export default function ProductDetailScreen() {
     if (product) {
       setName(product.name);
       setDescription(product.description ?? "");
-      setPrice(product.price);
-      setStatus(product.status);
+      setPrice(String(product.price));
+      if (product.status !== "deleted") setStatus(product.status);
       setStockCount(String(product.stockCount));
       setShowWhenOutOfStock(product.showWhenOutOfStock);
-      setCategoryId(product.categoryId);
+      setCategoryId(product.categoryId ?? null);
     }
   }, [product]);
 
@@ -81,13 +72,18 @@ export default function ProductDetailScreen() {
       Alert.alert("Validation", "Name and price are required.");
       return;
     }
+    const priceNum = parseFloat(price);
+    if (isNaN(priceNum) || priceNum < 0) {
+      Alert.alert("Validation", "Please enter a valid price.");
+      return;
+    }
     updateProduct.mutate(
       {
         productId,
         data: {
           name: name.trim(),
           description: description.trim() || undefined,
-          price,
+          price: priceNum,
           status,
           stockCount: parseInt(stockCount) || 1,
           showWhenOutOfStock,
@@ -137,6 +133,19 @@ export default function ProductDetailScreen() {
           ),
       },
     ]);
+  }
+
+  async function handleWhatsAppShare() {
+    if (!product || !seller) return;
+    const productUrl = `https://${seller.subdomain}.chatcart.in/p/${product.id}`;
+    const message = `Check out *${product.name}* — ₹${product.price.toLocaleString("en-IN")}\n\n${productUrl}`;
+    const waUrl = `whatsapp://send?text=${encodeURIComponent(message)}`;
+    const canOpen = await Linking.canOpenURL(waUrl);
+    if (canOpen) {
+      await Linking.openURL(waUrl);
+    } else {
+      await Share.share({ message });
+    }
   }
 
   const statusOptions: Array<{ value: "active" | "out_of_stock" | "hidden"; label: string }> = [
@@ -284,11 +293,16 @@ export default function ProductDetailScreen() {
 
       {/* WhatsApp share */}
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Share</Text>
-        <Text style={[styles.shareLink, { color: colors.primary }]}>
-          https://store.chatcart.in/p/{product.id}
+        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Share via WhatsApp</Text>
+        <Text style={[styles.shareLink, { color: colors.primary }]} numberOfLines={1}>
+          https://{seller?.subdomain ?? "store"}.chatcart.in/p/{product.id}
         </Text>
-        <Text style={[styles.shareHint, { color: colors.mutedForeground }]}>Share this link via WhatsApp to show this product to customers</Text>
+        <Pressable
+          style={[styles.waBtn, { backgroundColor: "#25D366" }]}
+          onPress={handleWhatsAppShare}
+        >
+          <Text style={styles.waBtnText}>📲 Share on WhatsApp</Text>
+        </Pressable>
       </View>
 
       <Pressable
@@ -397,10 +411,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Inter_500Medium",
   },
-  shareHint: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    lineHeight: 17,
+  waBtn: {
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  waBtnText: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+    color: "#fff",
   },
   saveBtn: {
     borderRadius: 10,

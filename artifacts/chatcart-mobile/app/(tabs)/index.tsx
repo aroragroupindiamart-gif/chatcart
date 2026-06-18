@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useGetMe } from "@workspace/api-client-react";
+import type { Seller } from "@workspace/api-client-react";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -76,8 +77,7 @@ export default function DashboardScreen() {
 
   useEffect(() => {
     if (data) {
-      const d = data as { seller: { id: number; phone: string; storeName: string; subdomain: string; whatsappNumber: string } };
-      if (d.seller) setSeller(d.seller);
+      setSeller(data as Seller);
     }
   }, [data]);
 
@@ -105,10 +105,7 @@ export default function DashboardScreen() {
     fetchStats();
   }, []);
 
-  const storeName =
-    seller?.storeName ??
-    (data as { seller?: { storeName?: string } })?.seller?.storeName ??
-    "My Store";
+  const storeName = seller?.storeName ?? (data as Seller)?.storeName ?? "My Store";
 
   return (
     <ScrollView

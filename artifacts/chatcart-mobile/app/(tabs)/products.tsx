@@ -1,4 +1,5 @@
 import { useDeleteProduct, useListProducts } from "@workspace/api-client-react";
+import type { Product, ProductStatus } from "@workspace/api-client-react";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -9,21 +10,12 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
-
-interface Product {
-  id: number;
-  name: string;
-  price: string;
-  status: string;
-  stockCount: number;
-  showWhenOutOfStock: boolean;
-  images: Array<{ id: number; url: string }>;
-}
 
 const STATUS_LABELS: Record<string, string> = {
   active: "Active",
@@ -37,15 +29,32 @@ const STATUS_COLORS: Record<string, string> = {
   hidden: "#6B7280",
 };
 
+type FilterTab = "all" | "active" | "out_of_stock" | "hidden";
+
+const FILTER_TABS: Array<{ key: FilterTab; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "active", label: "Active" },
+  { key: "out_of_stock", label: "OOS" },
+  { key: "hidden", label: "Hidden" },
+];
+
 export default function ProductsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const { data, isLoading, refetch, isRefetching } = useListProducts();
+  const [search, setSearch] = useState("");
+  const [activeFilter, setActiveFilter] = useState<FilterTab>("all");
+
+  const params = {
+    status: activeFilter !== "all" ? (activeFilter as ProductStatus) : undefined,
+    search: search.trim() || undefined,
+  };
+
+  const { data, isLoading, refetch, isRefetching } = useListProducts(params);
   const deleteProduct = useDeleteProduct();
 
-  const products: Product[] = (data as { products?: Product[] })?.products ?? [];
+  const products: Product[] = (data as Product[]) ?? [];
 
   function confirmDelete(id: number, name: string) {
     Alert.alert(
@@ -92,7 +101,7 @@ export default function ProductsScreen() {
               {item.name}
             </Text>
             <Text style={[styles.price, { color: colors.primary }]}>
-              ₹{parseFloat(item.price).toLocaleString("en-IN")}
+              ₹{item.price.toLocaleString("en-IN")}
             </Text>
             <View style={styles.statusRow}>
               <View
@@ -100,6 +109,9 @@ export default function ProductsScreen() {
               />
               <Text style={[styles.statusText, { color: statusColor }]}>
                 {STATUS_LABELS[item.status] ?? item.status}
+              </Text>
+              <Text style={[styles.stockText, { color: colors.mutedForeground }]}>
+                · {item.stockCount} in stock
               </Text>
             </View>
           </View>
@@ -118,6 +130,45 @@ export default function ProductsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <View style={[styles.topBar, { backgroundColor: colors.background, borderBottomColor: colors.border }]}>
+        <TextInput
+          style={[styles.searchInput, { backgroundColor: colors.card, borderColor: colors.border, color: colors.foreground }]}
+          placeholder="Search products..."
+          placeholderTextColor={colors.mutedForeground}
+          value={search}
+          onChangeText={setSearch}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+        />
+        <View style={styles.filterTabs}>
+          {FILTER_TABS.map((tab) => {
+            const active = activeFilter === tab.key;
+            return (
+              <Pressable
+                key={tab.key}
+                style={[
+                  styles.filterTab,
+                  {
+                    backgroundColor: active ? colors.primary : colors.card,
+                    borderColor: active ? colors.primary : colors.border,
+                  },
+                ]}
+                onPress={() => setActiveFilter(tab.key)}
+              >
+                <Text
+                  style={[
+                    styles.filterTabText,
+                    { color: active ? colors.primaryForeground : colors.mutedForeground },
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
       {isLoading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primary} />
@@ -145,7 +196,7 @@ export default function ProductsScreen() {
               <Text
                 style={[styles.emptyTitle, { color: colors.foreground }]}
               >
-                No products yet
+                {search || activeFilter !== "all" ? "No matching products" : "No products yet"}
               </Text>
               <Text
                 style={[
@@ -153,7 +204,9 @@ export default function ProductsScreen() {
                   { color: colors.mutedForeground },
                 ]}
               >
-                Tap the + button to add your first product
+                {search || activeFilter !== "all"
+                  ? "Try a different search or filter"
+                  : "Tap the + button to add your first product"}
               </Text>
             </View>
           }
@@ -172,6 +225,35 @@ export default function ProductsScreen() {
 }
 
 const styles = StyleSheet.create({
+  topBar: {
+    borderBottomWidth: 1,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 10,
+    gap: 10,
+  },
+  searchInput: {
+    borderWidth: 1.5,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    fontFamily: "Inter_400Regular",
+  },
+  filterTabs: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  filterTab: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1.5,
+  },
+  filterTabText: {
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+  },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   card: {
     borderRadius: 12,
@@ -203,6 +285,7 @@ const styles = StyleSheet.create({
   statusRow: { flexDirection: "row", alignItems: "center", gap: 5 },
   statusDot: { width: 7, height: 7, borderRadius: 4 },
   statusText: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  stockText: { fontSize: 12, fontFamily: "Inter_400Regular" },
   cardActions: { gap: 8 },
   deleteBtn: {
     width: 28,

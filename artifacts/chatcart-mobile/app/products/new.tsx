@@ -1,4 +1,5 @@
 import { useCreateProduct, useListCategories } from "@workspace/api-client-react";
+import type { Category } from "@workspace/api-client-react";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -30,8 +31,7 @@ export default function NewProductScreen() {
   const [stockCount, setStockCount] = useState("1");
 
   const { data: catData } = useListCategories();
-  const categories: Array<{ id: number; name: string }> =
-    (catData as { categories?: Array<{ id: number; name: string }> })?.categories ?? [];
+  const categories: Category[] = (catData as Category[]) ?? [];
 
   const createProduct = useCreateProduct();
 
@@ -40,7 +40,8 @@ export default function NewProductScreen() {
       Alert.alert("Validation", "Product name is required.");
       return;
     }
-    if (!price.trim() || isNaN(parseFloat(price))) {
+    const priceNum = parseFloat(price);
+    if (!price.trim() || isNaN(priceNum) || priceNum < 0) {
       Alert.alert("Validation", "Please enter a valid price.");
       return;
     }
@@ -49,10 +50,8 @@ export default function NewProductScreen() {
         data: {
           name: name.trim(),
           description: description.trim() || undefined,
-          price,
+          price: priceNum,
           categoryId: categoryId ?? undefined,
-          status,
-          showWhenOutOfStock,
           stockCount: parseInt(stockCount) || 1,
         },
       },

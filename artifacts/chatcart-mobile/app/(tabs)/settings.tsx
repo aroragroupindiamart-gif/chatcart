@@ -1,4 +1,5 @@
 import { useUpdateSeller } from "@workspace/api-client-react";
+import type { Seller } from "@workspace/api-client-react";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
@@ -39,8 +40,7 @@ export default function SettingsScreen() {
       { data: { storeName, whatsappNumber } },
       {
         onSuccess: (res) => {
-          const d = res as { seller: { id: number; phone: string; storeName: string; subdomain: string; whatsappNumber: string } };
-          if (d.seller) setSeller(d.seller);
+          setSeller(res as Seller);
           setSaved(true);
           setTimeout(() => setSaved(false), 2000);
         },

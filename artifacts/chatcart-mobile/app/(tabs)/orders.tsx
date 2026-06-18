@@ -1,4 +1,5 @@
 import { useListOrders } from "@workspace/api-client-react";
+import type { OrderListResponse } from "@workspace/api-client-react";
 import { useRouter } from "expo-router";
 import React from "react";
 import {
@@ -17,7 +18,7 @@ import { useColors } from "@/hooks/useColors";
 interface Order {
   id: string;
   status: string;
-  totalAmount: string;
+  totalAmount: number;
   customerContact?: string;
   createdAt: string;
 }
@@ -40,7 +41,7 @@ export default function OrdersScreen() {
   const router = useRouter();
 
   const { data, isLoading, refetch, isRefetching } = useListOrders();
-  const orders: Order[] = (data as { orders?: Order[] })?.orders ?? [];
+  const orders: Order[] = ((data as OrderListResponse)?.orders as Order[] | undefined) ?? [];
 
   function formatDate(iso: string) {
     const d = new Date(iso);
@@ -79,7 +80,7 @@ export default function OrdersScreen() {
           </View>
           <View style={{ alignItems: "flex-end", gap: 6 }}>
             <Text style={[styles.amount, { color: colors.foreground }]}>
-              ₹{parseFloat(item.totalAmount).toLocaleString("en-IN")}
+              ₹{item.totalAmount.toLocaleString("en-IN")}
             </Text>
             <View
               style={[
