@@ -3,20 +3,36 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Chatcart API — WhatsApp-first seller catalog management
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Seller authentication (phone + OTP)
+  - name: sellers
+    description: Seller profile and store settings
+  - name: categories
+    description: Product categories
+  - name: products
+    description: Product catalog management
+  - name: product-images
+    description: Product image uploads
+  - name: product-variants
+    description: Product variant options
+  - name: orders
+    description: Order history
+  - name: storage
+    description: Object storage uploads
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,7 +40,620 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── Auth ──────────────────────────────────────────────────────────────────
+
+  /auth/send-otp:
+    post:
+      operationId: sendOtp
+      tags: [auth]
+      summary: Send OTP to phone number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendOtpRequest"
+      responses:
+        "200":
+          description: OTP sent (or logged to console in dev)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendOtpResponse"
+        "400":
+          description: Invalid phone number
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/verify-otp:
+    post:
+      operationId: verifyOtp
+      tags: [auth]
+      summary: Verify OTP and issue session token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyOtpRequest"
+      responses:
+        "200":
+          description: Authenticated — returns JWT token and seller profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid or expired OTP
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current authenticated seller
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Current seller profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Seller"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Invalidate current session
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # ── Seller ────────────────────────────────────────────────────────────────
+
+  /sellers/me:
+    patch:
+      operationId: updateSeller
+      tags: [sellers]
+      summary: Update seller store settings
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSellerRequest"
+      responses:
+        "200":
+          description: Updated seller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Seller"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── Categories ────────────────────────────────────────────────────────────
+
+  /categories:
+    get:
+      operationId: listCategories
+      tags: [categories]
+      summary: List all categories for the authenticated seller
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: List of categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+    post:
+      operationId: createCategory
+      tags: [categories]
+      summary: Create a new category
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCategoryRequest"
+      responses:
+        "201":
+          description: Created category
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+
+  /categories/{categoryId}:
+    patch:
+      operationId: updateCategory
+      tags: [categories]
+      summary: Update a category name
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCategoryRequest"
+      responses:
+        "200":
+          description: Updated category
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+    delete:
+      operationId: deleteCategory
+      tags: [categories]
+      summary: Delete a category
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # ── Products ──────────────────────────────────────────────────────────────
+
+  /products:
+    get:
+      operationId: listProducts
+      tags: [products]
+      summary: List products with optional filtering
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/ProductStatus"
+        - name: categoryId
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of products ordered by sort_order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+    post:
+      operationId: createProduct
+      tags: [products]
+      summary: Create a new product
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductRequest"
+      responses:
+        "201":
+          description: Created product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+
+  /products/{productId}:
+    get:
+      operationId: getProduct
+      tags: [products]
+      summary: Get a single product
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Product detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateProduct
+      tags: [products]
+      summary: Update product fields
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProductRequest"
+      responses:
+        "200":
+          description: Updated product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+    delete:
+      operationId: deleteProduct
+      tags: [products]
+      summary: Permanently delete a product (only after soft-delete, requires confirmation)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Permanently deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /products/reorder:
+    patch:
+      operationId: reorderProducts
+      tags: [products]
+      summary: Update sort order for multiple products (drag-to-reorder)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReorderProductsRequest"
+      responses:
+        "200":
+          description: Sort order updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # ── Product Images ─────────────────────────────────────────────────────────
+
+  /products/{productId}/images:
+    post:
+      operationId: addProductImage
+      tags: [product-images]
+      summary: Add an image URL to a product (after uploading to object storage)
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddProductImageRequest"
+      responses:
+        "201":
+          description: Image added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductImage"
+
+  /products/{productId}/images/{imageId}:
+    delete:
+      operationId: deleteProductImage
+      tags: [product-images]
+      summary: Remove an image from a product
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: imageId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Image deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /products/{productId}/images/reorder:
+    patch:
+      operationId: reorderProductImages
+      tags: [product-images]
+      summary: Reorder images for a product
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReorderImagesRequest"
+      responses:
+        "200":
+          description: Image order updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # ── Product Variants ───────────────────────────────────────────────────────
+
+  /products/{productId}/variants:
+    post:
+      operationId: addProductVariant
+      tags: [product-variants]
+      summary: Add a variant group to a product
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddProductVariantRequest"
+      responses:
+        "201":
+          description: Variant added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductVariant"
+
+  /products/{productId}/variants/{variantId}:
+    patch:
+      operationId: updateProductVariant
+      tags: [product-variants]
+      summary: Update a variant group
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProductVariantRequest"
+      responses:
+        "200":
+          description: Variant updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductVariant"
+    delete:
+      operationId: deleteProductVariant
+      tags: [product-variants]
+      summary: Remove a variant group from a product
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: variantId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Variant deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # ── Orders ────────────────────────────────────────────────────────────────
+
+  /orders:
+    get:
+      operationId: listOrders
+      tags: [orders]
+      summary: List orders for the authenticated seller
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Paginated order list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderListResponse"
+
+  /orders/{orderId}:
+    get:
+      operationId: getOrder
+      tags: [orders]
+      summary: Get a single order with line items
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Order detail with items
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrderDetail"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── Dashboard ─────────────────────────────────────────────────────────────
+
+  /dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [products]
+      summary: Get dashboard summary stats
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  # ── Storage ───────────────────────────────────────────────────────────────
+
+  /storage/uploads/request-url:
+    post:
+      operationId: requestUploadUrl
+      tags: [storage]
+      summary: Request a presigned upload URL for object storage
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestUploadUrlBody"
+      responses:
+        "200":
+          description: Presigned upload URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestUploadUrlResponse"
+
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   schemas:
     HealthStatus:
       type: object
@@ -34,3 +663,467 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+      required:
+        - success
+
+    # ── Auth ──────────────────────────────────────────────────────────────
+
+    SendOtpRequest:
+      type: object
+      properties:
+        phone:
+          type: string
+          description: Phone number in E.164 format (e.g. +919876543210)
+      required:
+        - phone
+
+    SendOtpResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        expiresIn:
+          type: integer
+          description: Seconds until OTP expires
+      required:
+        - message
+        - expiresIn
+
+    VerifyOtpRequest:
+      type: object
+      properties:
+        phone:
+          type: string
+        otp:
+          type: string
+      required:
+        - phone
+        - otp
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        seller:
+          $ref: "#/components/schemas/Seller"
+      required:
+        - token
+        - seller
+
+    # ── Seller ────────────────────────────────────────────────────────────
+
+    Seller:
+      type: object
+      properties:
+        id:
+          type: integer
+        phone:
+          type: string
+        storeName:
+          type: string
+        subdomain:
+          type: string
+        whatsappNumber:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - phone
+        - storeName
+        - subdomain
+        - whatsappNumber
+        - createdAt
+
+    UpdateSellerRequest:
+      type: object
+      properties:
+        storeName:
+          type: string
+        whatsappNumber:
+          type: string
+
+    # ── Categories ────────────────────────────────────────────────────────
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        productCount:
+          type: integer
+      required:
+        - id
+        - name
+        - productCount
+
+    CreateCategoryRequest:
+      type: object
+      properties:
+        name:
+          type: string
+      required:
+        - name
+
+    UpdateCategoryRequest:
+      type: object
+      properties:
+        name:
+          type: string
+      required:
+        - name
+
+    # ── Products ──────────────────────────────────────────────────────────
+
+    ProductStatus:
+      type: string
+      enum:
+        - active
+        - out_of_stock
+        - hidden
+        - deleted
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+          description: Price in INR
+        categoryId:
+          type: integer
+        categoryName:
+          type: string
+        status:
+          $ref: "#/components/schemas/ProductStatus"
+        stockCount:
+          type: integer
+        showWhenOutOfStock:
+          type: boolean
+        sortOrder:
+          type: integer
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductImage"
+        variants:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductVariant"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - price
+        - status
+        - stockCount
+        - showWhenOutOfStock
+        - sortOrder
+        - images
+        - variants
+        - createdAt
+        - updatedAt
+
+    CreateProductRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+        categoryId:
+          type: integer
+        stockCount:
+          type: integer
+          default: 1
+      required:
+        - name
+        - price
+
+    UpdateProductRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+        categoryId:
+          type: integer
+        stockCount:
+          type: integer
+        status:
+          $ref: "#/components/schemas/ProductStatus"
+        showWhenOutOfStock:
+          type: boolean
+
+    ReorderProductsRequest:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              sortOrder:
+                type: integer
+            required:
+              - id
+              - sortOrder
+      required:
+        - items
+
+    # ── Product Images ────────────────────────────────────────────────────
+
+    ProductImage:
+      type: object
+      properties:
+        id:
+          type: integer
+        url:
+          type: string
+        displayOrder:
+          type: integer
+      required:
+        - id
+        - url
+        - displayOrder
+
+    AddProductImageRequest:
+      type: object
+      properties:
+        url:
+          type: string
+          description: Object path from the upload endpoint (e.g. /objects/uploads/uuid)
+        displayOrder:
+          type: integer
+          default: 0
+      required:
+        - url
+
+    ReorderImagesRequest:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              displayOrder:
+                type: integer
+            required:
+              - id
+              - displayOrder
+      required:
+        - items
+
+    # ── Product Variants ──────────────────────────────────────────────────
+
+    ProductVariant:
+      type: object
+      properties:
+        id:
+          type: integer
+        variantType:
+          type: string
+          description: "e.g. Size, Color, Stone"
+        options:
+          type: array
+          items:
+            type: string
+          description: Available options for this variant type
+      required:
+        - id
+        - variantType
+        - options
+
+    AddProductVariantRequest:
+      type: object
+      properties:
+        variantType:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+      required:
+        - variantType
+        - options
+
+    UpdateProductVariantRequest:
+      type: object
+      properties:
+        variantType:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+
+    # ── Orders ────────────────────────────────────────────────────────────
+
+    OrderStatus:
+      type: string
+      enum:
+        - pending
+        - confirmed
+        - fulfilled
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+          description: "e.g. ORD-00001"
+        customerContact:
+          type: string
+        status:
+          $ref: "#/components/schemas/OrderStatus"
+        totalAmount:
+          type: number
+        itemCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - status
+        - totalAmount
+        - itemCount
+        - createdAt
+
+    OrderItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        productNameSnapshot:
+          type: string
+        priceSnapshot:
+          type: number
+        variantSnapshot:
+          type: string
+        quantity:
+          type: integer
+      required:
+        - id
+        - productNameSnapshot
+        - priceSnapshot
+        - quantity
+
+    OrderDetail:
+      allOf:
+        - $ref: "#/components/schemas/Order"
+        - type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/OrderItem"
+          required:
+            - items
+
+    OrderListResponse:
+      type: object
+      properties:
+        orders:
+          type: array
+          items:
+            $ref: "#/components/schemas/Order"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required:
+        - orders
+        - total
+        - page
+        - limit
+
+    # ── Dashboard ─────────────────────────────────────────────────────────
+
+    DashboardStats:
+      type: object
+      properties:
+        activeProducts:
+          type: integer
+        outOfStockProducts:
+          type: integer
+        hiddenProducts:
+          type: integer
+        totalOrders:
+          type: integer
+        recentOrders:
+          type: array
+          items:
+            $ref: "#/components/schemas/Order"
+      required:
+        - activeProducts
+        - outOfStockProducts
+        - hiddenProducts
+        - totalOrders
+        - recentOrders
+
+    # ── Storage ───────────────────────────────────────────────────────────
+
+    RequestUploadUrlBody:
+      type: object
+      properties:
+        name:
+          type: string
+        size:
+          type: integer
+        contentType:
+          type: string
+      required:
+        - name
+        - size
+        - contentType
+
+    RequestUploadUrlResponse:
+      type: object
+      properties:
+        uploadURL:
+          type: string
+        objectPath:
+          type: string
+      required:
+        - uploadURL
+        - objectPath
