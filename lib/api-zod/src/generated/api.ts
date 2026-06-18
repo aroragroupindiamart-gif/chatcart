@@ -481,10 +481,17 @@ export const GetDashboardStatsResponse = zod.object({
 /**
  * @summary Request a presigned upload URL for object storage
  */
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+
 export const RequestUploadUrlBody = zod.object({
   "name": zod.string(),
-  "size": zod.number(),
-  "contentType": zod.string()
+  "size": zod.number().positive().max(MAX_UPLOAD_BYTES, {
+    message: `File size must not exceed 5 MB (${MAX_UPLOAD_BYTES} bytes)`
+  }),
+  "contentType": zod.enum(ALLOWED_IMAGE_TYPES, {
+    message: "contentType must be one of: image/jpeg, image/png, image/webp"
+  })
 })
 
 export const RequestUploadUrlResponse = zod.object({
