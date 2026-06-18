@@ -49,28 +49,58 @@ function SettingsContent() {
 
   const [storeName, setStoreName] = useState("");
   const [whatsappNumber, setWhatsappNumber] = useState("");
+  const [subdomain, setSubdomain] = useState("");
   const [bannerImageUrl, setBannerImageUrl] = useState<string | null>(null);
   const [tagline, setTagline] = useState("");
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
+  const RESERVED_SLUGS = new Set([
+    "www", "api", "admin", "store", "app", "mail", "support", "help", "chatcart",
+  ]);
+
+  function validateSlug(slug: string): string | null {
+    if (!slug) return null;
+    if (slug.length < 3) return "Must be at least 3 characters.";
+    if (slug.length > 30) return "Must be 30 characters or fewer.";
+    if (!/^[a-z0-9-]+$/.test(slug)) return "Only lowercase letters, numbers, and hyphens allowed.";
+    if (slug.startsWith("-") || slug.endsWith("-")) return "Cannot start or end with a hyphen.";
+    if (RESERVED_SLUGS.has(slug)) return "This URL is reserved — please choose a different one.";
+    return null;
+  }
+
+  const slugError = validateSlug(subdomain);
+
   useEffect(() => {
     if (seller) {
       setStoreName(seller.storeName || "");
       setWhatsappNumber(seller.whatsappNumber || "");
+      setSubdomain((seller as any).subdomain || "");
       setBannerImageUrl((seller as any).bannerImageUrl ?? null);
       setTagline((seller as any).tagline ?? "");
     }
   }, [seller]);
 
   const handleSaveStore = async () => {
+    if (slugError) {
+      toast({ title: "Invalid store URL", description: slugError, variant: "destructive" });
+      return;
+    }
+    const originalSubdomain = (seller as any)?.subdomain;
+    if (originalSubdomain && subdomain !== originalSubdomain) {
+      const ok = confirm(
+        "Changing your store URL will break any links you've already shared with customers. Are you sure?"
+      );
+      if (!ok) return;
+    }
     try {
       await updateSeller.mutateAsync({
-        data: { storeName, whatsappNumber }
+        data: { storeName, whatsappNumber, subdomain } as any
       });
       toast({ title: "Store settings updated" });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      const msg = err?.response?.data?.error || err.message || "Failed to save";
+      toast({ title: "Error", description: msg, variant: "destructive" });
     }
   };
 
@@ -197,7 +227,23 @@ function SettingsContent() {
           </div>
           <div className="space-y-2">
             <Label>Store URL</Label>
-            <Input value={`${seller?.subdomain || 'your-store'}.chatcart.in`} disabled className="bg-slate-50" />
+            <Input
+              value={subdomain}
+              onChange={e => setSubdomain(e.target.value.toLowerCase().replace(/\s+/g, "-"))}
+              placeholder="e.g. sharma-general"
+              className={slugError ? "border-red-400 focus-visible:ring-red-400" : ""}
+            />
+            {slugError ? (
+              <p className="text-xs text-red-500">{slugError}</p>
+            ) : subdomain ? (
+              <p className="text-xs text-slate-500">
+                Your store will be live at{" "}
+                <span className="font-medium text-slate-700">chatcart.in/store/{subdomain}</span>
+                <span className="ml-1 text-slate-400">(live URL: {subdomain}.chatcart.in once deployed)</span>
+              </p>
+            ) : (
+              <p className="text-xs text-slate-400">Choose a custom slug for your store link.</p>
+            )}
           </div>
           <Button onClick={handleSaveStore} disabled={updateSeller.isPending}>
             <Save className="w-4 h-4 mr-2" />

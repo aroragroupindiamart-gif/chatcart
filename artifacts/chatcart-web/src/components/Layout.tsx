@@ -72,7 +72,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               {seller?.phone}
             </p>
             <p className="text-xs text-slate-500 truncate">
-              {seller?.subdomain}.chatcart.in
+              chatcart.in/store/{seller?.subdomain}
             </p>
           </div>
           <Button

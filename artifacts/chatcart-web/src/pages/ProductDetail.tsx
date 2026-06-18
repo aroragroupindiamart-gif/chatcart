@@ -180,7 +180,7 @@ function ProductDetailContent() {
     const wa = meData?.whatsappNumber ?? "";
     const phone = normalizeWhatsAppNumber(wa);
     const productUrl = meData?.subdomain
-      ? `https://${meData.subdomain}.chatcart.in/p/${productId}`
+      ? `https://chatcart.in/store/${meData.subdomain}/p/${productId}`
       : `https://chatcart.in/p/${productId}`;
     const text = encodeURIComponent(`Check out ${name} for ₹${price}!\n${productUrl}`);
     if (!phone) {

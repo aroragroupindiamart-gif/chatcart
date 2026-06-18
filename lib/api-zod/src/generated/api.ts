@@ -76,7 +76,10 @@ export const LogoutResponse = zod.object({
  */
 export const UpdateSellerBody = zod.object({
   "storeName": zod.string().optional(),
-  "whatsappNumber": zod.string().optional()
+  "whatsappNumber": zod.string().optional(),
+  "subdomain": zod.string().optional(),
+  "bannerImageUrl": zod.string().nullable().optional(),
+  "tagline": zod.string().nullable().optional()
 })
 
 export const UpdateSellerResponse = zod.object({
