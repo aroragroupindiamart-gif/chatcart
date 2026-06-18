@@ -79,17 +79,21 @@ router.get("/storage/public-objects/*filePath", async (req: Request, res: Respon
 });
 
 /**
- * GET /storage/objects/*
+ * GET /storage/objects/uploads/:filename
  *
- * Serve object entities from PRIVATE_OBJECT_DIR.
- * These are served from a separate path from /public-objects and can optionally
- * be protected with authentication or ACL checks based on the use case.
+ * Serve uploaded object entities (product images) for the authenticated seller.
+ * Restricted to the uploads/ prefix only — no path traversal, no cross-prefix access.
+ * Images are also accessible publicly via /api/public/img/uploads/:filename.
  */
-router.get("/storage/objects/*path", requireAuth, async (req: Request, res: Response) => {
+router.get("/storage/objects/uploads/:filename", requireAuth, async (req: Request, res: Response) => {
   try {
-    const raw = req.params.path;
-    const wildcardPath = Array.isArray(raw) ? raw.join("/") : raw;
-    const objectPath = `/objects/${wildcardPath}`;
+    const { filename } = req.params;
+    // Reject path traversal attempts
+    if (!filename || filename.includes("/") || filename.includes("..") || filename.includes("\0")) {
+      res.status(400).json({ error: "Invalid filename" });
+      return;
+    }
+    const objectPath = `/objects/uploads/${filename}`;
     const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
 
     const response = await objectStorageService.downloadObject(objectFile);

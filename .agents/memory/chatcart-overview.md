@@ -4,9 +4,9 @@ description: Key facts about the Chatcart project — DB seed data, store URLs, 
 ---
 
 ## Seeded demo data
-- Seller phone: +919876543210, subdomain: `sharma-general`, store name: "Sharma General Store"
-- Products: Bluetooth Earbuds (₹1299), USB-C Cable (₹299), Cotton Kurta (₹599), Denim Jeans (₹1199 OOS), Chakli (₹120), Dry Fruit Box (₹649), Phone Stand (hidden)
-- Categories: Electronics (1), Clothing (2), Food & Snacks (3)
+- Demo seller subdomain: `sharma-general`, store name: "Sharma General Store"
+- Products: Bluetooth Earbuds, USB-C Cable, Cotton Kurta, Denim Jeans (OOS, showWhenOutOfStock=false), Chakli, Dry Fruit Box, Phone Stand (hidden)
+- Categories: Electronics, Clothing, Food & Snacks
 
 ## Artifacts
 - Dashboard (sellers): /  — port 23368
