@@ -7,6 +7,7 @@ import productsRouter from "./products";
 import ordersRouter from "./orders";
 import dashboardRouter from "./dashboard";
 import storageRouter from "./storage";
+import publicStoreRouter from "./publicStore";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(productsRouter);
 router.use(ordersRouter);
 router.use(dashboardRouter);
 router.use(storageRouter);
+router.use(publicStoreRouter);
 
 export default router;

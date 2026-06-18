@@ -1,18 +1,48 @@
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Layout } from "@/components/Layout";
-import { useGetProduct, useCreateProduct, useUpdateProduct, useListCategories, getGetProductQueryKey, ProductStatus, useDeleteProduct, useGetMe } from "@workspace/api-client-react";
+import {
+  useGetProduct,
+  useCreateProduct,
+  useUpdateProduct,
+  useListCategories,
+  getGetProductQueryKey,
+  ProductStatus,
+  useDeleteProduct,
+  useGetMe,
+  useRequestUploadUrl,
+  useAddProductImage,
+  useDeleteProductImage,
+} from "@workspace/api-client-react";
 import { useLocation, useParams } from "wouter";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, Trash, Share2 } from "lucide-react";
+import { ArrowLeft, Save, Trash, Share2, Upload, X, Image as ImageIcon, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQueryClient } from "@tanstack/react-query";
+
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+
+function imgSrc(url: string): string {
+  if (url.startsWith("/objects/")) {
+    return `/api/public/img/${url.slice("/objects/".length)}`;
+  }
+  return url;
+}
+
+function normalizeWhatsAppNumber(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 10) return `91${digits}`;
+  if (digits.startsWith("91") && digits.length === 12) return digits;
+  if (digits.startsWith("0") && digits.length === 11) return `91${digits.slice(1)}`;
+  return digits;
+}
 
 export default function ProductDetail() {
   return (
@@ -22,6 +52,14 @@ export default function ProductDetail() {
       </Layout>
     </ProtectedRoute>
   );
+}
+
+interface UploadingFile {
+  id: string;
+  name: string;
+  preview: string;
+  status: "uploading" | "done" | "error";
+  error?: string;
 }
 
 function ProductDetailContent() {
@@ -35,8 +73,8 @@ function ProductDetailContent() {
   const { data: product, isLoading } = useGetProduct(productId, {
     query: {
       enabled: !isNew && !!productId,
-      queryKey: getGetProductQueryKey(productId)
-    }
+      queryKey: getGetProductQueryKey(productId),
+    },
   });
 
   const { data: meData } = useGetMe();
@@ -45,6 +83,12 @@ function ProductDetailContent() {
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
+  const requestUploadUrl = useRequestUploadUrl();
+  const addProductImage = useAddProductImage();
+  const deleteProductImage = useDeleteProductImage();
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -84,9 +128,9 @@ function ProductDetailContent() {
             price: Number(price),
             stockCount: Number(stockCount) || 0,
             categoryId: resolvedCategoryId ?? undefined,
-          }
+          },
         });
-        toast({ title: "Product created successfully" });
+        toast({ title: "Product created — add photos below" });
         setLocation(`/products/${newProduct.id}`);
       } else {
         await updateProduct.mutateAsync({
@@ -98,8 +142,8 @@ function ProductDetailContent() {
             stockCount: Number(stockCount) || 0,
             categoryId: resolvedCategoryId ?? undefined,
             status: status as ProductStatus,
-            showWhenOutOfStock
-          }
+            showWhenOutOfStock,
+          },
         });
         queryClient.invalidateQueries({ queryKey: getGetProductQueryKey(productId) });
         toast({ title: "Product updated successfully" });
@@ -121,18 +165,101 @@ function ProductDetailContent() {
   };
 
   const handleShare = () => {
-    const storeName = meData?.storeName ?? "";
-    const storeSlug = storeName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-    const productUrl = storeSlug
-      ? `https://${storeSlug}.chatcart.in/p/${productId}`
+    const wa = meData?.whatsappNumber ?? "";
+    const phone = normalizeWhatsAppNumber(wa);
+    const productUrl = meData?.subdomain
+      ? `https://${meData.subdomain}.chatcart.in/p/${productId}`
       : `https://chatcart.in/p/${productId}`;
     const text = encodeURIComponent(`Check out ${name} for ₹${price}!\n${productUrl}`);
-    window.open(`https://wa.me/?text=${text}`, "_blank");
+    if (!phone) {
+      toast({
+        title: "WhatsApp number not set",
+        description: "Please set your WhatsApp number in Settings first.",
+        variant: "destructive",
+      });
+      return;
+    }
+    window.open(`https://wa.me/${phone}?text=${text}`, "_blank");
+  };
+
+  const handleFilesSelected = async (files: FileList | null) => {
+    if (!files || files.length === 0 || isNew) return;
+
+    const valid: File[] = [];
+    for (const file of Array.from(files)) {
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        toast({ title: `${file.name}: unsupported type`, description: "Only JPG, PNG, WebP allowed.", variant: "destructive" });
+        continue;
+      }
+      if (file.size > MAX_SIZE_BYTES) {
+        toast({ title: `${file.name}: too large`, description: "Max 5 MB per image.", variant: "destructive" });
+        continue;
+      }
+      valid.push(file);
+    }
+
+    if (valid.length === 0) return;
+
+    const entries: UploadingFile[] = valid.map((f) => ({
+      id: Math.random().toString(36).slice(2),
+      name: f.name,
+      preview: URL.createObjectURL(f),
+      status: "uploading" as const,
+    }));
+    setUploadingFiles((prev) => [...prev, ...entries]);
+
+    for (let i = 0; i < valid.length; i++) {
+      const file = valid[i];
+      const entry = entries[i];
+      try {
+        const { uploadURL, objectPath } = await requestUploadUrl.mutateAsync({
+          data: { name: file.name, size: file.size, contentType: file.type },
+        });
+
+        await fetch(uploadURL, {
+          method: "PUT",
+          body: file,
+          headers: { "Content-Type": file.type },
+        });
+
+        const existingCount = (product?.images?.length ?? 0) + i;
+        await addProductImage.mutateAsync({
+          productId,
+          data: { url: objectPath, displayOrder: existingCount },
+        });
+
+        setUploadingFiles((prev) =>
+          prev.map((e) => (e.id === entry.id ? { ...e, status: "done" } : e))
+        );
+      } catch (err: any) {
+        setUploadingFiles((prev) =>
+          prev.map((e) =>
+            e.id === entry.id ? { ...e, status: "error", error: err.message } : e
+          )
+        );
+        toast({ title: `Failed to upload ${file.name}`, variant: "destructive" });
+      }
+    }
+
+    queryClient.invalidateQueries({ queryKey: getGetProductQueryKey(productId) });
+    setUploadingFiles((prev) => prev.filter((e) => e.status !== "done"));
+  };
+
+  const handleDeleteImage = async (imageId: number) => {
+    try {
+      await deleteProductImage.mutateAsync({ productId, imageId });
+      queryClient.invalidateQueries({ queryKey: getGetProductQueryKey(productId) });
+      toast({ title: "Image removed" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to remove image", variant: "destructive" });
+    }
   };
 
   if (!isNew && isLoading) {
     return <div className="p-8 text-center text-slate-500">Loading product...</div>;
   }
+
+  const existingImages = product?.images ?? [];
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -168,23 +295,23 @@ function ProductDetailContent() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Product Name</Label>
-              <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Wireless Earbuds" />
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Wireless Earbuds" />
             </div>
             <div className="space-y-2">
               <Label>Price (₹)</Label>
-              <Input type="number" value={price} onChange={e => setPrice(e.target.value)} placeholder="0.00" />
+              <Input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0.00" />
             </div>
           </div>
-          
+
           <div className="space-y-2">
             <Label>Description</Label>
-            <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Describe the product..." rows={4} />
+            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the product..." rows={4} />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Stock Count</Label>
-              <Input type="number" value={stockCount} onChange={e => setStockCount(e.target.value)} placeholder="0" />
+              <Input type="number" value={stockCount} onChange={(e) => setStockCount(e.target.value)} placeholder="0" />
             </div>
             <div className="space-y-2">
               <Label>Category</Label>
@@ -194,7 +321,7 @@ function ProductDetailContent() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="unassigned">None</SelectItem>
-                  {categories?.map(c => (
+                  {categories?.map((c) => (
                     <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -225,6 +352,83 @@ function ProductDetailContent() {
           )}
         </div>
       </div>
+
+      {/* ── Image Section (only for existing products) ── */}
+      {!isNew && (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">Product Images</h2>
+              <p className="text-sm text-slate-500">JPG, PNG, WebP · max 5 MB each</p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={requestUploadUrl.isPending || addProductImage.isPending}
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Add Images
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              className="hidden"
+              onChange={(e) => handleFilesSelected(e.target.files)}
+            />
+          </div>
+
+          {existingImages.length === 0 && uploadingFiles.length === 0 ? (
+            <div
+              className="border-2 border-dashed border-slate-200 rounded-lg p-10 text-center cursor-pointer hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <ImageIcon className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <p className="text-sm text-slate-500">Click or drag images here</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+              {existingImages.map((img) => (
+                <div key={img.id} className="relative group aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
+                  <img
+                    src={imgSrc(img.url)}
+                    alt="Product"
+                    className="w-full h-full object-cover"
+                  />
+                  <button
+                    onClick={() => handleDeleteImage(img.id)}
+                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+              {uploadingFiles.map((f) => (
+                <div key={f.id} className="relative aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
+                  <img src={f.preview} alt={f.name} className="w-full h-full object-cover opacity-50" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    {f.status === "uploading" && <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />}
+                    {f.status === "error" && <X className="w-6 h-6 text-red-500" />}
+                  </div>
+                </div>
+              ))}
+              <div
+                className="aspect-square rounded-lg border-2 border-dashed border-slate-200 flex items-center justify-center cursor-pointer hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="w-5 h-5 text-slate-400" />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {isNew && (
+        <p className="text-sm text-slate-500 text-center">
+          Save the product first to add photos.
+        </p>
+      )}
     </div>
   );
 }

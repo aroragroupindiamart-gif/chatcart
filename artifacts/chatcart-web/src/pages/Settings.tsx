@@ -110,7 +110,15 @@ function SettingsContent() {
           </div>
           <div className="space-y-2">
             <Label>WhatsApp Number</Label>
-            <Input value={whatsappNumber} onChange={e => setWhatsappNumber(e.target.value)} placeholder="+91..." />
+            <Input
+              value={whatsappNumber}
+              onChange={e => setWhatsappNumber(e.target.value)}
+              placeholder="91XXXXXXXXXX or +91XXXXXXXXXX"
+            />
+            <p className="text-xs text-slate-500">
+              Enter your 10-digit mobile number — country code (91) will be added automatically.
+              This number receives customer orders via WhatsApp.
+            </p>
           </div>
           <div className="space-y-2">
             <Label>Store URL</Label>

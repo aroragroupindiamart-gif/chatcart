@@ -114,4 +114,40 @@ router.get("/storage/objects/*path", requireAuth, async (req: Request, res: Resp
   }
 });
 
+/**
+ * GET /public/img/*path
+ *
+ * Serve product images publicly (no auth required).
+ * Product images are inherently public — they're shown on the customer storefront.
+ * Path should be the objectPath without the leading /objects/ prefix,
+ * e.g. /api/public/img/uploads/<uuid>
+ */
+router.get("/public/img/*path", async (req: Request, res: Response) => {
+  try {
+    const raw = req.params.path;
+    const filePath = Array.isArray(raw) ? raw.join("/") : raw;
+    const objectPath = `/objects/${filePath}`;
+    const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
+    const response = await objectStorageService.downloadObject(objectFile, 86400);
+
+    res.status(response.status);
+    response.headers.forEach((value, key) => res.setHeader(key, value));
+
+    if (response.body) {
+      const { Readable } = await import("stream");
+      const nodeStream = Readable.fromWeb(response.body as ReadableStream<Uint8Array>);
+      nodeStream.pipe(res);
+    } else {
+      res.end();
+    }
+  } catch (error) {
+    if (error instanceof ObjectNotFoundError) {
+      res.status(404).json({ error: "Image not found" });
+      return;
+    }
+    req.log.error({ err: error }, "Error serving public image");
+    res.status(500).json({ error: "Failed to serve image" });
+  }
+});
+
 export default router;

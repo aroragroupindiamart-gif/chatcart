@@ -1,2 +1,1 @@
-- [Expo white screen on context use](expo-context-init.md) — using useContext in app/index.tsx caused a blank screen; read AsyncStorage directly instead
-- [Orval codegen duplicate exports fix](orval-codegen-fix.md) — orval regenerates index.ts with both Zod + TS type exports; patch it in the codegen script after orval runs
+- [Chatcart project overview](chatcart-overview.md) — WhatsApp-first seller catalogue; seeded seller is subdomain `sharma-general`, phone +919876543210.
