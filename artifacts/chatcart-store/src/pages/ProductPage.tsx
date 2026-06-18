@@ -30,6 +30,7 @@ export default function ProductPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeImage, setActiveImage] = useState(0);
+  const [brokenImages, setBrokenImages] = useState<Set<number>>(new Set());
   const [variantSelections, setVariantSelections] = useState<Record<string, string>>({});
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
@@ -134,12 +135,17 @@ export default function ProductPage() {
         {/* Images */}
         {product.images.length > 0 && (
           <div className="space-y-2">
-            <div className="aspect-square rounded-xl overflow-hidden bg-muted">
-              <img
-                src={imgSrc(product.images[activeImage].url)}
-                alt={product.name}
-                className="w-full h-full object-cover"
-              />
+            <div className="aspect-square rounded-xl overflow-hidden bg-muted flex items-center justify-center">
+              {brokenImages.has(activeImage) ? (
+                <Store className="w-12 h-12 text-muted-foreground opacity-20" />
+              ) : (
+                <img
+                  src={imgSrc(product.images[activeImage].url)}
+                  alt={product.name}
+                  className="w-full h-full object-cover"
+                  onError={() => setBrokenImages(prev => new Set(prev).add(activeImage))}
+                />
+              )}
             </div>
             {product.images.length > 1 && (
               <div className="flex gap-2 overflow-x-auto pb-1">
@@ -153,11 +159,18 @@ export default function ProductPage() {
                         : "border-border/40 hover:border-border"
                     }`}
                   >
-                    <img
-                      src={imgSrc(img.url)}
-                      alt=""
-                      className="w-full h-full object-cover"
-                    />
+                    {brokenImages.has(idx) ? (
+                      <div className="w-full h-full flex items-center justify-center bg-muted">
+                        <Store className="w-4 h-4 text-muted-foreground opacity-20" />
+                      </div>
+                    ) : (
+                      <img
+                        src={imgSrc(img.url)}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        onError={() => setBrokenImages(prev => new Set(prev).add(idx))}
+                      />
+                    )}
                   </button>
                 ))}
               </div>

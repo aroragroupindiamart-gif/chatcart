@@ -261,6 +261,7 @@ function ProductCard({
   onClick: () => void;
 }) {
   const primaryImage = product.images[0];
+  const [imageError, setImageError] = useState(false);
   const isOutOfStock = product.status === "out_of_stock";
   const hasPrice = product.price != null;
 
@@ -270,11 +271,12 @@ function ProductCard({
       className="group text-left bg-card border border-card-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-lg transition-all duration-200 w-full"
     >
       <div className="aspect-square bg-muted overflow-hidden relative">
-        {primaryImage ? (
+        {primaryImage && !imageError ? (
           <img
             src={imgSrc(primaryImage.url)}
             alt={product.name}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            onError={() => setImageError(true)}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
