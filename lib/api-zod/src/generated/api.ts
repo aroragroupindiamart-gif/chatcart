@@ -497,7 +497,8 @@ export const RequestUploadUrlBody = zod.object({
   }),
   "contentType": zod.enum(ALLOWED_IMAGE_TYPES, {
     message: "contentType must be one of: image/jpeg, image/png, image/webp"
-  })
+  }),
+  "productId": zod.number().int().positive()
 })
 
 export const RequestUploadUrlResponse = zod.object({

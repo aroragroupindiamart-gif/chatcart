@@ -225,7 +225,17 @@ router.post("/auth/verify-otp", async (req, res) => {
 router.get("/auth/me", requireAuth, async (req, res) => {
   try {
     const [seller] = await db
-      .select()
+      .select({
+        id: sellersTable.id,
+        phone: sellersTable.phone,
+        storeName: sellersTable.storeName,
+        subdomain: sellersTable.subdomain,
+        whatsappNumber: sellersTable.whatsappNumber,
+        bannerImageUrl: sellersTable.bannerImageUrl,
+        tagline: sellersTable.tagline,
+        createdAt: sellersTable.createdAt,
+        updatedAt: sellersTable.updatedAt,
+      })
       .from(sellersTable)
       .where(eq(sellersTable.id, req.seller!.sellerId))
       .limit(1);
