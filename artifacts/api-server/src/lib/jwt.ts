@@ -10,6 +10,7 @@ const JWT_EXPIRES_IN = "30d";
 export interface JwtPayload {
   sellerId: number;
   phone: string;
+  tokenVersion: number;
 }
 
 export function signToken(payload: JwtPayload): string {

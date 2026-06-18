@@ -1,5 +1,6 @@
 export * from "./sellers";
 export * from "./otpCodes";
+export * from "./otpRateLimits";
 export * from "./categories";
 export * from "./products";
 export * from "./productImages";
