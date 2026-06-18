@@ -59,8 +59,6 @@ export const GetMeResponse = zod.object({
   "storeName": zod.string(),
   "subdomain": zod.string(),
   "whatsappNumber": zod.string(),
-  "bannerImageUrl": zod.string().nullable().optional(),
-  "tagline": zod.string().nullable().optional(),
   "createdAt": zod.coerce.date()
 })
 
@@ -78,9 +76,7 @@ export const LogoutResponse = zod.object({
  */
 export const UpdateSellerBody = zod.object({
   "storeName": zod.string().optional(),
-  "whatsappNumber": zod.string().optional(),
-  "bannerImageUrl": zod.string().nullable().optional(),
-  "tagline": zod.string().nullable().optional()
+  "whatsappNumber": zod.string().optional()
 })
 
 export const UpdateSellerResponse = zod.object({
@@ -89,8 +85,6 @@ export const UpdateSellerResponse = zod.object({
   "storeName": zod.string(),
   "subdomain": zod.string(),
   "whatsappNumber": zod.string(),
-  "bannerImageUrl": zod.string().nullable().optional(),
-  "tagline": zod.string().nullable().optional(),
   "createdAt": zod.coerce.date()
 })
 
@@ -188,7 +182,7 @@ export const createProductBodyStockCountDefault = 1;
 export const CreateProductBody = zod.object({
   "name": zod.string(),
   "description": zod.string().optional(),
-  "price": zod.number().optional(),
+  "price": zod.number(),
   "categoryId": zod.number().optional(),
   "stockCount": zod.number().default(createProductBodyStockCountDefault)
 })
@@ -485,23 +479,41 @@ export const GetDashboardStatsResponse = zod.object({
 
 
 /**
- * @summary Request a presigned upload URL for object storage
+ * @summary Request a presigned upload URL for a product image (atomically creates the product_images row)
  */
-const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
-const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+export const requestUploadUrlBodySizeMax = 5242880;
+
+export const requestUploadUrlBodyDisplayOrderDefault = 0;
 
 export const RequestUploadUrlBody = zod.object({
+  "productId": zod.number().describe('ID of the product this image will be attached to'),
   "name": zod.string(),
-  "size": zod.number().positive().max(MAX_UPLOAD_BYTES, {
-    message: `File size must not exceed 5 MB (${MAX_UPLOAD_BYTES} bytes)`
-  }),
-  "contentType": zod.enum(ALLOWED_IMAGE_TYPES, {
-    message: "contentType must be one of: image/jpeg, image/png, image/webp"
-  }),
-  "productId": zod.number().int().positive()
+  "size": zod.number().min(1).max(requestUploadUrlBodySizeMax).describe('File size in bytes, max 5 MB'),
+  "contentType": zod.enum(['image/jpeg', 'image/png', 'image/webp']).describe('Must be a supported image MIME type'),
+  "displayOrder": zod.number().default(requestUploadUrlBodyDisplayOrderDefault).describe('Display order for the image within the product')
 })
 
 export const RequestUploadUrlResponse = zod.object({
+  "uploadURL": zod.string(),
+  "objectPath": zod.string(),
+  "imageId": zod.number().describe('ID of the newly created product_images row')
+})
+
+
+/**
+ * @summary Request a presigned upload URL for a seller logo or banner image
+ */
+export const requestLogoUploadUrlBodySizeMax = 5242880;
+
+
+
+export const RequestLogoUploadUrlBody = zod.object({
+  "name": zod.string(),
+  "size": zod.number().min(1).max(requestLogoUploadUrlBodySizeMax).describe('File size in bytes, max 5 MB'),
+  "contentType": zod.enum(['image/jpeg', 'image/png', 'image/webp']).describe('Must be a supported image MIME type')
+})
+
+export const RequestLogoUploadUrlResponse = zod.object({
   "uploadURL": zod.string(),
   "objectPath": zod.string()
 })

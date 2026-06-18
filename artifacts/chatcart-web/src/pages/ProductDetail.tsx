@@ -10,8 +10,8 @@ import {
   useDeleteProduct,
   useGetMe,
   useRequestUploadUrl,
-  useAddProductImage,
   useDeleteProductImage,
+  RequestUploadUrlBodyContentType,
 } from "@workspace/api-client-react";
 import { useLocation, useParams } from "wouter";
 import { useEffect, useRef, useState } from "react";
@@ -84,7 +84,6 @@ function ProductDetailContent() {
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
   const requestUploadUrl = useRequestUploadUrl();
-  const addProductImage = useAddProductImage();
   const deleteProductImage = useDeleteProductImage();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -119,6 +118,7 @@ function ProductDetailContent() {
         return () => clearTimeout(timer);
       }
     }
+    return undefined;
   }, [isNew, isLoading]);
 
   const handleSave = async () => {
@@ -137,7 +137,7 @@ function ProductDetailContent() {
           data: {
             name,
             description: description || undefined,
-            price: resolvedPrice,
+            price: resolvedPrice ?? 0,
             stockCount: Number(stockCount) || 0,
             categoryId: resolvedCategoryId ?? undefined,
           },
@@ -206,7 +206,7 @@ function ProductDetailContent() {
     }
     try {
       const newProduct = await createProduct.mutateAsync({
-        data: { name },
+        data: { name, price: 0, stockCount: 0 },
       });
       toast({ title: "Product saved — add your photos now" });
       setLocation(`/products/${newProduct.id}?upload=1`);
@@ -245,20 +245,24 @@ function ProductDetailContent() {
       const file = valid[i];
       const entry = entries[i];
       try {
-        const { uploadURL, objectPath } = await requestUploadUrl.mutateAsync({
-          data: { name: file.name, size: file.size, contentType: file.type },
+        const existingCount = (product?.images?.length ?? 0) + i;
+
+        // The server verifies product ownership, creates the product_images row
+        // atomically, and returns a presigned URL for the upload — no orphaned files.
+        const { uploadURL } = await requestUploadUrl.mutateAsync({
+          data: {
+            productId,
+            name: file.name,
+            size: file.size,
+            contentType: file.type as RequestUploadUrlBodyContentType,
+            displayOrder: existingCount,
+          },
         });
 
         await fetch(uploadURL, {
           method: "PUT",
           body: file,
           headers: { "Content-Type": file.type },
-        });
-
-        const existingCount = (product?.images?.length ?? 0) + i;
-        await addProductImage.mutateAsync({
-          productId,
-          data: { url: objectPath, displayOrder: existingCount },
         });
 
         setUploadingFiles((prev) =>
@@ -338,7 +342,7 @@ function ProductDetailContent() {
               variant="outline"
               size="sm"
               onClick={() => fileInputRef.current?.click()}
-              disabled={requestUploadUrl.isPending || addProductImage.isPending}
+              disabled={requestUploadUrl.isPending}
             >
               <Upload className="w-4 h-4 mr-2" />
               Add Images

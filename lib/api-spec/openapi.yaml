@@ -663,7 +663,7 @@ paths:
     post:
       operationId: requestUploadUrl
       tags: [storage]
-      summary: Request a presigned upload URL for object storage
+      summary: Request a presigned upload URL for a product image (atomically creates the product_images row)
       security:
         - BearerAuth: []
       requestBody:
@@ -674,11 +674,50 @@ paths:
               $ref: "#/components/schemas/RequestUploadUrlBody"
       responses:
         "200":
-          description: Presigned upload URL
+          description: Presigned upload URL with the created product image record
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/RequestUploadUrlResponse"
+        "400":
+          description: Missing or invalid fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Product not owned by this seller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /storage/uploads/request-logo-url:
+    post:
+      operationId: requestLogoUploadUrl
+      tags: [storage]
+      summary: Request a presigned upload URL for a seller logo or banner image
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestLogoUploadUrlBody"
+      responses:
+        "200":
+          description: Presigned upload URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestLogoUploadUrlResponse"
 
 components:
   securitySchemes:
@@ -1179,6 +1218,48 @@ components:
     RequestUploadUrlBody:
       type: object
       properties:
+        productId:
+          type: integer
+          description: ID of the product this image will be attached to
+        name:
+          type: string
+        size:
+          type: integer
+          minimum: 1
+          maximum: 5242880
+          description: File size in bytes, max 5 MB
+        contentType:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+          description: Must be a supported image MIME type
+        displayOrder:
+          type: integer
+          default: 0
+          description: Display order for the image within the product
+      required:
+        - productId
+        - name
+        - size
+        - contentType
+
+    RequestUploadUrlResponse:
+      type: object
+      properties:
+        uploadURL:
+          type: string
+        objectPath:
+          type: string
+        imageId:
+          type: integer
+          description: ID of the newly created product_images row
+      required:
+        - uploadURL
+        - objectPath
+        - imageId
+
+    RequestLogoUploadUrlBody:
+      type: object
+      properties:
         name:
           type: string
         size:
@@ -1195,7 +1276,7 @@ components:
         - size
         - contentType
 
-    RequestUploadUrlResponse:
+    RequestLogoUploadUrlResponse:
       type: object
       properties:
         uploadURL:

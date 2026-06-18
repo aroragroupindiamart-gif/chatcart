@@ -222,13 +222,66 @@ export interface DashboardStats {
   recentOrders: Order[];
 }
 
+/**
+ * Must be a supported image MIME type
+ */
+export type RequestUploadUrlBodyContentType = typeof RequestUploadUrlBodyContentType[keyof typeof RequestUploadUrlBodyContentType];
+
+
+export const RequestUploadUrlBodyContentType = {
+  'image/jpeg': 'image/jpeg',
+  'image/png': 'image/png',
+  'image/webp': 'image/webp',
+} as const;
+
 export interface RequestUploadUrlBody {
+  /** ID of the product this image will be attached to */
+  productId: number;
   name: string;
+  /**
+     * File size in bytes, max 5 MB
+     * @minimum 1
+     * @maximum 5242880
+     */
   size: number;
-  contentType: string;
+  /** Must be a supported image MIME type */
+  contentType: RequestUploadUrlBodyContentType;
+  /** Display order for the image within the product */
+  displayOrder?: number;
 }
 
 export interface RequestUploadUrlResponse {
+  uploadURL: string;
+  objectPath: string;
+  /** ID of the newly created product_images row */
+  imageId: number;
+}
+
+/**
+ * Must be a supported image MIME type
+ */
+export type RequestLogoUploadUrlBodyContentType = typeof RequestLogoUploadUrlBodyContentType[keyof typeof RequestLogoUploadUrlBodyContentType];
+
+
+export const RequestLogoUploadUrlBodyContentType = {
+  'image/jpeg': 'image/jpeg',
+  'image/png': 'image/png',
+  'image/webp': 'image/webp',
+} as const;
+
+export interface RequestLogoUploadUrlBody {
+  name: string;
+  /**
+     * File size in bytes, max 5 MB
+     * @minimum 1
+     * @maximum 5242880
+     */
+  size: number;
+  /** Must be a supported image MIME type */
+  contentType: RequestLogoUploadUrlBodyContentType;
+}
+
+export interface RequestLogoUploadUrlResponse {
   uploadURL: string;
   objectPath: string;
 }

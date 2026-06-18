@@ -3,13 +3,14 @@ import { Readable } from "stream";
 import {
   RequestUploadUrlBody,
   RequestUploadUrlResponse,
+  RequestLogoUploadUrlBody,
+  RequestLogoUploadUrlResponse,
 } from "@workspace/api-zod";
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
-import { ObjectPermission } from "../lib/objectAcl";
 import { requireAuth } from "../middleware/auth.js";
 import { db } from "@workspace/db";
 import { productImagesTable, productsTable } from "@workspace/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, count } from "drizzle-orm";
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
@@ -17,9 +18,9 @@ const objectStorageService = new ObjectStorageService();
 /**
  * POST /storage/uploads/request-url
  *
- * Request a presigned URL for file upload.
- * The client sends JSON metadata (name, size, contentType) — NOT the file.
- * Then uploads the file directly to the returned presigned URL.
+ * Request a presigned URL for a product image upload.
+ * Requires productId — verifies the product belongs to the authenticated seller,
+ * then atomically creates the product_images row and returns the presigned URL.
  */
 router.post("/storage/uploads/request-url", requireAuth, async (req: Request, res: Response) => {
   const parsed = RequestUploadUrlBody.safeParse(req.body);
@@ -28,21 +29,90 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Request, re
     return;
   }
 
-  try {
-    const { name, size, contentType } = parsed.data;
+  const { productId, name, size, contentType, displayOrder } = parsed.data;
+  const sellerId = req.seller!.sellerId;
 
+  try {
+    // Verify the product exists and belongs to the authenticated seller
+    const [product] = await db
+      .select({ id: productsTable.id })
+      .from(productsTable)
+      .where(and(eq(productsTable.id, productId), eq(productsTable.sellerId, sellerId)))
+      .limit(1);
+
+    if (!product) {
+      res.status(404).json({ error: "Product not found or not owned by this seller" });
+      return;
+    }
+
+    // Determine display order: if not provided, append after existing images
+    let resolvedDisplayOrder = displayOrder;
+    if (resolvedDisplayOrder === 0) {
+      const [{ imageCount }] = await db
+        .select({ imageCount: count() })
+        .from(productImagesTable)
+        .where(eq(productImagesTable.productId, productId));
+      resolvedDisplayOrder = imageCount;
+    }
+
+    // Generate the presigned upload URL
+    const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+    const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+
+    // Atomically create the product_images row before the upload happens.
+    // The row is written now so the file is always linked to a product — no orphans.
+    const [newImage] = await db
+      .insert(productImagesTable)
+      .values({
+        productId,
+        url: objectPath,
+        displayOrder: resolvedDisplayOrder,
+      })
+      .returning({ id: productImagesTable.id });
+
+    res.json(
+      RequestUploadUrlResponse.parse({
+        uploadURL,
+        objectPath,
+        imageId: newImage.id,
+        metadata: { name, size, contentType },
+      }),
+    );
+  } catch (error) {
+    req.log.error({ err: error }, "Error generating upload URL");
+    res.status(500).json({ error: "Failed to generate upload URL" });
+  }
+});
+
+/**
+ * POST /storage/uploads/request-logo-url
+ *
+ * Request a presigned URL for a seller logo or banner image upload.
+ * These are not product images and are not linked to product_images rows —
+ * they are referenced directly on the seller record (bannerImageUrl).
+ */
+router.post("/storage/uploads/request-logo-url", requireAuth, async (req: Request, res: Response) => {
+  const parsed = RequestLogoUploadUrlBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Missing or invalid required fields" });
+    return;
+  }
+
+  const { name, size, contentType } = parsed.data;
+
+  try {
     const uploadURL = await objectStorageService.getObjectEntityUploadURL();
     const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
 
     res.json(
-      RequestUploadUrlResponse.parse({
+      RequestLogoUploadUrlResponse.parse({
         uploadURL,
         objectPath,
         metadata: { name, size, contentType },
       }),
     );
   } catch (error) {
-    req.log.error({ err: error }, "Error generating upload URL");
+    req.log.error({ err: error }, "Error generating logo upload URL");
     res.status(500).json({ error: "Failed to generate upload URL" });
   }
 });

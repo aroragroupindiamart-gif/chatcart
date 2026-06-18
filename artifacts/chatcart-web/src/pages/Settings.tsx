@@ -7,7 +7,8 @@ import {
   useCreateCategory,
   useUpdateCategory,
   useDeleteCategory,
-  useRequestUploadUrl,
+  useRequestLogoUploadUrl,
+  RequestLogoUploadUrlBodyContentType,
   getListCategoriesQueryKey,
 } from "@workspace/api-client-react";
 import { useState, useEffect, useRef } from "react";
@@ -44,7 +45,7 @@ function SettingsContent() {
   const queryClient = useQueryClient();
   const { data: seller } = useGetMe();
   const updateSeller = useUpdateSeller();
-  const requestUploadUrl = useRequestUploadUrl();
+  const requestLogoUploadUrl = useRequestLogoUploadUrl();
 
   const [storeName, setStoreName] = useState("");
   const [whatsappNumber, setWhatsappNumber] = useState("");
@@ -103,8 +104,8 @@ function SettingsContent() {
 
     setUploadingLogo(true);
     try {
-      const { uploadURL, objectPath } = await requestUploadUrl.mutateAsync({
-        data: { name: file.name, size: file.size, contentType: file.type },
+      const { uploadURL, objectPath } = await requestLogoUploadUrl.mutateAsync({
+        data: { name: file.name, size: file.size, contentType: file.type as RequestLogoUploadUrlBodyContentType },
       });
       await fetch(uploadURL, {
         method: "PUT",
