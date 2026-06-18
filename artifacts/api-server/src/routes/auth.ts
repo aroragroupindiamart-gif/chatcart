@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { sellersTable, otpCodesTable } from "@workspace/db/schema";
-import { eq, and, gt, lt } from "drizzle-orm";
+import { eq, and, gt, lt, desc } from "drizzle-orm";
 import { signToken } from "../lib/jwt.js";
 import { requireAuth } from "../middleware/auth.js";
 
@@ -158,7 +158,7 @@ router.post("/auth/verify-otp", async (req, res) => {
           gt(otpCodesTable.expiresAt, now)
         )
       )
-      .orderBy(otpCodesTable.createdAt)
+      .orderBy(desc(otpCodesTable.createdAt))
       .limit(1);
 
     // Wrong code OR no active OTP
