@@ -1,11 +1,15 @@
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Layout } from "@/components/Layout";
-import { useGetOrder, getGetOrderQueryKey, OrderStatus } from "@workspace/api-client-react";
+import { useGetOrder, getGetOrderQueryKey } from "@workspace/api-client-react";
 import { useParams, Link } from "wouter";
-import { ArrowLeft, MapPin, Phone, Calendar } from "lucide-react";
+import { ArrowLeft, Phone, Calendar } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useQueryClient } from "@tanstack/react-query";
+
+const STATUS_STYLES: Record<string, string> = {
+  pending: "bg-amber-100 text-amber-800",
+  confirmed: "bg-blue-100 text-blue-800",
+  fulfilled: "bg-green-100 text-green-800",
+};
 
 export default function OrderDetail() {
   return (
@@ -20,13 +24,12 @@ export default function OrderDetail() {
 function OrderDetailContent() {
   const params = useParams();
   const orderId = params.id as string;
-  const queryClient = useQueryClient();
 
   const { data: order, isLoading } = useGetOrder(orderId, {
     query: {
       enabled: !!orderId,
-      queryKey: getGetOrderQueryKey(orderId)
-    }
+      queryKey: getGetOrderQueryKey(orderId),
+    },
   });
 
   if (isLoading) {
@@ -36,12 +39,6 @@ function OrderDetailContent() {
   if (!order) {
     return <div className="p-8 text-center text-slate-500">Order not found</div>;
   }
-
-  // Real app would have an update order status mutation here
-  // Mock function for UI completeness
-  const handleStatusChange = (newStatus: string) => {
-    // queryClient.setQueryData(...)
-  };
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -53,16 +50,11 @@ function OrderDetailContent() {
           Order {order.id}
         </h1>
         <div className="ml-auto">
-          <Select value={order.status} onValueChange={handleStatusChange}>
-            <SelectTrigger className="w-40 font-medium">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="confirmed">Confirmed</SelectItem>
-              <SelectItem value="fulfilled">Fulfilled</SelectItem>
-            </SelectContent>
-          </Select>
+          <span
+            className={`px-3 py-1 rounded-full text-sm font-medium capitalize ${STATUS_STYLES[order.status] ?? "bg-slate-100 text-slate-700"}`}
+          >
+            {order.status}
+          </span>
         </div>
       </div>
 
@@ -79,12 +71,12 @@ function OrderDetailContent() {
                     <div>
                       <p className="font-medium text-slate-900">{item.productNameSnapshot}</p>
                       <p className="text-sm text-slate-500">
-                        {item.quantity} x ₹{item.priceSnapshot}
-                        {item.variantSnapshot && ` • ${item.variantSnapshot}`}
+                        {item.quantity} × ₹{item.priceSnapshot}
+                        {item.variantSnapshot && ` · ${item.variantSnapshot}`}
                       </p>
                     </div>
                     <div className="font-bold text-slate-900">
-                      ₹{item.quantity * item.priceSnapshot}
+                      ₹{(item.quantity * item.priceSnapshot).toFixed(2)}
                     </div>
                   </div>
                 ))}
@@ -109,7 +101,15 @@ function OrderDetailContent() {
               </div>
               <div className="flex items-center gap-3 text-slate-600">
                 <Calendar className="w-4 h-4" />
-                <span>{new Date(order.createdAt).toLocaleDateString()} {new Date(order.createdAt).toLocaleTimeString()}</span>
+                <span>
+                  {new Date(order.createdAt).toLocaleDateString("en-IN", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
               </div>
             </CardContent>
           </Card>

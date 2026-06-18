@@ -1,6 +1,6 @@
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Layout } from "@/components/Layout";
-import { useGetProduct, useCreateProduct, useUpdateProduct, useListCategories, getGetProductQueryKey, ProductStatus, useDeleteProduct } from "@workspace/api-client-react";
+import { useGetProduct, useCreateProduct, useUpdateProduct, useListCategories, getGetProductQueryKey, ProductStatus, useDeleteProduct, useGetMe } from "@workspace/api-client-react";
 import { useLocation, useParams } from "wouter";
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
@@ -39,6 +39,7 @@ function ProductDetailContent() {
     }
   });
 
+  const { data: meData } = useGetMe();
   const { data: categories } = useListCategories();
 
   const createProduct = useCreateProduct();
@@ -71,6 +72,9 @@ function ProductDetailContent() {
       return;
     }
 
+    const resolvedCategoryId =
+      categoryId && categoryId !== "unassigned" ? Number(categoryId) : null;
+
     try {
       if (isNew) {
         const newProduct = await createProduct.mutateAsync({
@@ -79,7 +83,7 @@ function ProductDetailContent() {
             description,
             price: Number(price),
             stockCount: Number(stockCount) || 0,
-            categoryId: categoryId ? Number(categoryId) : undefined,
+            categoryId: resolvedCategoryId ?? undefined,
           }
         });
         toast({ title: "Product created successfully" });
@@ -92,7 +96,7 @@ function ProductDetailContent() {
             description,
             price: Number(price),
             stockCount: Number(stockCount) || 0,
-            categoryId: categoryId ? Number(categoryId) : undefined,
+            categoryId: resolvedCategoryId ?? undefined,
             status: status as ProductStatus,
             showWhenOutOfStock
           }
@@ -117,8 +121,13 @@ function ProductDetailContent() {
   };
 
   const handleShare = () => {
-    const text = encodeURIComponent(`Check out ${name} for ₹${price}!`);
-    window.open(`https://wa.me/?text=${text}`, '_blank');
+    const storeName = meData?.storeName ?? "";
+    const storeSlug = storeName.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+    const productUrl = storeSlug
+      ? `https://${storeSlug}.chatcart.in/p/${productId}`
+      : `https://chatcart.in/p/${productId}`;
+    const text = encodeURIComponent(`Check out ${name} for ₹${price}!\n${productUrl}`);
+    window.open(`https://wa.me/?text=${text}`, "_blank");
   };
 
   if (!isNew && isLoading) {

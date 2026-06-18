@@ -28,6 +28,8 @@ async function assertProductBelongsToSeller(productId: number, sellerId: number)
   return !!product;
 }
 
+// ── List & create ────────────────────────────────────────────────────────────
+
 router.get("/products", requireAuth, async (req, res) => {
   try {
     const { categoryId, status, search } = req.query as {
@@ -114,6 +116,37 @@ router.post("/products", requireAuth, async (req, res) => {
     res.status(500).json({ error: "Failed to create product" });
   }
 });
+
+// ── Reorder (MUST come before /:productId to avoid route shadowing) ──────────
+
+router.patch("/products/reorder", requireAuth, async (req, res) => {
+  try {
+    const { items } = req.body as { items: Array<{ id: number; sortOrder: number }> };
+    if (!Array.isArray(items)) {
+      res.status(400).json({ error: "items array required" });
+      return;
+    }
+    await Promise.all(
+      items.map((item) =>
+        db
+          .update(productsTable)
+          .set({ sortOrder: item.sortOrder, updatedAt: new Date() })
+          .where(
+            and(
+              eq(productsTable.id, item.id),
+              eq(productsTable.sellerId, req.seller!.sellerId)
+            )
+          )
+      )
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to reorder products" });
+  }
+});
+
+// ── Single product CRUD ──────────────────────────────────────────────────────
 
 router.get("/products/:productId", requireAuth, async (req, res) => {
   try {
@@ -234,32 +267,7 @@ router.delete("/products/:productId", requireAuth, async (req, res) => {
   }
 });
 
-router.patch("/products/reorder", requireAuth, async (req, res) => {
-  try {
-    const { items } = req.body as { items: Array<{ id: number; sortOrder: number }> };
-    if (!Array.isArray(items)) {
-      res.status(400).json({ error: "items array required" });
-      return;
-    }
-    await Promise.all(
-      items.map((item) =>
-        db
-          .update(productsTable)
-          .set({ sortOrder: item.sortOrder, updatedAt: new Date() })
-          .where(
-            and(
-              eq(productsTable.id, item.id),
-              eq(productsTable.sellerId, req.seller!.sellerId)
-            )
-          )
-      )
-    );
-    res.json({ success: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to reorder products" });
-  }
-});
+// ── Product images ───────────────────────────────────────────────────────────
 
 router.post("/products/:productId/images", requireAuth, async (req, res) => {
   try {
@@ -345,6 +353,8 @@ router.patch(
     }
   }
 );
+
+// ── Product variants ─────────────────────────────────────────────────────────
 
 router.post(
   "/products/:productId/variants",

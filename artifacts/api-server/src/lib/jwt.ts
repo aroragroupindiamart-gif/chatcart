@@ -1,6 +1,10 @@
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = process.env.JWT_SECRET ?? "chatcart-dev-secret-change-in-prod";
+const envSecret = process.env.JWT_SECRET;
+if (!envSecret && process.env.NODE_ENV === "production") {
+  throw new Error("JWT_SECRET environment variable must be set in production");
+}
+const JWT_SECRET = envSecret ?? "chatcart-dev-secret-change-in-prod";
 const JWT_EXPIRES_IN = "30d";
 
 export interface JwtPayload {
