@@ -34,7 +34,7 @@ export default function ProductPage() {
     setError(null);
     Promise.all([
       api.getSeller(subdomain),
-      api.getProduct(parseInt(productId)),
+      api.getProduct(subdomain, parseInt(productId)),
     ])
       .then(([s, p]) => {
         setSeller(s);

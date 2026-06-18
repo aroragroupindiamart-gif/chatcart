@@ -81,8 +81,8 @@ export const api = {
   getProducts: (subdomain: string) =>
     apiFetch<Product[]>(`/sellers/${encodeURIComponent(subdomain)}/products`),
 
-  getProduct: (productId: number) =>
-    apiFetch<Product>(`/products/${productId}`),
+  getProduct: (subdomain: string, productId: number) =>
+    apiFetch<Product>(`/sellers/${encodeURIComponent(subdomain)}/products/${productId}`),
 
   createOrder: (body: {
     sellerId: number;

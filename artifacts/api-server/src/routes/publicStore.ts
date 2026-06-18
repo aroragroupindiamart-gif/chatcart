@@ -9,7 +9,7 @@ import {
   orderItemsTable,
   categoriesTable,
 } from "@workspace/db/schema";
-import { eq, and, ne, asc, inArray } from "drizzle-orm";
+import { eq, and, ne, or, asc, inArray } from "drizzle-orm";
 
 const router = Router();
 
@@ -101,7 +101,6 @@ router.get("/public/sellers/:subdomain/products", async (req, res) => {
       return;
     }
 
-    // Return active products + showWhenOutOfStock products (marked accordingly)
     const products = await db
       .select()
       .from(productsTable)
@@ -109,7 +108,11 @@ router.get("/public/sellers/:subdomain/products", async (req, res) => {
         and(
           eq(productsTable.sellerId, seller.id),
           ne(productsTable.status, "deleted"),
-          ne(productsTable.status, "hidden")
+          ne(productsTable.status, "hidden"),
+          or(
+            ne(productsTable.status, "out_of_stock"),
+            eq(productsTable.showWhenOutOfStock, true)
+          )
         )
       )
       .orderBy(asc(productsTable.sortOrder));
@@ -139,16 +142,30 @@ router.get("/public/sellers/:subdomain/products", async (req, res) => {
   }
 });
 
-// GET /public/products/:productId — single product (no auth)
-router.get("/public/products/:productId", async (req, res) => {
+// GET /public/sellers/:subdomain/products/:productId — seller-scoped single product (no auth)
+router.get("/public/sellers/:subdomain/products/:productId", async (req, res) => {
   try {
+    const { subdomain } = req.params;
     const productId = parseInt(String(req.params.productId));
+
+    const [seller] = await db
+      .select({ id: sellersTable.id })
+      .from(sellersTable)
+      .where(eq(sellersTable.subdomain, subdomain))
+      .limit(1);
+
+    if (!seller) {
+      res.status(404).json({ error: "Store not found" });
+      return;
+    }
+
     const [product] = await db
       .select()
       .from(productsTable)
       .where(
         and(
           eq(productsTable.id, productId),
+          eq(productsTable.sellerId, seller.id),
           ne(productsTable.status, "deleted"),
           ne(productsTable.status, "hidden")
         )
