@@ -7,6 +7,9 @@ import {
 import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
 import { ObjectPermission } from "../lib/objectAcl";
 import { requireAuth } from "../middleware/auth.js";
+import { db } from "@workspace/db";
+import { productImagesTable, productsTable } from "@workspace/db/schema";
+import { eq, and } from "drizzle-orm";
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
@@ -94,6 +97,27 @@ router.get("/storage/objects/uploads/:filename", requireAuth, async (req: Reques
       return;
     }
     const objectPath = `/objects/uploads/${filename}`;
+
+    // Ownership check: ensure the file belongs to a product owned by the authenticated seller.
+    // Return 403 without revealing whether the file exists.
+    const sellerId = req.seller!.sellerId;
+    const ownershipRows = await db
+      .select({ id: productImagesTable.id })
+      .from(productImagesTable)
+      .innerJoin(productsTable, eq(productImagesTable.productId, productsTable.id))
+      .where(
+        and(
+          eq(productImagesTable.url, objectPath),
+          eq(productsTable.sellerId, sellerId),
+        ),
+      )
+      .limit(1);
+
+    if (ownershipRows.length === 0) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
     const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
 
     const response = await objectStorageService.downloadObject(objectFile);
