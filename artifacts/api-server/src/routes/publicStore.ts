@@ -20,7 +20,7 @@ function formatProduct(
 ) {
   return {
     ...product,
-    price: parseFloat(product.price as unknown as string),
+    price: product.price != null ? parseFloat(product.price as unknown as string) : null,
     images: images.filter((i) => i.productId === product.id),
     variants: variants.filter((v) => v.productId === product.id),
   };
@@ -70,6 +70,8 @@ router.get("/public/sellers/:subdomain", async (req, res) => {
         storeName: sellersTable.storeName,
         subdomain: sellersTable.subdomain,
         whatsappNumber: sellersTable.whatsappNumber,
+        bannerImageUrl: sellersTable.bannerImageUrl,
+        tagline: sellersTable.tagline,
       })
       .from(sellersTable)
       .where(eq(sellersTable.subdomain, subdomain))

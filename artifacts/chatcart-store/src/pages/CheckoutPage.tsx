@@ -33,7 +33,7 @@ export default function CheckoutPage({ seller, onBack }: CheckoutPageProps) {
         customerContact: `Name: ${name.trim()}, Phone: ${phone.trim()}`,
         items: items.map((item) => ({
           productNameSnapshot: item.product.name,
-          priceSnapshot: item.product.price.toFixed(2),
+          priceSnapshot: (item.product.price ?? 0).toFixed(2),
           variantSnapshot:
             Object.keys(item.variantSelections).length > 0
               ? Object.entries(item.variantSelections)
@@ -92,11 +92,15 @@ export default function CheckoutPage({ seller, onBack }: CheckoutPageProps) {
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    {formatPrice(item.product.price)} × {item.quantity}
+                    {item.product.price != null
+                      ? `${formatPrice(item.product.price)} × ${item.quantity}`
+                      : `Qty: ${item.quantity}`}
                   </p>
                 </div>
                 <span className="text-sm font-semibold shrink-0">
-                  {formatPrice(item.product.price * item.quantity)}
+                  {item.product.price != null
+                    ? formatPrice(item.product.price * item.quantity)
+                    : "—"}
                 </span>
               </div>
             ))}

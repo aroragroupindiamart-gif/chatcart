@@ -8,6 +8,8 @@ export const sellersTable = pgTable("sellers", {
   storeName: text("store_name").notNull().default("My Store"),
   subdomain: text("subdomain").notNull().unique(),
   whatsappNumber: text("whatsapp_number").notNull(),
+  bannerImageUrl: text("banner_image_url"),
+  tagline: text("tagline"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

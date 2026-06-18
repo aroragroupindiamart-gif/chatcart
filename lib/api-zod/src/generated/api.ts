@@ -59,6 +59,8 @@ export const GetMeResponse = zod.object({
   "storeName": zod.string(),
   "subdomain": zod.string(),
   "whatsappNumber": zod.string(),
+  "bannerImageUrl": zod.string().nullable().optional(),
+  "tagline": zod.string().nullable().optional(),
   "createdAt": zod.coerce.date()
 })
 
@@ -76,7 +78,9 @@ export const LogoutResponse = zod.object({
  */
 export const UpdateSellerBody = zod.object({
   "storeName": zod.string().optional(),
-  "whatsappNumber": zod.string().optional()
+  "whatsappNumber": zod.string().optional(),
+  "bannerImageUrl": zod.string().nullable().optional(),
+  "tagline": zod.string().nullable().optional()
 })
 
 export const UpdateSellerResponse = zod.object({
@@ -85,6 +89,8 @@ export const UpdateSellerResponse = zod.object({
   "storeName": zod.string(),
   "subdomain": zod.string(),
   "whatsappNumber": zod.string(),
+  "bannerImageUrl": zod.string().nullable().optional(),
+  "tagline": zod.string().nullable().optional(),
   "createdAt": zod.coerce.date()
 })
 
@@ -182,7 +188,7 @@ export const createProductBodyStockCountDefault = 1;
 export const CreateProductBody = zod.object({
   "name": zod.string(),
   "description": zod.string().optional(),
-  "price": zod.number(),
+  "price": zod.number().optional(),
   "categoryId": zod.number().optional(),
   "stockCount": zod.number().default(createProductBodyStockCountDefault)
 })

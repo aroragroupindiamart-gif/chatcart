@@ -27,7 +27,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useQueryClient } from "@tanstack/react-query";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_SIZE_BYTES = 5 * 1024 * 1024;
 
 function imgSrc(url: string): string {
   if (url.startsWith("/objects/")) {
@@ -102,7 +102,7 @@ function ProductDetailContent() {
     if (product && !isNew) {
       setName(product.name);
       setDescription(product.description || "");
-      setPrice(product.price.toString());
+      setPrice(product.price != null ? product.price.toString() : "");
       setStockCount(product.stockCount.toString());
       setCategoryId(product.categoryId?.toString() || "");
       setStatus(product.status);
@@ -110,22 +110,34 @@ function ProductDetailContent() {
     }
   }, [product, isNew]);
 
+  // Auto-open file picker when navigated here after auto-save (?upload=1)
+  useEffect(() => {
+    if (!isNew && !isLoading) {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("upload") === "1") {
+        const timer = setTimeout(() => fileInputRef.current?.click(), 400);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isNew, isLoading]);
+
   const handleSave = async () => {
-    if (!name || !price) {
-      toast({ title: "Validation Error", description: "Name and price are required", variant: "destructive" });
+    if (!name.trim()) {
+      toast({ title: "Validation Error", description: "Product name is required", variant: "destructive" });
       return;
     }
 
     const resolvedCategoryId =
       categoryId && categoryId !== "unassigned" ? Number(categoryId) : null;
+    const resolvedPrice = price.trim() !== "" ? Number(price) : undefined;
 
     try {
       if (isNew) {
         const newProduct = await createProduct.mutateAsync({
           data: {
             name,
-            description,
-            price: Number(price),
+            description: description || undefined,
+            price: resolvedPrice,
             stockCount: Number(stockCount) || 0,
             categoryId: resolvedCategoryId ?? undefined,
           },
@@ -138,7 +150,7 @@ function ProductDetailContent() {
           data: {
             name,
             description,
-            price: Number(price),
+            price: resolvedPrice,
             stockCount: Number(stockCount) || 0,
             categoryId: resolvedCategoryId ?? undefined,
             status: status as ProductStatus,
@@ -180,6 +192,27 @@ function ProductDetailContent() {
       return;
     }
     window.open(`https://wa.me/${phone}?text=${text}`, "_blank");
+  };
+
+  // For NEW products: auto-save with name then redirect to edit mode
+  const handleNewProductPhotoZoneClick = async () => {
+    if (!name.trim()) {
+      toast({
+        title: "Add a product name first",
+        description: "Enter a name below, then tap here to add photos.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      const newProduct = await createProduct.mutateAsync({
+        data: { name },
+      });
+      toast({ title: "Product saved — add your photos now" });
+      setLocation(`/products/${newProduct.id}?upload=1`);
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to save product", variant: "destructive" });
+    }
   };
 
   const handleFilesSelected = async (files: FileList | null) => {
@@ -263,6 +296,7 @@ function ProductDetailContent() {
 
   return (
     <div className="space-y-6 max-w-3xl">
+      {/* ── Header ── */}
       <div className="flex items-center gap-4">
         <Link href="/products" className="p-2 rounded-md hover:bg-slate-100 text-slate-500 transition-colors">
           <ArrowLeft className="w-5 h-5" />
@@ -290,31 +324,166 @@ function ProductDetailContent() {
         </div>
       </div>
 
+      {/* ── Photos (always first, most prominent) ── */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">Product Photos</h2>
+            <p className="text-sm text-slate-500">
+              {isNew ? "Save the product first to add photos" : "JPG, PNG, WebP · max 5 MB each"}
+            </p>
+          </div>
+          {!isNew && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={requestUploadUrl.isPending || addProductImage.isPending}
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Add Images
+            </Button>
+          )}
+        </div>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          multiple
+          className="hidden"
+          onChange={(e) => handleFilesSelected(e.target.files)}
+        />
+
+        {isNew ? (
+          /* Big tap-target for new products */
+          <div
+            onClick={handleNewProductPhotoZoneClick}
+            className="border-2 border-dashed border-slate-200 rounded-xl p-12 text-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/50 transition-all group"
+          >
+            {createProduct.isPending ? (
+              <Loader2 className="w-10 h-10 text-indigo-400 mx-auto mb-3 animate-spin" />
+            ) : (
+              <ImageIcon className="w-10 h-10 text-slate-300 group-hover:text-indigo-400 mx-auto mb-3 transition-colors" />
+            )}
+            <p className="text-sm font-medium text-slate-600 group-hover:text-indigo-600 transition-colors">
+              {createProduct.isPending ? "Saving product…" : "Tap to add photos"}
+            </p>
+            <p className="text-xs text-slate-400 mt-1">
+              Enter a product name below, then tap here
+            </p>
+          </div>
+        ) : existingImages.length === 0 && uploadingFiles.length === 0 ? (
+          <div
+            className="border-2 border-dashed border-slate-200 rounded-lg p-10 text-center cursor-pointer hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <ImageIcon className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+            <p className="text-sm text-slate-500">Click or drag images here</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+            {existingImages.map((img) => (
+              <div key={img.id} className="relative group aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
+                <img
+                  src={imgSrc(img.url)}
+                  alt="Product"
+                  className="w-full h-full object-cover"
+                />
+                <button
+                  onClick={() => handleDeleteImage(img.id)}
+                  className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+            {uploadingFiles.map((f) => (
+              <div key={f.id} className="relative aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
+                <img src={f.preview} alt={f.name} className="w-full h-full object-cover opacity-50" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  {f.status === "uploading" && <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />}
+                  {f.status === "error" && <X className="w-6 h-6 text-red-500" />}
+                </div>
+              </div>
+            ))}
+            <div
+              className="aspect-square rounded-lg border-2 border-dashed border-slate-200 flex items-center justify-center cursor-pointer hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload className="w-5 h-5 text-slate-400" />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Product Details ── */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-6">
         <div className="space-y-4">
+          {/* Name (required) + Price (optional) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Product Name</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Wireless Earbuds" />
+              <Label>
+                Item Name <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Gold Stud Earrings"
+              />
             </div>
             <div className="space-y-2">
-              <Label>Price (₹)</Label>
-              <Input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0.00" />
+              <Label>
+                Price (₹){" "}
+                <span className="text-slate-400 font-normal">(optional)</span>
+              </Label>
+              <Input
+                type="number"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder="Leave blank for 'Price on request'"
+              />
+              {!price && (
+                <p className="text-xs text-slate-400">
+                  Customers will see "Price on request" and can message you.
+                </p>
+              )}
             </div>
           </div>
 
+          {/* Description */}
           <div className="space-y-2">
-            <Label>Description</Label>
-            <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Describe the product..." rows={4} />
+            <Label>
+              Description{" "}
+              <span className="text-slate-400 font-normal">(optional)</span>
+            </Label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe the product..."
+              rows={4}
+            />
           </div>
 
+          {/* Stock + Category */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Stock Count</Label>
-              <Input type="number" value={stockCount} onChange={(e) => setStockCount(e.target.value)} placeholder="0" />
+              <Label>
+                Stock Count{" "}
+                <span className="text-slate-400 font-normal">(optional)</span>
+              </Label>
+              <Input
+                type="number"
+                value={stockCount}
+                onChange={(e) => setStockCount(e.target.value)}
+                placeholder="0"
+              />
             </div>
             <div className="space-y-2">
-              <Label>Category</Label>
+              <Label>
+                Category{" "}
+                <span className="text-slate-400 font-normal">(optional)</span>
+              </Label>
               <Select value={categoryId} onValueChange={setCategoryId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select a category" />
@@ -329,6 +498,7 @@ function ProductDetailContent() {
             </div>
           </div>
 
+          {/* Status (edit only) */}
           {!isNew && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-100">
               <div className="space-y-2">
@@ -352,83 +522,6 @@ function ProductDetailContent() {
           )}
         </div>
       </div>
-
-      {/* ── Image Section (only for existing products) ── */}
-      {!isNew && (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-base font-semibold text-slate-900">Product Images</h2>
-              <p className="text-sm text-slate-500">JPG, PNG, WebP · max 5 MB each</p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={requestUploadUrl.isPending || addProductImage.isPending}
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              Add Images
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              multiple
-              className="hidden"
-              onChange={(e) => handleFilesSelected(e.target.files)}
-            />
-          </div>
-
-          {existingImages.length === 0 && uploadingFiles.length === 0 ? (
-            <div
-              className="border-2 border-dashed border-slate-200 rounded-lg p-10 text-center cursor-pointer hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <ImageIcon className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-              <p className="text-sm text-slate-500">Click or drag images here</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
-              {existingImages.map((img) => (
-                <div key={img.id} className="relative group aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
-                  <img
-                    src={imgSrc(img.url)}
-                    alt="Product"
-                    className="w-full h-full object-cover"
-                  />
-                  <button
-                    onClick={() => handleDeleteImage(img.id)}
-                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-              {uploadingFiles.map((f) => (
-                <div key={f.id} className="relative aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
-                  <img src={f.preview} alt={f.name} className="w-full h-full object-cover opacity-50" />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    {f.status === "uploading" && <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />}
-                    {f.status === "error" && <X className="w-6 h-6 text-red-500" />}
-                  </div>
-                </div>
-              ))}
-              <div
-                className="aspect-square rounded-lg border-2 border-dashed border-slate-200 flex items-center justify-center cursor-pointer hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Upload className="w-5 h-5 text-slate-400" />
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-      {isNew && (
-        <p className="text-sm text-slate-500 text-center">
-          Save the product first to add photos.
-        </p>
-      )}
     </div>
   );
 }

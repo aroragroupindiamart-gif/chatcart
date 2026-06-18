@@ -30,7 +30,7 @@ export const productsTable = pgTable("products", {
   }),
   name: text("name").notNull(),
   description: text("description"),
-  price: numeric("price", { precision: 12, scale: 2 }).notNull(),
+  price: numeric("price", { precision: 12, scale: 2 }),
   status: productStatusEnum("status").default("active").notNull(),
   stockCount: integer("stock_count").default(1).notNull(),
   showWhenOutOfStock: boolean("show_when_out_of_stock").default(false).notNull(),

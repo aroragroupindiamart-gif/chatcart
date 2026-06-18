@@ -94,7 +94,7 @@ export default function CartSheet({ open, onClose, seller }: CartSheetProps) {
                               onClick={() =>
                                 updateQuantity(item.key, item.quantity - 1)
                               }
-                              className="w-7 h-7 flex items-center justify-center rounded hover:bg-white transition-colors"
+                              className="w-7 h-7 flex items-center justify-center rounded hover:bg-card transition-colors"
                             >
                               <Minus className="w-3 h-3" />
                             </button>
@@ -105,13 +105,15 @@ export default function CartSheet({ open, onClose, seller }: CartSheetProps) {
                               onClick={() =>
                                 updateQuantity(item.key, item.quantity + 1)
                               }
-                              className="w-7 h-7 flex items-center justify-center rounded hover:bg-white transition-colors"
+                              className="w-7 h-7 flex items-center justify-center rounded hover:bg-card transition-colors"
                             >
                               <Plus className="w-3 h-3" />
                             </button>
                           </div>
                           <span className="text-sm font-semibold">
-                            {formatPrice(item.product.price * item.quantity)}
+                            {item.product.price != null
+                              ? formatPrice(item.product.price * item.quantity)
+                              : "—"}
                           </span>
                         </div>
                       </div>

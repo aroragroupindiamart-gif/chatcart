@@ -1,10 +1,8 @@
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
-import { ShoppingCart, Store, Search, X } from "lucide-react";
+import { ShoppingCart, Store, Search, X, ChevronRight, ChevronUp } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
 import { api, imgSrc, formatPrice, type Seller, type Product, type Category } from "@/lib/api";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import CartSheet from "@/components/CartSheet";
 
@@ -19,8 +17,8 @@ export default function StoreFront() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
+  const [expandedCategories, setExpandedCategories] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (!subdomain) return;
@@ -40,18 +38,31 @@ export default function StoreFront() {
       .finally(() => setLoading(false));
   }, [subdomain]);
 
-  const usedCategoryIds = new Set(products.filter(p => p.categoryId !== null).map(p => p.categoryId));
-  const visibleCategories = categories.filter(c => usedCategoryIds.has(c.id));
-
-  const filtered = products.filter((p) => {
-    const matchSearch =
-      !search || p.name.toLowerCase().includes(search.toLowerCase());
-    const matchCat =
-      selectedCategory === null || p.categoryId === selectedCategory;
-    return matchSearch && matchCat;
-  });
-
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+  const isSearching = search.trim().length > 0;
+
+  const usedCategoryIds = new Set(
+    products.filter((p) => p.categoryId !== null).map((p) => p.categoryId)
+  );
+  const visibleCategories = categories.filter((c) => usedCategoryIds.has(c.id));
+  const uncategorized = products.filter((p) => p.categoryId === null);
+
+  const filtered = products.filter(
+    (p) => !search || p.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const usesCategorySections = !isSearching && visibleCategories.length >= 2;
+
+  const toggleCategory = (catId: number) => {
+    setExpandedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(catId)) next.delete(catId);
+      else next.add(catId);
+      return next;
+    });
+  };
+
+  const goToProduct = (id: number) => navigate(`${BASE}/${subdomain}/p/${id}`);
 
   if (loading) {
     return (
@@ -68,8 +79,8 @@ export default function StoreFront() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <div className="text-center space-y-3">
-          <Store className="w-12 h-12 text-muted-foreground mx-auto" />
-          <h1 className="text-xl font-semibold">Store not found</h1>
+          <Store className="w-12 h-12 text-muted-foreground mx-auto opacity-40" />
+          <h1 className="text-xl font-semibold text-foreground">Store not found</h1>
           <p className="text-sm text-muted-foreground">
             {error ?? "This store doesn't exist or has been removed."}
           </p>
@@ -78,108 +89,166 @@ export default function StoreFront() {
     );
   }
 
+  const hasBanner = !!(seller.bannerImageUrl || seller.tagline);
+
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 bg-white border-b border-border shadow-sm">
+      {/* ── Sticky header ── */}
+      <header className="sticky top-0 z-40 bg-background/95 backdrop-blur border-b border-border/50">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center shrink-0">
-              <Store className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-semibold text-base truncate">
+            {seller.bannerImageUrl ? (
+              <img
+                src={imgSrc(seller.bannerImageUrl)}
+                alt={seller.storeName ?? ""}
+                className="w-7 h-7 rounded-full object-cover shrink-0 border border-border/40"
+              />
+            ) : (
+              <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center shrink-0">
+                <Store className="w-4 h-4 text-white" />
+              </div>
+            )}
+            <span className="font-semibold text-base truncate text-foreground">
               {seller.storeName ?? subdomain}
             </span>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="relative gap-2 shrink-0"
+          <button
             onClick={() => setCartOpen(true)}
+            className="relative p-2 rounded-lg hover:bg-muted transition-colors"
+            aria-label="Open cart"
           >
-            <ShoppingCart className="w-4 h-4" />
-            <span className="hidden sm:inline">Cart</span>
+            <ShoppingCart className="w-5 h-5 text-foreground" />
             {totalItems > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 bg-primary text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-medium">
-                {totalItems}
+              <span className="absolute -top-0.5 -right-0.5 bg-primary text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold leading-none">
+                {totalItems > 9 ? "9+" : totalItems}
               </span>
             )}
-          </Button>
+          </button>
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 py-5 space-y-4">
+      {/* ── Brand banner (only when set) ── */}
+      {hasBanner && (
+        <div className="bg-card border-b border-border/30">
+          <div className="max-w-3xl mx-auto px-4 py-5 flex items-center gap-4">
+            {seller.bannerImageUrl && (
+              <img
+                src={imgSrc(seller.bannerImageUrl)}
+                alt={seller.storeName ?? ""}
+                className="w-14 h-14 rounded-xl object-cover border border-border shrink-0"
+              />
+            )}
+            <div className="min-w-0">
+              <h1 className="font-bold text-xl text-foreground leading-tight">
+                {seller.storeName}
+              </h1>
+              {seller.tagline && (
+                <p className="text-sm text-muted-foreground mt-0.5 leading-snug">
+                  {seller.tagline}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <main className="max-w-3xl mx-auto px-4 py-5 space-y-6">
+        {/* ── Search ── */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Search products…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 pr-9"
+            className="pl-9 pr-9 bg-card border-border/60 focus-visible:ring-primary/50"
           />
           {search && (
             <button
               onClick={() => setSearch("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
           )}
         </div>
 
-        {visibleCategories.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-            <button
-              onClick={() => setSelectedCategory(null)}
-              className={`shrink-0 px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
-                selectedCategory === null
-                  ? "bg-primary text-white border-primary"
-                  : "bg-white text-foreground border-border hover:bg-muted"
-              }`}
-            >
-              All
-            </button>
-            {visibleCategories.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() =>
-                  setSelectedCategory(selectedCategory === cat.id ? null : cat.id)
-                }
-                className={`shrink-0 px-3 py-1 rounded-full text-sm font-medium transition-colors border ${
-                  selectedCategory === cat.id
-                    ? "bg-primary text-white border-primary"
-                    : "bg-white text-foreground border-border hover:bg-muted"
-                }`}
-              >
-                {cat.name}
-              </button>
-            ))}
+        {/* ── Product content ── */}
+        {isSearching ? (
+          filtered.length === 0 ? (
+            <div className="text-center py-16 space-y-2">
+              <p className="text-muted-foreground">No products found for "{search}"</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {filtered.map((p) => (
+                <ProductCard key={p.id} product={p} onClick={() => goToProduct(p.id)} />
+              ))}
+            </div>
+          )
+        ) : usesCategorySections ? (
+          <div className="space-y-8">
+            {visibleCategories.map((cat) => {
+              const catProducts = products.filter((p) => p.categoryId === cat.id);
+              const isExpanded = expandedCategories.has(cat.id);
+              return (
+                <section key={cat.id}>
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-base font-bold text-foreground">{cat.name}</h2>
+                    <button
+                      onClick={() => toggleCategory(cat.id)}
+                      className="text-primary text-sm font-medium flex items-center gap-0.5 hover:text-primary/80 transition-colors shrink-0"
+                    >
+                      {isExpanded ? (
+                        <>Show less <ChevronUp className="w-3.5 h-3.5" /></>
+                      ) : (
+                        <>See all <ChevronRight className="w-3.5 h-3.5" /></>
+                      )}
+                    </button>
+                  </div>
+                  {isExpanded ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {catProducts.map((p) => (
+                        <ProductCard key={p.id} product={p} onClick={() => goToProduct(p.id)} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                      {catProducts.map((p) => (
+                        <div key={p.id} className="shrink-0 w-40 snap-start">
+                          <ProductCard product={p} onClick={() => goToProduct(p.id)} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+            {uncategorized.length > 0 && (
+              <section>
+                <h2 className="text-base font-bold text-foreground mb-3">Other Items</h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {uncategorized.map((p) => (
+                    <ProductCard key={p.id} product={p} onClick={() => goToProduct(p.id)} />
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
-        )}
-
-        {filtered.length === 0 ? (
+        ) : products.length === 0 ? (
           <div className="text-center py-16 space-y-2">
-            <p className="text-muted-foreground">No products found</p>
+            <Store className="w-10 h-10 text-muted-foreground mx-auto opacity-20" />
+            <p className="text-muted-foreground">No products available yet</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {filtered.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                onClick={() =>
-                  navigate(`${BASE}/${subdomain}/p/${product.id}`)
-                }
-              />
+            {products.map((p) => (
+              <ProductCard key={p.id} product={p} onClick={() => goToProduct(p.id)} />
             ))}
           </div>
         )}
       </main>
 
-      <CartSheet
-        open={cartOpen}
-        onClose={() => setCartOpen(false)}
-        seller={seller}
-      />
+      <CartSheet open={cartOpen} onClose={() => setCartOpen(false)} seller={seller} />
     </div>
   );
 }
@@ -192,13 +261,15 @@ function ProductCard({
   onClick: () => void;
 }) {
   const primaryImage = product.images[0];
+  const isOutOfStock = product.status === "out_of_stock";
+  const hasPrice = product.price != null;
 
   return (
     <button
       onClick={onClick}
-      className="group text-left bg-white rounded-xl border border-border overflow-hidden hover:shadow-md transition-shadow"
+      className="group text-left bg-card border border-card-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-lg transition-all duration-200 w-full"
     >
-      <div className="aspect-square bg-muted overflow-hidden">
+      <div className="aspect-square bg-muted overflow-hidden relative">
         {primaryImage ? (
           <img
             src={imgSrc(primaryImage.url)}
@@ -206,25 +277,27 @@ function ProductCard({
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-            <Store className="w-10 h-10 opacity-30" />
+          <div className="w-full h-full flex items-center justify-center">
+            <Store className="w-8 h-8 text-muted-foreground opacity-20" />
+          </div>
+        )}
+        {isOutOfStock && (
+          <div className="absolute bottom-0 inset-x-0 bg-background/80 text-center py-1">
+            <span className="text-xs text-muted-foreground font-medium">Out of stock</span>
           </div>
         )}
       </div>
       <div className="p-2.5 space-y-1">
-        <p className="text-sm font-medium leading-tight line-clamp-2">
+        <p className="text-sm font-medium leading-tight line-clamp-2 text-foreground">
           {product.name}
         </p>
-        <div className="flex items-center justify-between gap-1">
+        {hasPrice ? (
           <span className="text-sm font-semibold text-primary">
-            {formatPrice(product.price)}
+            {formatPrice(product.price!)}
           </span>
-          {product.status === "out_of_stock" && (
-            <Badge variant="secondary" className="text-xs px-1.5 py-0">
-              Out of stock
-            </Badge>
-          )}
-        </div>
+        ) : (
+          <span className="text-xs text-muted-foreground italic">Price on request</span>
+        )}
       </div>
     </button>
   );

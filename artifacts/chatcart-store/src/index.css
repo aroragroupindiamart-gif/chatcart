@@ -86,49 +86,53 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* ── Dark theme (storefront default) ───────────────── */
 :root {
-  --button-outline: rgba(0,0,0,.10);
-  --badge-outline: rgba(0,0,0,.05);
-  --opaque-button-border-intensity: -8;
-  --elevate-1: rgba(0,0,0,.03);
-  --elevate-2: rgba(0,0,0,.08);
+  --button-outline: rgba(255,255,255,.10);
+  --badge-outline: rgba(255,255,255,.08);
+  --opaque-button-border-intensity: 8;
+  --elevate-1: rgba(255,255,255,.03);
+  --elevate-2: rgba(255,255,255,.06);
 
-  --background: 210 40% 98%;
-  --foreground: 222 47% 11%;
-  --border: 214 32% 91%;
-  --input: 214 32% 91%;
+  /* near-black background, not pure #000 */
+  --background: 0 0% 7%;
+  --foreground: 0 0% 93%;
+  --border: 0 0% 20%;
+  --input: 0 0% 14%;
   --ring: 243 75% 59%;
 
-  --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --card-border: 214 32% 91%;
+  /* cards slightly lighter than page bg */
+  --card: 0 0% 11%;
+  --card-foreground: 0 0% 93%;
+  --card-border: 0 0% 20%;
 
-  --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
-  --popover-border: 214 32% 91%;
+  --popover: 0 0% 11%;
+  --popover-foreground: 0 0% 93%;
+  --popover-border: 0 0% 20%;
 
+  /* keep indigo accent */
   --primary: 243 75% 59%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 210 40% 96%;
-  --secondary-foreground: 222 47% 11%;
+  --secondary: 0 0% 16%;
+  --secondary-foreground: 0 0% 93%;
 
-  --muted: 210 40% 96%;
-  --muted-foreground: 215 16% 47%;
+  --muted: 0 0% 14%;
+  --muted-foreground: 0 0% 52%;
 
-  --accent: 210 40% 96%;
-  --accent-foreground: 222 47% 11%;
+  --accent: 0 0% 16%;
+  --accent-foreground: 0 0% 93%;
 
   --destructive: 0 84% 60%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive-foreground: 0 0% 100%;
 
-  --sidebar: 0 0% 100%;
-  --sidebar-foreground: 222 47% 11%;
-  --sidebar-border: 214 32% 91%;
+  --sidebar: 0 0% 9%;
+  --sidebar-foreground: 0 0% 93%;
+  --sidebar-border: 0 0% 20%;
   --sidebar-primary: 243 75% 59%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 210 40% 96%;
-  --sidebar-accent-foreground: 222 47% 11%;
+  --sidebar-accent: 0 0% 14%;
+  --sidebar-accent-foreground: 0 0% 93%;
   --sidebar-ring: 243 75% 59%;
 
   --chart-1: 243 75% 59%;
@@ -142,22 +146,22 @@
   --app-font-mono: Menlo, monospace;
   --radius: 0.5rem;
 
-  --shadow-2xs: 0px 1px 2px 0px rgba(0,0,0,.05);
-  --shadow-xs: 0px 1px 2px 0px rgba(0,0,0,.05);
-  --shadow-sm: 0px 1px 3px 0px rgba(0,0,0,.10), 0px 1px 2px -1px rgba(0,0,0,.10);
-  --shadow: 0px 1px 3px 0px rgba(0,0,0,.10), 0px 1px 2px -1px rgba(0,0,0,.10);
-  --shadow-md: 0px 4px 6px -1px rgba(0,0,0,.10), 0px 2px 4px -2px rgba(0,0,0,.10);
-  --shadow-lg: 0px 10px 15px -3px rgba(0,0,0,.10), 0px 4px 6px -4px rgba(0,0,0,.10);
-  --shadow-xl: 0px 20px 25px -5px rgba(0,0,0,.10), 0px 8px 10px -6px rgba(0,0,0,.10);
-  --shadow-2xl: 0px 25px 50px -12px rgba(0,0,0,.25);
+  --shadow-2xs: 0px 1px 2px 0px rgba(0,0,0,.25);
+  --shadow-xs: 0px 1px 2px 0px rgba(0,0,0,.25);
+  --shadow-sm: 0px 1px 3px 0px rgba(0,0,0,.35), 0px 1px 2px -1px rgba(0,0,0,.35);
+  --shadow: 0px 1px 3px 0px rgba(0,0,0,.35), 0px 1px 2px -1px rgba(0,0,0,.35);
+  --shadow-md: 0px 4px 6px -1px rgba(0,0,0,.40), 0px 2px 4px -2px rgba(0,0,0,.40);
+  --shadow-lg: 0px 10px 15px -3px rgba(0,0,0,.45), 0px 4px 6px -4px rgba(0,0,0,.45);
+  --shadow-xl: 0px 20px 25px -5px rgba(0,0,0,.50), 0px 8px 10px -6px rgba(0,0,0,.50);
+  --shadow-2xl: 0px 25px 50px -12px rgba(0,0,0,.60);
 
   --primary-border: hsl(243 75% 51%);
-  --secondary-border: hsl(210 40% 90%);
-  --muted-border: hsl(210 40% 90%);
-  --accent-border: hsl(210 40% 90%);
+  --secondary-border: hsl(0 0% 22%);
+  --muted-border: hsl(0 0% 22%);
+  --accent-border: hsl(0 0% 22%);
   --destructive-border: hsl(0 84% 52%);
   --sidebar-primary-border: hsl(243 75% 51%);
-  --sidebar-accent-border: hsl(210 40% 90%);
+  --sidebar-accent-border: hsl(0 0% 22%);
 }
 
 @layer base {

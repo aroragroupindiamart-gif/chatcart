@@ -3,6 +3,8 @@ export interface Seller {
   storeName: string | null;
   subdomain: string | null;
   whatsappNumber: string | null;
+  bannerImageUrl: string | null;
+  tagline: string | null;
 }
 
 export interface ProductImage {
@@ -24,7 +26,7 @@ export interface Product {
   sellerId: number;
   name: string;
   description: string | null;
-  price: number;
+  price: number | null;
   status: string;
   categoryId: number | null;
   sortOrder: number;

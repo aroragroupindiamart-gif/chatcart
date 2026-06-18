@@ -8,9 +8,11 @@ const router = Router();
 
 router.patch("/sellers/me", requireAuth, async (req, res) => {
   try {
-    const { storeName, whatsappNumber } = req.body as {
+    const { storeName, whatsappNumber, bannerImageUrl, tagline } = req.body as {
       storeName?: string;
       whatsappNumber?: string;
+      bannerImageUrl?: string | null;
+      tagline?: string | null;
     };
 
     const updates: Partial<typeof sellersTable.$inferInsert> = {
@@ -18,6 +20,8 @@ router.patch("/sellers/me", requireAuth, async (req, res) => {
     };
     if (storeName !== undefined) updates.storeName = storeName;
     if (whatsappNumber !== undefined) updates.whatsappNumber = whatsappNumber;
+    if (bannerImageUrl !== undefined) updates.bannerImageUrl = bannerImageUrl;
+    if (tagline !== undefined) updates.tagline = tagline;
 
     const [updated] = await db
       .update(sellersTable)

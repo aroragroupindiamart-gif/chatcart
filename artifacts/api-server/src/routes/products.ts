@@ -13,7 +13,7 @@ const router = Router();
 function formatProduct(product: typeof productsTable.$inferSelect, images: typeof productImagesTable.$inferSelect[], variants: typeof productVariantsTable.$inferSelect[]) {
   return {
     ...product,
-    price: parseFloat(product.price as unknown as string),
+    price: product.price != null ? parseFloat(product.price as unknown as string) : null,
     images: images.filter((i) => i.productId === product.id),
     variants: variants.filter((v) => v.productId === product.id),
   };
@@ -93,8 +93,8 @@ router.post("/products", requireAuth, async (req, res) => {
       stockCount?: number;
       showWhenOutOfStock?: boolean;
     };
-    if (!body.name?.trim() || body.price == null) {
-      res.status(400).json({ error: "Name and price required" });
+    if (!body.name?.trim()) {
+      res.status(400).json({ error: "Product name required" });
       return;
     }
     const [product] = await db
@@ -103,7 +103,7 @@ router.post("/products", requireAuth, async (req, res) => {
         sellerId: req.seller!.sellerId,
         name: body.name.trim(),
         description: body.description,
-        price: String(body.price),
+        price: body.price != null ? String(body.price) : null,
         categoryId: body.categoryId ?? null,
         status: body.status ?? "active",
         stockCount: body.stockCount ?? 1,
