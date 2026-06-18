@@ -436,6 +436,27 @@ export const GetOrderResponse = zod.object({
 
 
 /**
+ * @summary Update the status of an order
+ */
+export const UpdateOrderStatusParams = zod.object({
+  "orderId": zod.coerce.string()
+})
+
+export const UpdateOrderStatusBody = zod.object({
+  "status": zod.enum(['pending', 'confirmed', 'fulfilled'])
+})
+
+export const UpdateOrderStatusResponse = zod.object({
+  "id": zod.string(),
+  "customerContact": zod.string().optional(),
+  "status": zod.enum(['pending', 'confirmed', 'fulfilled']),
+  "totalAmount": zod.number(),
+  "itemCount": zod.number(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
  * @summary Get dashboard summary stats
  */
 export const GetDashboardStatsResponse = zod.object({

@@ -1,9 +1,23 @@
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Layout } from "@/components/Layout";
-import { useGetOrder, getGetOrderQueryKey } from "@workspace/api-client-react";
+import {
+  useGetOrder,
+  useUpdateOrderStatus,
+  getGetOrderQueryKey,
+  type OrderStatus,
+} from "@workspace/api-client-react";
 import { useParams, Link } from "wouter";
 import { ArrowLeft, Phone, Calendar } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
 
 const STATUS_STYLES: Record<string, string> = {
   pending: "bg-amber-100 text-amber-800",
@@ -24,6 +38,8 @@ export default function OrderDetail() {
 function OrderDetailContent() {
   const params = useParams();
   const orderId = params.id as string;
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const { data: order, isLoading } = useGetOrder(orderId, {
     query: {
@@ -32,29 +48,69 @@ function OrderDetailContent() {
     },
   });
 
+  const updateStatus = useUpdateOrderStatus();
+
+  const handleStatusChange = async (newStatus: string) => {
+    try {
+      await updateStatus.mutateAsync({
+        orderId,
+        data: { status: newStatus as OrderStatus },
+      });
+      queryClient.invalidateQueries({ queryKey: getGetOrderQueryKey(orderId) });
+      toast({ title: "Order status updated" });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to update status",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (isLoading) {
-    return <div className="p-8 text-center text-slate-500">Loading order...</div>;
+    return (
+      <div className="p-8 text-center text-slate-500">Loading order...</div>
+    );
   }
 
   if (!order) {
-    return <div className="p-8 text-center text-slate-500">Order not found</div>;
+    return (
+      <div className="p-8 text-center text-slate-500">Order not found</div>
+    );
   }
 
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-center gap-4">
-        <Link href="/orders" className="p-2 rounded-md hover:bg-slate-100 text-slate-500 transition-colors">
+        <Link
+          href="/orders"
+          className="p-2 rounded-md hover:bg-slate-100 text-slate-500 transition-colors"
+        >
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">
           Order {order.id}
         </h1>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-3">
           <span
             className={`px-3 py-1 rounded-full text-sm font-medium capitalize ${STATUS_STYLES[order.status] ?? "bg-slate-100 text-slate-700"}`}
           >
             {order.status}
           </span>
+          <Select
+            value={order.status}
+            onValueChange={handleStatusChange}
+            disabled={updateStatus.isPending}
+          >
+            <SelectTrigger className="w-40 h-8 text-sm">
+              <SelectValue placeholder="Update status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="confirmed">Confirmed</SelectItem>
+              <SelectItem value="fulfilled">Fulfilled</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -67,9 +123,14 @@ function OrderDetailContent() {
             <CardContent>
               <div className="divide-y divide-slate-100">
                 {order.items.map((item, idx) => (
-                  <div key={idx} className="py-4 first:pt-0 last:pb-0 flex justify-between items-center">
+                  <div
+                    key={idx}
+                    className="py-4 first:pt-0 last:pb-0 flex justify-between items-center"
+                  >
                     <div>
-                      <p className="font-medium text-slate-900">{item.productNameSnapshot}</p>
+                      <p className="font-medium text-slate-900">
+                        {item.productNameSnapshot}
+                      </p>
                       <p className="text-sm text-slate-500">
                         {item.quantity} × ₹{item.priceSnapshot}
                         {item.variantSnapshot && ` · ${item.variantSnapshot}`}

@@ -191,6 +191,19 @@ export type OrderDetail = Order & {
   items: OrderItem[];
 };
 
+export interface UpdateOrderStatusRequest {
+  status: OrderStatus;
+}
+
+export interface OrderSummary {
+  id: string;
+  customerContact?: string;
+  status: OrderStatus;
+  totalAmount: number;
+  itemCount: number;
+  createdAt: string;
+}
+
 export interface OrderListResponse {
   orders: Order[];
   total: number;

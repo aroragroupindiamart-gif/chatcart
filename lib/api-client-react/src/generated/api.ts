@@ -33,6 +33,7 @@ import type {
   ListProductsParams,
   OrderDetail,
   OrderListResponse,
+  OrderSummary,
   Product,
   ProductImage,
   ProductVariant,
@@ -45,6 +46,7 @@ import type {
   SendOtpResponse,
   SuccessResponse,
   UpdateCategoryRequest,
+  UpdateOrderStatusRequest,
   UpdateProductRequest,
   UpdateProductVariantRequest,
   UpdateSellerRequest,
@@ -1829,6 +1831,78 @@ export function useGetOrder<TData = Awaited<ReturnType<typeof getOrder>>, TError
 
 
 
+
+export const getUpdateOrderStatusUrl = (orderId: string,) => {
+
+
+
+
+  return `/api/orders/${orderId}/status`
+}
+
+/**
+ * @summary Update the status of an order
+ */
+export const updateOrderStatus = async (orderId: string,
+    updateOrderStatusRequest: UpdateOrderStatusRequest, options?: RequestInit): Promise<OrderSummary> => {
+
+  return customFetch<OrderSummary>(getUpdateOrderStatusUrl(orderId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateOrderStatusRequest,)
+  }
+);}
+
+
+
+
+export const getUpdateOrderStatusMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOrderStatus>>, TError,{orderId: string;data: BodyType<UpdateOrderStatusRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateOrderStatus>>, TError,{orderId: string;data: BodyType<UpdateOrderStatusRequest>}, TContext> => {
+
+const mutationKey = ['updateOrderStatus'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateOrderStatus>>, {orderId: string;data: BodyType<UpdateOrderStatusRequest>}> = (props) => {
+          const {orderId,data} = props ?? {};
+
+          return  updateOrderStatus(orderId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateOrderStatusMutationResult = NonNullable<Awaited<ReturnType<typeof updateOrderStatus>>>
+    export type UpdateOrderStatusMutationBody = BodyType<UpdateOrderStatusRequest>
+    export type UpdateOrderStatusMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Update the status of an order
+ */
+export const useUpdateOrderStatus = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateOrderStatus>>, TError,{orderId: string;data: BodyType<UpdateOrderStatusRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateOrderStatus>>,
+        TError,
+        {orderId: string;data: BodyType<UpdateOrderStatusRequest>},
+        TContext
+      > => {
+      return useMutation(getUpdateOrderStatusMutationOptions(options));
+    }
 
 export const getGetDashboardStatsUrl = () => {
 
