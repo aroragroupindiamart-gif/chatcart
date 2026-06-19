@@ -332,15 +332,19 @@ router.patch(
         res.status(403).json({ error: "Forbidden" });
         return;
       }
-      const { imageIds } = req.body as { imageIds: number[] };
+      const { items } = req.body as { items: Array<{ id: number; displayOrder: number }> };
+      if (!Array.isArray(items)) {
+        res.status(400).json({ error: "items array required" });
+        return;
+      }
       await Promise.all(
-        imageIds.map((id, index) =>
+        items.map((item) =>
           db
             .update(productImagesTable)
-            .set({ displayOrder: index })
+            .set({ displayOrder: item.displayOrder })
             .where(
               and(
-                eq(productImagesTable.id, id),
+                eq(productImagesTable.id, item.id),
                 eq(productImagesTable.productId, productId)
               )
             )

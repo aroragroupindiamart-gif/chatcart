@@ -11,20 +11,37 @@ import {
   useGetMe,
   useRequestUploadUrl,
   useDeleteProductImage,
+  useReorderProductImages,
   RequestUploadUrlBodyContentType,
 } from "@workspace/api-client-react";
 import { useLocation, useParams } from "wouter";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, Trash, Share2, Upload, X, Image as ImageIcon, Loader2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Save, Trash, Share2, Upload, X, Image as ImageIcon, Loader2, AlertCircle, RefreshCw, GripVertical } from "lucide-react";
 import { Link } from "wouter";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  rectSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_SIZE_BYTES = 5 * 1024 * 1024;
@@ -59,6 +76,7 @@ export default function ProductDetail() {
 
 interface UploadingFile {
   id: string;
+  file: File;
   name: string;
   preview: string;
   status: "uploading" | "done" | "error";
@@ -86,6 +104,125 @@ interface RetryItem {
   error?: string;
 }
 
+interface OrderedImage {
+  id: number;
+  url: string;
+  displayOrder: number;
+}
+
+// ── Sortable image thumbnail ──────────────────────────────────────────────────
+
+interface SortableImageProps {
+  img: OrderedImage;
+  isPrimary: boolean;
+  onDelete: (id: number) => void;
+}
+
+function SortableImage({ img, isPrimary, onDelete }: SortableImageProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: img.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="relative group aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-50 touch-none"
+    >
+      <img
+        src={imgSrc(img.url)}
+        alt="Product"
+        className="w-full h-full object-cover"
+        draggable={false}
+      />
+
+      {/* Drag handle — full tile is draggable via listeners */}
+      <div
+        {...attributes}
+        {...listeners}
+        className="absolute inset-0 cursor-grab active:cursor-grabbing"
+      />
+
+      {/* Primary badge */}
+      {isPrimary && (
+        <div className="absolute bottom-1 left-1 bg-indigo-600 text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-none pointer-events-none">
+          Primary
+        </div>
+      )}
+
+      {/* Delete button */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onDelete(img.id); }}
+        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow z-10"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
+
+      {/* Drag indicator */}
+      <div className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-60 transition-opacity pointer-events-none">
+        <GripVertical className="w-4 h-4 text-white drop-shadow" />
+      </div>
+    </div>
+  );
+}
+
+// ── Uploading file thumbnail (in-progress or error) ───────────────────────────
+
+interface UploadingThumbProps {
+  entry: UploadingFile;
+  onRetry: (entry: UploadingFile) => void;
+  onDismiss: (id: string) => void;
+}
+
+function UploadingThumb({ entry, onRetry, onDismiss }: UploadingThumbProps) {
+  return (
+    <div className="relative aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
+      <img src={entry.preview} alt={entry.name} className="w-full h-full object-cover opacity-40" />
+
+      {entry.status === "uploading" && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/20">
+          <Loader2 className="w-6 h-6 text-white animate-spin drop-shadow" />
+          <span className="text-[10px] text-white mt-1 font-medium drop-shadow">Uploading…</span>
+        </div>
+      )}
+
+      {entry.status === "error" && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-900/50 gap-1 p-1">
+          <AlertCircle className="w-5 h-5 text-red-200" />
+          <p className="text-[9px] text-red-100 text-center leading-tight line-clamp-2">{entry.error ?? "Upload failed"}</p>
+          <button
+            onClick={() => onRetry(entry)}
+            className="mt-0.5 flex items-center gap-0.5 bg-white/90 text-red-700 text-[9px] font-semibold px-1.5 py-0.5 rounded-full hover:bg-white transition-colors"
+          >
+            <RefreshCw className="w-2.5 h-2.5" />
+            Retry
+          </button>
+          <button
+            onClick={() => onDismiss(entry.id)}
+            className="absolute top-0.5 right-0.5 text-white/70 hover:text-white"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
 function ProductDetailContent() {
   const params = useParams();
   const isNew = !params.id || params.id === "new";
@@ -109,10 +246,11 @@ function ProductDetailContent() {
   const deleteProduct = useDeleteProduct();
   const requestUploadUrl = useRequestUploadUrl();
   const deleteProductImage = useDeleteProductImage();
+  const reorderProductImages = useReorderProductImages();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // In-flight uploads for saved products
+  // In-flight / failed uploads for saved products
   const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
 
   // Queue of photos selected on the "new product" form before the product is saved
@@ -123,6 +261,11 @@ function ProductDetailContent() {
 
   // Items loaded from sessionStorage — failed uploads from a previous create attempt
   const [retryItems, setRetryItems] = useState<RetryItem[]>([]);
+
+  // Local ordered image list — drives the drag-to-reorder UI
+  const [orderedImages, setOrderedImages] = useState<OrderedImage[]>([]);
+  const orderedImagesRef = useRef<OrderedImage[]>([]);
+  orderedImagesRef.current = orderedImages;
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -144,6 +287,16 @@ function ProductDetailContent() {
     }
   }, [product, isNew]);
 
+  // Sync orderedImages from product data, but preserve local order during active drag sessions
+  const [isDragging, setIsDragging] = useState(false);
+  useEffect(() => {
+    if (product?.images && !isDragging) {
+      setOrderedImages(
+        [...product.images].sort((a, b) => a.displayOrder - b.displayOrder)
+      );
+    }
+  }, [product?.images, isDragging]);
+
   // On the edit page, check sessionStorage for failed uploads from the create flow
   useEffect(() => {
     if (!isNew && productId) {
@@ -160,10 +313,95 @@ function ProductDetailContent() {
     }
   }, [isNew, productId]);
 
+  // dnd-kit sensors — pointer for mouse, touch for mobile
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      setIsDragging(false);
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+
+      // Compute the new order synchronously using the current ref value
+      const current = orderedImagesRef.current;
+      const oldIndex = current.findIndex((img) => img.id === active.id);
+      const newIndex = current.findIndex((img) => img.id === over.id);
+      const next = arrayMove(current, oldIndex, newIndex);
+
+      setOrderedImages(next);
+
+      reorderProductImages.mutate(
+        {
+          productId,
+          data: {
+            items: next.map((img, index) => ({
+              id: img.id,
+              displayOrder: index,
+            })),
+          },
+        },
+        {
+          onError: () => {
+            toast({ title: "Failed to save image order", variant: "destructive" });
+          },
+          onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: getGetProductQueryKey(productId) });
+          },
+        }
+      );
+    },
+    [productId, reorderProductImages, queryClient, toast]
+  );
+
+  /**
+   * Upload a single file to an already-created product.
+   */
+  const uploadSingleFile = async (
+    file: File,
+    entryId: string,
+    targetProductId: number,
+    displayOrder: number
+  ): Promise<UploadResult> => {
+    try {
+      const { uploadURL } = await requestUploadUrl.mutateAsync({
+        data: {
+          productId: targetProductId,
+          name: file.name,
+          size: file.size,
+          contentType: file.type as RequestUploadUrlBodyContentType,
+          displayOrder,
+        },
+      });
+
+      const res = await fetch(uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type },
+      });
+
+      if (!res.ok) {
+        throw new Error(`Upload failed (${res.status} ${res.statusText})`);
+      }
+
+      setUploadingFiles((prev) =>
+        prev.map((e) => (e.id === entryId ? { ...e, status: "done" } : e))
+      );
+      return { id: entryId, name: file.name, status: "done" };
+    } catch (err: any) {
+      setUploadingFiles((prev) =>
+        prev.map((e) =>
+          e.id === entryId ? { ...e, status: "error", error: err.message } : e
+        )
+      );
+      return { id: entryId, name: file.name, status: "error", error: err.message };
+    }
+  };
+
   /**
    * Upload a batch of pending files to an already-created product.
-   * Returns explicit per-file results — callers must NOT read pendingFiles state
-   * to determine success/failure (state updates are async and the closure is stale).
    */
   const uploadFilesToProduct = async (
     files: PendingFile[],
@@ -242,15 +480,12 @@ function ProductDetailContent() {
 
         if (pendingFiles.length > 0) {
           setIsUploadingAfterCreate(true);
-          // Capture a snapshot of pendingFiles before the await — the state setter
-          // batches asynchronously, so we pass the current array directly.
           const snapshot = [...pendingFiles];
           const results = await uploadFilesToProduct(snapshot, newId, 0);
           setIsUploadingAfterCreate(false);
 
           const failed = results.filter((r) => r.status === "error");
           if (failed.length > 0) {
-            // Persist failures in sessionStorage so the edit page can surface a retry banner
             sessionStorage.setItem(
               retryStorageKey(newId),
               JSON.stringify(failed.map((r) => ({ name: r.name, error: r.error })))
@@ -340,7 +575,6 @@ function ProductDetailContent() {
     if (valid.length === 0) return;
 
     if (isNew) {
-      // Queue locally — uploaded in batch after the product is created
       const entries: PendingFile[] = valid.map((f) => ({
         id: Math.random().toString(36).slice(2),
         file: f,
@@ -351,9 +585,10 @@ function ProductDetailContent() {
       return;
     }
 
-    // Saved product — upload immediately
+    // Saved product — upload immediately, keep in uploadingFiles for progress display
     const entries: UploadingFile[] = valid.map((f) => ({
       id: Math.random().toString(36).slice(2),
+      file: f,
       name: f.name,
       preview: URL.createObjectURL(f),
       status: "uploading" as const,
@@ -363,44 +598,34 @@ function ProductDetailContent() {
     for (let i = 0; i < valid.length; i++) {
       const file = valid[i];
       const entry = entries[i];
-      try {
-        const existingCount = (product?.images?.length ?? 0) + i;
-
-        const { uploadURL } = await requestUploadUrl.mutateAsync({
-          data: {
-            productId,
-            name: file.name,
-            size: file.size,
-            contentType: file.type as RequestUploadUrlBodyContentType,
-            displayOrder: existingCount,
-          },
-        });
-
-        const res = await fetch(uploadURL, {
-          method: "PUT",
-          body: file,
-          headers: { "Content-Type": file.type },
-        });
-
-        if (!res.ok) {
-          throw new Error(`Upload failed (${res.status} ${res.statusText})`);
-        }
-
-        setUploadingFiles((prev) =>
-          prev.map((e) => (e.id === entry.id ? { ...e, status: "done" } : e))
-        );
-      } catch (err: any) {
-        setUploadingFiles((prev) =>
-          prev.map((e) =>
-            e.id === entry.id ? { ...e, status: "error", error: err.message } : e
-          )
-        );
-        toast({ title: `Failed to upload ${file.name}`, variant: "destructive" });
+      const existingCount = (product?.images?.length ?? 0) + i;
+      const result = await uploadSingleFile(file, entry.id, productId, existingCount);
+      if (result.status === "done") {
+        // Remove done entries and refresh images
+        setUploadingFiles((prev) => prev.filter((e) => e.id !== entry.id));
+        queryClient.invalidateQueries({ queryKey: getGetProductQueryKey(productId) });
       }
     }
+  };
 
-    queryClient.invalidateQueries({ queryKey: getGetProductQueryKey(productId) });
-    setUploadingFiles((prev) => prev.filter((e) => e.status !== "done"));
+  const handleRetryUpload = async (entry: UploadingFile) => {
+    setUploadingFiles((prev) =>
+      prev.map((e) => (e.id === entry.id ? { ...e, status: "uploading", error: undefined } : e))
+    );
+    const existingCount = (product?.images?.length ?? 0);
+    const result = await uploadSingleFile(entry.file, entry.id, productId, existingCount);
+    if (result.status === "done") {
+      setUploadingFiles((prev) => prev.filter((e) => e.id !== entry.id));
+      queryClient.invalidateQueries({ queryKey: getGetProductQueryKey(productId) });
+    }
+  };
+
+  const handleDismissUploadError = (id: string) => {
+    setUploadingFiles((prev) => {
+      const entry = prev.find((e) => e.id === id);
+      if (entry) URL.revokeObjectURL(entry.preview);
+      return prev.filter((e) => e.id !== id);
+    });
   };
 
   const handleRemovePendingFile = (id: string) => {
@@ -414,6 +639,7 @@ function ProductDetailContent() {
   const handleDeleteImage = async (imageId: number) => {
     try {
       await deleteProductImage.mutateAsync({ productId, imageId });
+      setOrderedImages((prev) => prev.filter((img) => img.id !== imageId));
       queryClient.invalidateQueries({ queryKey: getGetProductQueryKey(productId) });
       toast({ title: "Image removed" });
     } catch (err: any) {
@@ -425,9 +651,9 @@ function ProductDetailContent() {
     return <div className="p-8 text-center text-slate-500">Loading product...</div>;
   }
 
-  const existingImages = product?.images ?? [];
   const isSaving = createProduct.isPending || updateProduct.isPending;
   const hasPendingFiles = pendingFiles.length > 0;
+  const hasExistingOrUploading = orderedImages.length > 0 || uploadingFiles.length > 0;
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -512,7 +738,11 @@ function ProductDetailContent() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-base font-semibold text-slate-900">Product Photos</h2>
-            <p className="text-sm text-slate-500">JPG, PNG, WebP · max 5 MB each</p>
+            <p className="text-sm text-slate-500">
+              {!isNew && orderedImages.length > 1
+                ? "Drag to reorder · first photo is the storefront thumbnail"
+                : "JPG, PNG, WebP · max 5 MB each"}
+            </p>
           </div>
           {(!isNew || hasPendingFiles) && (
             <Button
@@ -533,11 +763,14 @@ function ProductDetailContent() {
           accept="image/jpeg,image/png,image/webp"
           multiple
           className="hidden"
-          onChange={(e) => handleFilesSelected(e.target.files)}
+          onChange={(e) => {
+            handleFilesSelected(e.target.files);
+            e.target.value = "";
+          }}
         />
 
         {isNew && !hasPendingFiles ? (
-          /* Empty drop-zone for new products — immediately opens picker */
+          /* Empty drop-zone for new products */
           <div
             onClick={() => fileInputRef.current?.click()}
             className="border-2 border-dashed border-slate-200 rounded-xl p-12 text-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/50 transition-all group"
@@ -581,7 +814,6 @@ function ProductDetailContent() {
                     </div>
                   )}
                 </div>
-                {/* Allow removing queued photos before creation */}
                 {f.status === "pending" && (
                   <button
                     onClick={() => handleRemovePendingFile(f.id)}
@@ -601,7 +833,8 @@ function ProductDetailContent() {
               </div>
             )}
           </div>
-        ) : existingImages.length === 0 && uploadingFiles.length === 0 ? (
+        ) : !hasExistingOrUploading ? (
+          /* No images yet on saved product */
           <div
             className="border-2 border-dashed border-slate-200 rounded-lg p-10 text-center cursor-pointer hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
             onClick={() => fileInputRef.current?.click()}
@@ -610,38 +843,47 @@ function ProductDetailContent() {
             <p className="text-sm text-slate-500">Click or drag images here</p>
           </div>
         ) : (
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
-            {existingImages.map((img) => (
-              <div key={img.id} className="relative group aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
-                <img
-                  src={imgSrc(img.url)}
-                  alt="Product"
-                  className="w-full h-full object-cover"
-                />
-                <button
-                  onClick={() => handleDeleteImage(img.id)}
-                  className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow"
+          /* Saved product with images — drag-to-reorder grid */
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={() => setIsDragging(true)}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={orderedImages.map((img) => img.id)}
+              strategy={rectSortingStrategy}
+            >
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                {orderedImages.map((img, index) => (
+                  <SortableImage
+                    key={img.id}
+                    img={img}
+                    isPrimary={index === 0}
+                    onDelete={handleDeleteImage}
+                  />
+                ))}
+
+                {/* In-flight / error uploads */}
+                {uploadingFiles.map((f) => (
+                  <UploadingThumb
+                    key={f.id}
+                    entry={f}
+                    onRetry={handleRetryUpload}
+                    onDismiss={handleDismissUploadError}
+                  />
+                ))}
+
+                {/* Add more button */}
+                <div
+                  className="aspect-square rounded-lg border-2 border-dashed border-slate-200 flex items-center justify-center cursor-pointer hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
+                  onClick={() => fileInputRef.current?.click()}
                 >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
-            {uploadingFiles.map((f) => (
-              <div key={f.id} className="relative aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
-                <img src={f.preview} alt={f.name} className="w-full h-full object-cover opacity-50" />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  {f.status === "uploading" && <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />}
-                  {f.status === "error" && <X className="w-6 h-6 text-red-500" />}
+                  <Upload className="w-5 h-5 text-slate-400" />
                 </div>
               </div>
-            ))}
-            <div
-              className="aspect-square rounded-lg border-2 border-dashed border-slate-200 flex items-center justify-center cursor-pointer hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className="w-5 h-5 text-slate-400" />
-            </div>
-          </div>
+            </SortableContext>
+          </DndContext>
         )}
       </div>
 
