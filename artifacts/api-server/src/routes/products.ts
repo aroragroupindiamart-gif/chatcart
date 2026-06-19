@@ -103,7 +103,7 @@ router.post("/products", requireAuth, async (req, res) => {
         sellerId: req.seller!.sellerId,
         name: body.name.trim(),
         description: body.description,
-        price: body.price != null ? String(body.price) : null,
+        price: body.price != null ? String(body.price) : undefined,
         categoryId: body.categoryId ?? null,
         status: body.status ?? "active",
         stockCount: body.stockCount ?? 1,
