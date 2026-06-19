@@ -87,7 +87,7 @@ export default function OrderConfirmation() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="bg-white border-b border-border shadow-sm">
+      <header className="bg-card border-b border-border shadow-sm">
         <div className="max-w-lg mx-auto px-4 h-14 flex items-center gap-2">
           <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center shrink-0">
             <Store className="w-4 h-4 text-white" />
@@ -110,7 +110,7 @@ export default function OrderConfirmation() {
           </p>
         </div>
 
-        <div className="bg-white rounded-xl border border-border overflow-hidden">
+        <div className="bg-card rounded-xl border border-border overflow-hidden">
           <div className="px-4 py-3 border-b border-border bg-muted/30">
             <h2 className="font-semibold text-sm">Order details</h2>
           </div>
@@ -145,7 +145,7 @@ export default function OrderConfirmation() {
         </div>
 
         {order.customerContact && (
-          <div className="bg-white rounded-xl border border-border px-4 py-3">
+          <div className="bg-card rounded-xl border border-border px-4 py-3">
             <p className="text-xs text-muted-foreground mb-1">Your details</p>
             <p className="text-sm">{order.customerContact}</p>
           </div>
