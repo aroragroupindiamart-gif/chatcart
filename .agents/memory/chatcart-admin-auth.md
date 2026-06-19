@@ -21,7 +21,7 @@ Admin login: 5 failed attempts → 15-minute lockout. Tracked via `login_attempt
 
 ## Seeded dev admin
 - Email: `admin@chatcart.in`
-- Password: `chatcart-admin-2026`
+- Password: set at seed time (see `scripts/seed-admin.ts` — pass via `ADMIN_PASSWORD` env var)
 - Role: `super_admin`
 
 **How to apply:** Any future admin route must use `requireAdminAuth`. Never use `requireAuth` (seller middleware) on admin routes or vice versa.
