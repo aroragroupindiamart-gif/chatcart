@@ -399,15 +399,15 @@ paths:
     post:
       operationId: importProductsCsv
       tags: [import]
-      summary: Bulk-import products from CSV content (Pro plan only)
+      summary: Bulk-import products from a CSV file upload (Pro plan only)
       security:
         - BearerAuth: []
       requestBody:
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
-              $ref: "#/components/schemas/CsvImportInput"
+              $ref: "#/components/schemas/CsvFileUpload"
       responses:
         "200":
           description: Import results
@@ -924,6 +924,12 @@ components:
           type: string
         whatsappNumber:
           type: string
+        subdomain:
+          type: string
+        bannerImageUrl:
+          type: ["string", "null"]
+        tagline:
+          type: ["string", "null"]
 
     # ── Categories ────────────────────────────────────────────────────────
 
@@ -1072,14 +1078,14 @@ components:
       required:
         - items
 
-    CsvImportInput:
+    CsvFileUpload:
       type: object
       properties:
-        csvContent:
+        file:
           type: string
-          description: "Raw CSV text with header row and columns: name, price, description, category, status"
+          description: "CSV file with header row and columns: name, price, description, category, status"
       required:
-        - csvContent
+        - file
 
     ImportResult:
       type: object

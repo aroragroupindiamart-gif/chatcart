@@ -2,7 +2,7 @@ import { pgTable, serial, text, timestamp, integer, boolean, pgEnum } from "driz
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const subscriptionPlanEnum = pgEnum("subscription_plan", ["trial", "basic", "pro", "business", "starter", "growth"]);
+export const subscriptionPlanEnum = pgEnum("subscription_plan", ["starter", "growth", "pro"]);
 export const subscriptionStatusEnum = pgEnum("subscription_status", ["active", "trial", "expired", "cancelled", "suspended"]);
 
 export const sellersTable = pgTable("sellers", {

@@ -84,7 +84,10 @@ export const LogoutResponse = zod.object({
  */
 export const UpdateSellerBody = zod.object({
   "storeName": zod.string().optional(),
-  "whatsappNumber": zod.string().optional()
+  "whatsappNumber": zod.string().optional(),
+  "subdomain": zod.string().optional(),
+  "bannerImageUrl": zod.string().nullish(),
+  "tagline": zod.string().nullish()
 })
 
 export const UpdateSellerResponse = zod.object({
@@ -304,10 +307,10 @@ export const ReorderProductsResponse = zod.object({
 
 
 /**
- * @summary Bulk-import products from CSV content (Pro plan only)
+ * @summary Bulk-import products from a CSV file upload (Pro plan only)
  */
 export const ImportProductsCsvBody = zod.object({
-  "csvContent": zod.string().describe('Raw CSV text with header row and columns: name, price, description, category, status')
+  "file": zod.instanceof(File).describe('CSV file with header row and columns: name, price, description, category, status')
 })
 
 export const ImportProductsCsvResponse = zod.object({

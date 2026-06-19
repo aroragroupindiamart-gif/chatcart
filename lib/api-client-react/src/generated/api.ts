@@ -26,7 +26,7 @@ import type {
   Category,
   CreateCategoryRequest,
   CreateProductRequest,
-  CsvImportInput,
+  CsvFileUpload,
   DashboardStats,
   ErrorResponse,
   ExportData,
@@ -1252,17 +1252,19 @@ export const getImportProductsCsvUrl = () => {
 }
 
 /**
- * @summary Bulk-import products from CSV content (Pro plan only)
+ * @summary Bulk-import products from a CSV file upload (Pro plan only)
  */
-export const importProductsCsv = async (csvImportInput: CsvImportInput, options?: RequestInit): Promise<ImportResult> => {
+export const importProductsCsv = async (csvFileUpload: CsvFileUpload, options?: RequestInit): Promise<ImportResult> => {
+    const formData = new FormData();
+formData.append(`file`, csvFileUpload.file);
 
   return customFetch<ImportResult>(getImportProductsCsvUrl(),
   {
     ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      csvImportInput,)
+    method: 'POST'
+    ,
+    body:
+      formData,
   }
 );}
 
@@ -1270,8 +1272,8 @@ export const importProductsCsv = async (csvImportInput: CsvImportInput, options?
 
 
 export const getImportProductsCsvMutationOptions = <TError = ErrorType<UpgradeRequiredError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importProductsCsv>>, TError,{data: BodyType<CsvImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof importProductsCsv>>, TError,{data: BodyType<CsvImportInput>}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importProductsCsv>>, TError,{data: BodyType<CsvFileUpload>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof importProductsCsv>>, TError,{data: BodyType<CsvFileUpload>}, TContext> => {
 
 const mutationKey = ['importProductsCsv'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -1283,7 +1285,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importProductsCsv>>, {data: BodyType<CsvImportInput>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importProductsCsv>>, {data: BodyType<CsvFileUpload>}> = (props) => {
           const {data} = props ?? {};
 
           return  importProductsCsv(data,requestOptions)
@@ -1297,18 +1299,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type ImportProductsCsvMutationResult = NonNullable<Awaited<ReturnType<typeof importProductsCsv>>>
-    export type ImportProductsCsvMutationBody = BodyType<CsvImportInput>
+    export type ImportProductsCsvMutationBody = BodyType<CsvFileUpload>
     export type ImportProductsCsvMutationError = ErrorType<UpgradeRequiredError>
 
     /**
- * @summary Bulk-import products from CSV content (Pro plan only)
+ * @summary Bulk-import products from a CSV file upload (Pro plan only)
  */
 export const useImportProductsCsv = <TError = ErrorType<UpgradeRequiredError>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importProductsCsv>>, TError,{data: BodyType<CsvImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importProductsCsv>>, TError,{data: BodyType<CsvFileUpload>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof importProductsCsv>>,
         TError,
-        {data: BodyType<CsvImportInput>},
+        {data: BodyType<CsvFileUpload>},
         TContext
       > => {
       return useMutation(getImportProductsCsvMutationOptions(options));

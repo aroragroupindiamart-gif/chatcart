@@ -1,5 +1,5 @@
 import { Router } from "express";
-import express from "express";
+import multer from "multer";
 import { db } from "@workspace/db";
 import { productsTable, categoriesTable } from "@workspace/db/schema";
 import { eq, and, count } from "drizzle-orm";
@@ -7,6 +7,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { getSellerPlan, getPlanLimits } from "../lib/planLimits.js";
 
 const router = Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 function parseCsvRow(line: string): string[] {
   const result: string[] = [];
@@ -53,7 +54,7 @@ const VALID_STATUSES = new Set(["active", "out_of_stock", "hidden"]);
 router.post(
   "/products/import-csv",
   requireAuth,
-  express.text({ type: ["text/csv", "text/plain", "application/json"] }),
+  upload.single("file"),
   async (req, res) => {
     try {
       const plan = await getSellerPlan(req.seller!.sellerId);
@@ -67,12 +68,12 @@ router.post(
       }
 
       let csvContent: string;
-      if (typeof req.body === "string") {
-        csvContent = req.body;
-      } else if (req.body?.csvContent) {
-        csvContent = String(req.body.csvContent);
+      if (req.file) {
+        csvContent = req.file.buffer.toString("utf-8");
+      } else if (typeof req.body?.csvContent === "string") {
+        csvContent = req.body.csvContent;
       } else {
-        res.status(400).json({ error: "CSV content required. Send as text/csv body or JSON with csvContent field." });
+        res.status(400).json({ error: "No CSV file provided. Upload a file using the 'file' field (multipart/form-data)." });
         return;
       }
 
@@ -119,7 +120,7 @@ router.post(
 
         const statusRaw = row["status"]?.toLowerCase().trim() || "active";
         if (!VALID_STATUSES.has(statusRaw)) {
-          errors.push(`Row ${rowNum}: invalid status "${statusRaw}" (must be active, out_of_stock, or hidden) — skipped`);
+          errors.push(`Row ${rowNum}: invalid status "${statusRaw}" — skipped`);
           skipped++;
           continue;
         }

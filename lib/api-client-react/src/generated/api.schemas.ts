@@ -73,6 +73,11 @@ export interface AuthResponse {
 export interface UpdateSellerRequest {
   storeName?: string;
   whatsappNumber?: string;
+  subdomain?: string;
+  /** @nullable */
+  bannerImageUrl?: string | null;
+  /** @nullable */
+  tagline?: string | null;
 }
 
 export interface Category {
@@ -158,9 +163,9 @@ export interface ReorderProductsRequest {
   items: ReorderProductsRequestItemsItem[];
 }
 
-export interface CsvImportInput {
-  /** Raw CSV text with header row and columns: name, price, description, category, status */
-  csvContent: string;
+export interface CsvFileUpload {
+  /** CSV file with header row and columns: name, price, description, category, status */
+  file: Blob;
 }
 
 export interface ImportResult {
