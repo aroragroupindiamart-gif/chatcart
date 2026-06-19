@@ -26,6 +26,10 @@ tags:
     description: Order history
   - name: storage
     description: Object storage uploads
+  - name: export
+    description: Store data export (Pro plan only)
+  - name: import
+    description: Bulk data import (Pro plan only)
 
 paths:
   /healthz:
@@ -292,6 +296,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Product"
+        "403":
+          description: Active product limit reached for this plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpgradeRequiredError"
 
   /products/{productId}:
     get:
@@ -384,6 +394,33 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SuccessResponse"
+
+  /products/import-csv:
+    post:
+      operationId: importProductsCsv
+      tags: [import]
+      summary: Bulk-import products from CSV content (Pro plan only)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CsvImportInput"
+      responses:
+        "200":
+          description: Import results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportResult"
+        "403":
+          description: Plan upgrade required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpgradeRequiredError"
 
   # ── Product Images ─────────────────────────────────────────────────────────
 
@@ -495,6 +532,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProductVariant"
+        "403":
+          description: Plan upgrade required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpgradeRequiredError"
 
   /products/{productId}/variants/{variantId}:
     patch:
@@ -719,6 +762,29 @@ paths:
               schema:
                 $ref: "#/components/schemas/RequestLogoUploadUrlResponse"
 
+  # ── Export ────────────────────────────────────────────────────────────────
+
+  /export:
+    get:
+      operationId: exportStoreData
+      tags: [export]
+      summary: Export full store data as JSON (Pro plan only)
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Store data export
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportData"
+        "403":
+          description: Plan upgrade required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpgradeRequiredError"
+
 components:
   securitySchemes:
     BearerAuth:
@@ -742,6 +808,17 @@ components:
           type: string
       required:
         - error
+
+    UpgradeRequiredError:
+      type: object
+      properties:
+        error:
+          type: string
+        upgradeRequired:
+          type: boolean
+      required:
+        - error
+        - upgradeRequired
 
     SuccessResponse:
       type: object
@@ -798,6 +875,16 @@ components:
 
     # ── Seller ────────────────────────────────────────────────────────────
 
+    SubscriptionPlan:
+      type: string
+      enum:
+        - starter
+        - growth
+        - pro
+        - trial
+        - basic
+        - business
+
     Seller:
       type: object
       properties:
@@ -810,6 +897,14 @@ components:
         subdomain:
           type: string
         whatsappNumber:
+          type: string
+        bannerImageUrl:
+          type: ["string", "null"]
+        tagline:
+          type: ["string", "null"]
+        subscriptionPlan:
+          $ref: "#/components/schemas/SubscriptionPlan"
+        subscriptionStatus:
           type: string
         createdAt:
           type: string
@@ -976,6 +1071,31 @@ components:
               - sortOrder
       required:
         - items
+
+    CsvImportInput:
+      type: object
+      properties:
+        csvContent:
+          type: string
+          description: "Raw CSV text with header row and columns: name, price, description, category, status"
+      required:
+        - csvContent
+
+    ImportResult:
+      type: object
+      properties:
+        imported:
+          type: integer
+        skipped:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: string
+      required:
+        - imported
+        - skipped
+        - errors
 
     # ── Product Images ────────────────────────────────────────────────────
 
@@ -1286,3 +1406,41 @@ components:
       required:
         - uploadURL
         - objectPath
+
+    # ── Export ────────────────────────────────────────────────────────────
+
+    ExportSellerSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        storeName:
+          type: string
+        subdomain:
+          type: string
+      required:
+        - id
+        - storeName
+        - subdomain
+
+    ExportData:
+      type: object
+      properties:
+        exportedAt:
+          type: string
+          format: date-time
+        seller:
+          $ref: "#/components/schemas/ExportSellerSummary"
+        products:
+          type: array
+          items:
+            $ref: "#/components/schemas/Product"
+        orders:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrderDetail"
+      required:
+        - exportedAt
+        - seller
+        - products
+        - orders

@@ -265,6 +265,8 @@ router.get("/auth/me", requireAuth, async (req, res) => {
         whatsappNumber: sellersTable.whatsappNumber,
         bannerImageUrl: sellersTable.bannerImageUrl,
         tagline: sellersTable.tagline,
+        subscriptionPlan: sellersTable.subscriptionPlan,
+        subscriptionStatus: sellersTable.subscriptionStatus,
         createdAt: sellersTable.createdAt,
         updatedAt: sellersTable.updatedAt,
       })

@@ -5,8 +5,9 @@ import {
   productImagesTable,
   productVariantsTable,
 } from "@workspace/db/schema";
-import { eq, and, ne, asc, desc, ilike, inArray } from "drizzle-orm";
+import { eq, and, ne, asc, desc, ilike, inArray, count } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
+import { getSellerPlan, getPlanLimits, getPlanDisplayName } from "../lib/planLimits.js";
 
 const router = Router();
 
@@ -26,6 +27,21 @@ async function assertProductBelongsToSeller(productId: number, sellerId: number)
     .where(and(eq(productsTable.id, productId), eq(productsTable.sellerId, sellerId)))
     .limit(1);
   return !!product;
+}
+
+async function countActiveProducts(sellerId: number, excludeProductId?: number): Promise<number> {
+  const conditions = [
+    eq(productsTable.sellerId, sellerId),
+    eq(productsTable.status, "active"),
+  ];
+  if (excludeProductId !== undefined) {
+    conditions.push(ne(productsTable.id, excludeProductId));
+  }
+  const [row] = await db
+    .select({ count: count() })
+    .from(productsTable)
+    .where(and(...conditions));
+  return row?.count ?? 0;
 }
 
 // ── List & create ────────────────────────────────────────────────────────────
@@ -97,6 +113,23 @@ router.post("/products", requireAuth, async (req, res) => {
       res.status(400).json({ error: "Product name required" });
       return;
     }
+
+    const requestedStatus = body.status ?? "active";
+    if (requestedStatus === "active") {
+      const plan = await getSellerPlan(req.seller!.sellerId);
+      const limits = getPlanLimits(plan);
+      if (limits.maxActiveProducts !== null) {
+        const activeCount = await countActiveProducts(req.seller!.sellerId);
+        if (activeCount >= limits.maxActiveProducts) {
+          res.status(403).json({
+            error: `Your ${getPlanDisplayName(plan)} plan allows up to ${limits.maxActiveProducts} active products. Upgrade your plan to add more.`,
+            upgradeRequired: true,
+          });
+          return;
+        }
+      }
+    }
+
     const [product] = await db
       .insert(productsTable)
       .values({
@@ -105,7 +138,7 @@ router.post("/products", requireAuth, async (req, res) => {
         description: body.description,
         price: body.price != null ? String(body.price) : undefined,
         categoryId: body.categoryId ?? null,
-        status: body.status ?? "active",
+        status: requestedStatus,
         stockCount: body.stockCount ?? 1,
         showWhenOutOfStock: body.showWhenOutOfStock ?? false,
       })
@@ -197,6 +230,21 @@ router.patch("/products/:productId", requireAuth, async (req, res) => {
       showWhenOutOfStock?: boolean;
       sortOrder?: number;
     };
+
+    if (body.status === "active") {
+      const plan = await getSellerPlan(req.seller!.sellerId);
+      const limits = getPlanLimits(plan);
+      if (limits.maxActiveProducts !== null) {
+        const activeCount = await countActiveProducts(req.seller!.sellerId, productId);
+        if (activeCount >= limits.maxActiveProducts) {
+          res.status(403).json({
+            error: `Your ${getPlanDisplayName(plan)} plan allows up to ${limits.maxActiveProducts} active products. Deactivate another product first or upgrade your plan.`,
+            upgradeRequired: true,
+          });
+          return;
+        }
+      }
+    }
 
     const updates: Partial<typeof productsTable.$inferInsert> = {
       updatedAt: new Date(),
@@ -365,6 +413,14 @@ router.post(
   requireAuth,
   async (req, res) => {
     try {
+      const plan = await getSellerPlan(req.seller!.sellerId);
+      if (!getPlanLimits(plan).variantsEnabled) {
+        res.status(403).json({
+          error: "Product variants are available on Growth and Pro plans. Upgrade to add variants.",
+          upgradeRequired: true,
+        });
+        return;
+      }
       const productId = parseInt(String(req.params.productId));
       if (!(await assertProductBelongsToSeller(productId, req.seller!.sellerId))) {
         res.status(403).json({ error: "Forbidden" });
@@ -395,6 +451,14 @@ router.patch(
   requireAuth,
   async (req, res) => {
     try {
+      const plan = await getSellerPlan(req.seller!.sellerId);
+      if (!getPlanLimits(plan).variantsEnabled) {
+        res.status(403).json({
+          error: "Product variants are available on Growth and Pro plans. Upgrade to edit variants.",
+          upgradeRequired: true,
+        });
+        return;
+      }
       const productId = parseInt(String(req.params.productId));
       const variantId = parseInt(String(req.params.variantId));
       if (!(await assertProductBelongsToSeller(productId, req.seller!.sellerId))) {
@@ -435,6 +499,14 @@ router.delete(
   requireAuth,
   async (req, res) => {
     try {
+      const plan = await getSellerPlan(req.seller!.sellerId);
+      if (!getPlanLimits(plan).variantsEnabled) {
+        res.status(403).json({
+          error: "Product variants are available on Growth and Pro plans.",
+          upgradeRequired: true,
+        });
+        return;
+      }
       const productId = parseInt(String(req.params.productId));
       const variantId = parseInt(String(req.params.variantId));
       if (!(await assertProductBelongsToSeller(productId, req.seller!.sellerId))) {

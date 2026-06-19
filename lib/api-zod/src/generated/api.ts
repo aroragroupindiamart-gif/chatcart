@@ -45,6 +45,10 @@ export const VerifyOtpResponse = zod.object({
   "storeName": zod.string(),
   "subdomain": zod.string(),
   "whatsappNumber": zod.string(),
+  "bannerImageUrl": zod.string().nullish(),
+  "tagline": zod.string().nullish(),
+  "subscriptionPlan": zod.enum(['starter', 'growth', 'pro', 'trial', 'basic', 'business']).optional(),
+  "subscriptionStatus": zod.string().optional(),
   "createdAt": zod.coerce.date()
 })
 })
@@ -59,6 +63,10 @@ export const GetMeResponse = zod.object({
   "storeName": zod.string(),
   "subdomain": zod.string(),
   "whatsappNumber": zod.string(),
+  "bannerImageUrl": zod.string().nullish(),
+  "tagline": zod.string().nullish(),
+  "subscriptionPlan": zod.enum(['starter', 'growth', 'pro', 'trial', 'basic', 'business']).optional(),
+  "subscriptionStatus": zod.string().optional(),
   "createdAt": zod.coerce.date()
 })
 
@@ -76,10 +84,7 @@ export const LogoutResponse = zod.object({
  */
 export const UpdateSellerBody = zod.object({
   "storeName": zod.string().optional(),
-  "whatsappNumber": zod.string().optional(),
-  "subdomain": zod.string().optional(),
-  "bannerImageUrl": zod.string().nullable().optional(),
-  "tagline": zod.string().nullable().optional()
+  "whatsappNumber": zod.string().optional()
 })
 
 export const UpdateSellerResponse = zod.object({
@@ -88,6 +93,10 @@ export const UpdateSellerResponse = zod.object({
   "storeName": zod.string(),
   "subdomain": zod.string(),
   "whatsappNumber": zod.string(),
+  "bannerImageUrl": zod.string().nullish(),
+  "tagline": zod.string().nullish(),
+  "subscriptionPlan": zod.enum(['starter', 'growth', 'pro', 'trial', 'basic', 'business']).optional(),
+  "subscriptionStatus": zod.string().optional(),
   "createdAt": zod.coerce.date()
 })
 
@@ -291,6 +300,20 @@ export const ReorderProductsBody = zod.object({
 
 export const ReorderProductsResponse = zod.object({
   "success": zod.boolean()
+})
+
+
+/**
+ * @summary Bulk-import products from CSV content (Pro plan only)
+ */
+export const ImportProductsCsvBody = zod.object({
+  "csvContent": zod.string().describe('Raw CSV text with header row and columns: name, price, description, category, status')
+})
+
+export const ImportProductsCsvResponse = zod.object({
+  "imported": zod.number(),
+  "skipped": zod.number(),
+  "errors": zod.array(zod.string())
 })
 
 
@@ -519,6 +542,59 @@ export const RequestLogoUploadUrlBody = zod.object({
 export const RequestLogoUploadUrlResponse = zod.object({
   "uploadURL": zod.string(),
   "objectPath": zod.string()
+})
+
+
+/**
+ * @summary Export full store data as JSON (Pro plan only)
+ */
+export const ExportStoreDataResponse = zod.object({
+  "exportedAt": zod.coerce.date(),
+  "seller": zod.object({
+  "id": zod.number(),
+  "storeName": zod.string(),
+  "subdomain": zod.string()
+}),
+  "products": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "description": zod.string().optional(),
+  "price": zod.number().describe('Price in INR'),
+  "categoryId": zod.number().optional(),
+  "categoryName": zod.string().optional(),
+  "status": zod.enum(['active', 'out_of_stock', 'hidden', 'deleted']),
+  "stockCount": zod.number(),
+  "showWhenOutOfStock": zod.boolean(),
+  "sortOrder": zod.number(),
+  "images": zod.array(zod.object({
+  "id": zod.number(),
+  "url": zod.string(),
+  "displayOrder": zod.number()
+})),
+  "variants": zod.array(zod.object({
+  "id": zod.number(),
+  "variantType": zod.string().describe('e.g. Size, Color, Stone'),
+  "options": zod.array(zod.string()).describe('Available options for this variant type')
+})),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})),
+  "orders": zod.array(zod.object({
+  "id": zod.string().describe('e.g. ORD-00001'),
+  "customerContact": zod.string().optional(),
+  "status": zod.enum(['pending', 'confirmed', 'fulfilled']),
+  "totalAmount": zod.number(),
+  "itemCount": zod.number(),
+  "createdAt": zod.coerce.date()
+}).and(zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "productNameSnapshot": zod.string(),
+  "priceSnapshot": zod.number(),
+  "variantSnapshot": zod.string().optional(),
+  "quantity": zod.number()
+}))
+})))
 })
 
 

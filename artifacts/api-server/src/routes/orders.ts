@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { ordersTable, orderItemsTable } from "@workspace/db/schema";
-import { eq, and, desc, count, inArray } from "drizzle-orm";
+import { eq, and, desc, count, inArray, gte } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
+import { getSellerPlan, getPlanLimits } from "../lib/planLimits.js";
 
 const router = Router();
 
@@ -31,6 +32,13 @@ router.get("/orders", requireAuth, async (req, res) => {
           status as "pending" | "confirmed" | "fulfilled"
         )
       );
+    }
+
+    const plan = await getSellerPlan(req.seller!.sellerId);
+    const limits = getPlanLimits(plan);
+    if (limits.orderHistoryDays !== null) {
+      const cutoff = new Date(Date.now() - limits.orderHistoryDays * 24 * 60 * 60 * 1000);
+      conditions.push(gte(ordersTable.createdAt, cutoff));
     }
 
     const [totalRow] = await db

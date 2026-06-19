@@ -15,9 +15,9 @@ import { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Plus, Edit2, Trash, X, Check, Upload, Loader2, Image as ImageIcon } from "lucide-react";
+import { Save, Plus, Edit2, Trash, X, Check, Upload, Loader2, Image as ImageIcon, Download, Lock, Crown, Zap, ArrowRight } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -28,6 +28,26 @@ function imgSrc(url: string): string {
     return `/api/public/img/${url.slice("/objects/".length)}`;
   }
   return url;
+}
+
+type PlanName = "Starter" | "Growth" | "Pro";
+
+function normalizePlan(plan: string | null | undefined): PlanName {
+  if (plan === "pro" || plan === "business") return "Pro";
+  if (plan === "growth" || plan === "basic") return "Growth";
+  return "Starter";
+}
+
+function planColor(planName: PlanName): string {
+  if (planName === "Pro") return "text-purple-600";
+  if (planName === "Growth") return "text-blue-600";
+  return "text-slate-600";
+}
+
+function planBadgeClass(planName: PlanName): string {
+  if (planName === "Pro") return "bg-purple-100 text-purple-700 border-purple-200";
+  if (planName === "Growth") return "bg-blue-100 text-blue-700 border-blue-200";
+  return "bg-slate-100 text-slate-700 border-slate-200";
 }
 
 export default function Settings() {
@@ -47,12 +67,17 @@ function SettingsContent() {
   const updateSeller = useUpdateSeller();
   const requestLogoUploadUrl = useRequestLogoUploadUrl();
 
+  const planName = normalizePlan((seller as any)?.subscriptionPlan);
+  const isPro = planName === "Pro";
+  const isGrowthOrPro = planName === "Growth" || planName === "Pro";
+
   const [storeName, setStoreName] = useState("");
   const [whatsappNumber, setWhatsappNumber] = useState("");
   const [subdomain, setSubdomain] = useState("");
   const [bannerImageUrl, setBannerImageUrl] = useState<string | null>(null);
   const [tagline, setTagline] = useState("");
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   const RESERVED_SLUGS = new Set([
@@ -114,7 +139,8 @@ function SettingsContent() {
       });
       toast({ title: "Branding saved" });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      const apiError = err?.response?.data?.error || err.message || "Failed to save";
+      toast({ title: "Error", description: apiError, variant: "destructive" });
     }
   };
 
@@ -148,6 +174,37 @@ function SettingsContent() {
       toast({ title: "Upload failed", description: err.message, variant: "destructive" });
     } finally {
       setUploadingLogo(false);
+    }
+  };
+
+  const handleExport = async () => {
+    setExportLoading(true);
+    try {
+      const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+      const response = await fetch("/api/export", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || `Export failed (${response.status})`);
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get("Content-Disposition") || "";
+      const filenameMatch = disposition.match(/filename="([^"]+)"/);
+      const filename = filenameMatch?.[1] || "chatcart-export.json";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: "Export downloaded" });
+    } catch (err: any) {
+      toast({ title: "Export failed", description: err.message, variant: "destructive" });
+    } finally {
+      setExportLoading(false);
     }
   };
 
@@ -202,6 +259,70 @@ function SettingsContent() {
         <p className="text-slate-500 mt-1">Manage your store details and categories</p>
       </div>
 
+      {/* ── Subscription Plan ── */}
+      <Card className="border-2 border-slate-200">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              {planName === "Pro" ? <Crown className="w-5 h-5 text-purple-500" /> : <Zap className="w-5 h-5 text-blue-500" />}
+              Your Plan
+            </CardTitle>
+            <span className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-semibold ${planBadgeClass(planName)}`}>
+              {planName}
+            </span>
+          </div>
+          <CardDescription>
+            Your current subscription and what's included.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="rounded-lg bg-slate-50 p-4">
+              <p className="text-xs text-slate-500 mb-1">Active products</p>
+              <p className={`text-lg font-bold ${planColor(planName)}`}>
+                {planName === "Starter" ? "Up to 25" : planName === "Growth" ? "Up to 100" : "Unlimited"}
+              </p>
+            </div>
+            <div className="rounded-lg bg-slate-50 p-4">
+              <p className="text-xs text-slate-500 mb-1">Order history</p>
+              <p className={`text-lg font-bold ${planColor(planName)}`}>
+                {planName === "Starter" ? "Last 30 days" : "Full history"}
+              </p>
+            </div>
+            <div className="rounded-lg bg-slate-50 p-4">
+              <p className="text-xs text-slate-500 mb-1">Product variants</p>
+              <p className={`text-lg font-bold ${planColor(planName)}`}>
+                {isGrowthOrPro ? "Included" : "Growth & above"}
+              </p>
+            </div>
+            <div className="rounded-lg bg-slate-50 p-4">
+              <p className="text-xs text-slate-500 mb-1">Support</p>
+              <p className={`text-sm font-bold ${planColor(planName)}`}>
+                {planName === "Pro" ? "WhatsApp + Phone, 24/7" : "Email support"}
+              </p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {planName === "Starter" ? "Within 24 hours" : planName === "Growth" ? "4-6 hour response" : "Instant response"}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+        {planName !== "Pro" && (
+          <CardFooter className="bg-slate-50 rounded-b-xl border-t border-slate-100">
+            <div className="flex items-center justify-between w-full">
+              <p className="text-sm text-slate-600">
+                {planName === "Starter"
+                  ? "Upgrade to Growth for 100 products and variants."
+                  : "Upgrade to Pro for unlimited products and branding."}
+              </p>
+              <Button size="sm" variant="outline" className="ml-4 shrink-0">
+                <ArrowRight className="w-4 h-4 mr-1" />
+                Upgrade
+              </Button>
+            </div>
+          </CardFooter>
+        )}
+      </Card>
+
       {/* ── Store Details ── */}
       <Card>
         <CardHeader>
@@ -253,79 +374,148 @@ function SettingsContent() {
       </Card>
 
       {/* ── Store Branding ── */}
-      <Card>
+      <Card className={!isPro ? "opacity-90" : ""}>
         <CardHeader>
-          <CardTitle>Store Branding</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>Store Branding</CardTitle>
+            {!isPro && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 border border-purple-200 px-2.5 py-1 text-xs font-semibold text-purple-600">
+                <Crown className="w-3 h-3" />
+                Pro only
+              </span>
+            )}
+          </div>
           <CardDescription>
-            Add a logo and tagline — they appear as a banner at the top of your customer storefront.
-            Leave both blank to show no banner.
+            {isPro
+              ? "Add a logo and tagline — they appear as a banner at the top of your customer storefront."
+              : "Add a custom logo and tagline to your storefront. Available on the Pro plan."}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Logo upload */}
-          <div className="space-y-2">
-            <Label>Store Logo</Label>
-            <div className="flex items-center gap-4">
-              {bannerImageUrl ? (
-                <div className="relative group">
-                  <img
-                    src={imgSrc(bannerImageUrl)}
-                    alt="Store logo"
-                    className="w-20 h-20 rounded-xl object-cover border border-slate-200"
-                  />
-                  <button
-                    onClick={() => setBannerImageUrl(null)}
-                    className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow"
+        {isPro ? (
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Store Logo</Label>
+              <div className="flex items-center gap-4">
+                {bannerImageUrl ? (
+                  <div className="relative group">
+                    <img
+                      src={imgSrc(bannerImageUrl)}
+                      alt="Store logo"
+                      className="w-20 h-20 rounded-xl object-cover border border-slate-200"
+                    />
+                    <button
+                      onClick={() => setBannerImageUrl(null)}
+                      className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="w-20 h-20 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center bg-slate-50">
+                    <ImageIcon className="w-6 h-6 text-slate-300" />
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => logoInputRef.current?.click()}
+                    disabled={uploadingLogo}
                   >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
+                    {uploadingLogo ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Uploading…</>
+                    ) : (
+                      <><Upload className="w-4 h-4 mr-2" />{bannerImageUrl ? "Replace Logo" : "Upload Logo"}</>
+                    )}
+                  </Button>
+                  <p className="text-xs text-slate-500">JPG, PNG, WebP · max 5 MB</p>
                 </div>
-              ) : (
-                <div className="w-20 h-20 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center bg-slate-50">
-                  <ImageIcon className="w-6 h-6 text-slate-300" />
-                </div>
-              )}
-              <div className="space-y-1.5">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => logoInputRef.current?.click()}
-                  disabled={uploadingLogo}
-                >
-                  {uploadingLogo ? (
-                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Uploading…</>
-                  ) : (
-                    <><Upload className="w-4 h-4 mr-2" />{bannerImageUrl ? "Replace Logo" : "Upload Logo"}</>
-                  )}
-                </Button>
-                <p className="text-xs text-slate-500">JPG, PNG, WebP · max 5 MB</p>
               </div>
+              <input
+                ref={logoInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleLogoSelected}
+              />
             </div>
-            <input
-              ref={logoInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="hidden"
-              onChange={handleLogoSelected}
-            />
-          </div>
 
-          {/* Tagline */}
-          <div className="space-y-2">
-            <Label>Tagline <span className="text-slate-400 font-normal">(optional)</span></Label>
-            <Input
-              value={tagline}
-              onChange={e => setTagline(e.target.value.slice(0, 100))}
-              placeholder="e.g. Importer & Wholesaler of Fashion Jewellery"
-              maxLength={100}
-            />
-            <p className="text-xs text-slate-500">{tagline.length}/100 characters</p>
-          </div>
+            <div className="space-y-2">
+              <Label>Tagline <span className="text-slate-400 font-normal">(optional)</span></Label>
+              <Input
+                value={tagline}
+                onChange={e => setTagline(e.target.value.slice(0, 100))}
+                placeholder="e.g. Importer & Wholesaler of Fashion Jewellery"
+                maxLength={100}
+              />
+              <p className="text-xs text-slate-500">{tagline.length}/100 characters</p>
+            </div>
 
-          <Button onClick={handleSaveBranding} disabled={updateSeller.isPending || uploadingLogo}>
-            <Save className="w-4 h-4 mr-2" />
-            Save Branding
-          </Button>
+            <Button onClick={handleSaveBranding} disabled={updateSeller.isPending || uploadingLogo}>
+              <Save className="w-4 h-4 mr-2" />
+              Save Branding
+            </Button>
+          </CardContent>
+        ) : (
+          <CardContent>
+            <div className="rounded-xl border-2 border-dashed border-purple-100 bg-purple-50/40 p-6 text-center">
+              <Lock className="w-8 h-8 text-purple-300 mx-auto mb-3" />
+              <p className="text-sm font-medium text-slate-700 mb-1">Custom branding is a Pro feature</p>
+              <p className="text-xs text-slate-500 mb-4">Upgrade to Pro to add your logo and tagline to your storefront.</p>
+              <Button size="sm" variant="outline" className="border-purple-300 text-purple-700 hover:bg-purple-50">
+                <Crown className="w-3.5 h-3.5 mr-1.5" />
+                Upgrade to Pro — ₹299/mo
+              </Button>
+            </div>
+          </CardContent>
+        )}
+      </Card>
+
+      {/* ── Export Store Data ── */}
+      <Card className={!isPro ? "opacity-90" : ""}>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Export Store Data</CardTitle>
+            {!isPro && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 border border-purple-200 px-2.5 py-1 text-xs font-semibold text-purple-600">
+                <Crown className="w-3 h-3" />
+                Pro only
+              </span>
+            )}
+          </div>
+          <CardDescription>
+            Download a full JSON export of your products and orders.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isPro ? (
+            <div className="flex items-center gap-4">
+              <Button
+                variant="outline"
+                onClick={handleExport}
+                disabled={exportLoading}
+              >
+                {exportLoading ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Preparing export…</>
+                ) : (
+                  <><Download className="w-4 h-4 mr-2" />Download Store Data (JSON)</>
+                )}
+              </Button>
+              <p className="text-xs text-slate-500">
+                Includes all active products, images, variants, and full order history.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-xl border-2 border-dashed border-purple-100 bg-purple-50/40 p-6 text-center">
+              <Lock className="w-8 h-8 text-purple-300 mx-auto mb-3" />
+              <p className="text-sm font-medium text-slate-700 mb-1">Data export is a Pro feature</p>
+              <p className="text-xs text-slate-500 mb-4">Upgrade to Pro to download your complete product and order data.</p>
+              <Button size="sm" variant="outline" className="border-purple-300 text-purple-700 hover:bg-purple-50">
+                <Crown className="w-3.5 h-3.5 mr-1.5" />
+                Upgrade to Pro — ₹299/mo
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 

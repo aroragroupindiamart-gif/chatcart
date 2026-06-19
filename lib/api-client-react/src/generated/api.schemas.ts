@@ -13,6 +13,11 @@ export interface ErrorResponse {
   error: string;
 }
 
+export interface UpgradeRequiredError {
+  error: string;
+  upgradeRequired: boolean;
+}
+
 export interface SuccessResponse {
   success: boolean;
 }
@@ -33,12 +38,30 @@ export interface VerifyOtpRequest {
   otp: string;
 }
 
+export type SubscriptionPlan = typeof SubscriptionPlan[keyof typeof SubscriptionPlan];
+
+
+export const SubscriptionPlan = {
+  starter: 'starter',
+  growth: 'growth',
+  pro: 'pro',
+  trial: 'trial',
+  basic: 'basic',
+  business: 'business',
+} as const;
+
 export interface Seller {
   id: number;
   phone: string;
   storeName: string;
   subdomain: string;
   whatsappNumber: string;
+  /** @nullable */
+  bannerImageUrl?: string | null;
+  /** @nullable */
+  tagline?: string | null;
+  subscriptionPlan?: SubscriptionPlan;
+  subscriptionStatus?: string;
   createdAt: string;
 }
 
@@ -133,6 +156,17 @@ export type ReorderProductsRequestItemsItem = {
 
 export interface ReorderProductsRequest {
   items: ReorderProductsRequestItemsItem[];
+}
+
+export interface CsvImportInput {
+  /** Raw CSV text with header row and columns: name, price, description, category, status */
+  csvContent: string;
+}
+
+export interface ImportResult {
+  imported: number;
+  skipped: number;
+  errors: string[];
 }
 
 export interface AddProductImageRequest {
@@ -284,6 +318,19 @@ export interface RequestLogoUploadUrlBody {
 export interface RequestLogoUploadUrlResponse {
   uploadURL: string;
   objectPath: string;
+}
+
+export interface ExportSellerSummary {
+  id: number;
+  storeName: string;
+  subdomain: string;
+}
+
+export interface ExportData {
+  exportedAt: string;
+  seller: ExportSellerSummary;
+  products: Product[];
+  orders: OrderDetail[];
 }
 
 export type ListProductsParams = {

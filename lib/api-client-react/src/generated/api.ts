@@ -26,9 +26,12 @@ import type {
   Category,
   CreateCategoryRequest,
   CreateProductRequest,
+  CsvImportInput,
   DashboardStats,
   ErrorResponse,
+  ExportData,
   HealthStatus,
+  ImportResult,
   ListOrdersParams,
   ListProductsParams,
   OrderDetail,
@@ -52,6 +55,7 @@ import type {
   UpdateProductRequest,
   UpdateProductVariantRequest,
   UpdateSellerRequest,
+  UpgradeRequiredError,
   VerifyOtpRequest
 } from './api.schemas';
 
@@ -904,7 +908,7 @@ export const createProduct = async (createProductRequest: CreateProductRequest, 
 
 
 
-export const getCreateProductMutationOptions = <TError = ErrorType<unknown>,
+export const getCreateProductMutationOptions = <TError = ErrorType<UpgradeRequiredError>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createProduct>>, TError,{data: BodyType<CreateProductRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof createProduct>>, TError,{data: BodyType<CreateProductRequest>}, TContext> => {
 
@@ -933,12 +937,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type CreateProductMutationResult = NonNullable<Awaited<ReturnType<typeof createProduct>>>
     export type CreateProductMutationBody = BodyType<CreateProductRequest>
-    export type CreateProductMutationError = ErrorType<unknown>
+    export type CreateProductMutationError = ErrorType<UpgradeRequiredError>
 
     /**
  * @summary Create a new product
  */
-export const useCreateProduct = <TError = ErrorType<unknown>,
+export const useCreateProduct = <TError = ErrorType<UpgradeRequiredError>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createProduct>>, TError,{data: BodyType<CreateProductRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof createProduct>>,
@@ -1239,6 +1243,77 @@ export const useReorderProducts = <TError = ErrorType<unknown>,
       return useMutation(getReorderProductsMutationOptions(options));
     }
 
+export const getImportProductsCsvUrl = () => {
+
+
+
+
+  return `/api/products/import-csv`
+}
+
+/**
+ * @summary Bulk-import products from CSV content (Pro plan only)
+ */
+export const importProductsCsv = async (csvImportInput: CsvImportInput, options?: RequestInit): Promise<ImportResult> => {
+
+  return customFetch<ImportResult>(getImportProductsCsvUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      csvImportInput,)
+  }
+);}
+
+
+
+
+export const getImportProductsCsvMutationOptions = <TError = ErrorType<UpgradeRequiredError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importProductsCsv>>, TError,{data: BodyType<CsvImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof importProductsCsv>>, TError,{data: BodyType<CsvImportInput>}, TContext> => {
+
+const mutationKey = ['importProductsCsv'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importProductsCsv>>, {data: BodyType<CsvImportInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  importProductsCsv(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ImportProductsCsvMutationResult = NonNullable<Awaited<ReturnType<typeof importProductsCsv>>>
+    export type ImportProductsCsvMutationBody = BodyType<CsvImportInput>
+    export type ImportProductsCsvMutationError = ErrorType<UpgradeRequiredError>
+
+    /**
+ * @summary Bulk-import products from CSV content (Pro plan only)
+ */
+export const useImportProductsCsv = <TError = ErrorType<UpgradeRequiredError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importProductsCsv>>, TError,{data: BodyType<CsvImportInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof importProductsCsv>>,
+        TError,
+        {data: BodyType<CsvImportInput>},
+        TContext
+      > => {
+      return useMutation(getImportProductsCsvMutationOptions(options));
+    }
+
 export const getAddProductImageUrl = (productId: number,) => {
 
 
@@ -1482,7 +1557,7 @@ export const addProductVariant = async (productId: number,
 
 
 
-export const getAddProductVariantMutationOptions = <TError = ErrorType<unknown>,
+export const getAddProductVariantMutationOptions = <TError = ErrorType<UpgradeRequiredError>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addProductVariant>>, TError,{productId: number;data: BodyType<AddProductVariantRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof addProductVariant>>, TError,{productId: number;data: BodyType<AddProductVariantRequest>}, TContext> => {
 
@@ -1511,12 +1586,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type AddProductVariantMutationResult = NonNullable<Awaited<ReturnType<typeof addProductVariant>>>
     export type AddProductVariantMutationBody = BodyType<AddProductVariantRequest>
-    export type AddProductVariantMutationError = ErrorType<unknown>
+    export type AddProductVariantMutationError = ErrorType<UpgradeRequiredError>
 
     /**
  * @summary Add a variant group to a product
  */
-export const useAddProductVariant = <TError = ErrorType<unknown>,
+export const useAddProductVariant = <TError = ErrorType<UpgradeRequiredError>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addProductVariant>>, TError,{productId: number;data: BodyType<AddProductVariantRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof addProductVariant>>,
@@ -2124,4 +2199,81 @@ export const useRequestLogoUploadUrl = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getRequestLogoUploadUrlMutationOptions(options));
     }
+
+export const getExportStoreDataUrl = () => {
+
+
+
+
+  return `/api/export`
+}
+
+/**
+ * @summary Export full store data as JSON (Pro plan only)
+ */
+export const exportStoreData = async ( options?: RequestInit): Promise<ExportData> => {
+
+  return customFetch<ExportData>(getExportStoreDataUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportStoreDataQueryKey = () => {
+    return [
+    `/api/export`
+    ] as const;
+    }
+
+
+export const getExportStoreDataQueryOptions = <TData = Awaited<ReturnType<typeof exportStoreData>>, TError = ErrorType<UpgradeRequiredError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportStoreData>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportStoreDataQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportStoreData>>> = ({ signal }) => exportStoreData({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportStoreData>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ExportStoreDataQueryResult = NonNullable<Awaited<ReturnType<typeof exportStoreData>>>
+export type ExportStoreDataQueryError = ErrorType<UpgradeRequiredError>
+
+
+/**
+ * @summary Export full store data as JSON (Pro plan only)
+ */
+
+export function useExportStoreData<TData = Awaited<ReturnType<typeof exportStoreData>>, TError = ErrorType<UpgradeRequiredError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportStoreData>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getExportStoreDataQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 

@@ -131,7 +131,7 @@ export default function Home() {
                   <Share2 className="w-10 h-10 text-primary" />
                 </div>
                 <h3 className="text-lg font-bold text-foreground mb-2">Share your link</h3>
-                <p className="text-sm text-muted-foreground">Send your custom store link on WhatsApp or Instagram.</p>
+                <p className="text-sm text-muted-foreground">Send your store link on WhatsApp or Instagram.</p>
               </div>
 
               <div className="flex flex-col items-center text-center w-full md:w-1/3">
@@ -159,26 +159,29 @@ export default function Home() {
           </div>
 
           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto items-center">
-            {/* Basic Tier */}
+            {/* Starter Tier */}
             <Card className="bg-background border-border shadow-sm relative">
               <CardHeader>
-                <CardTitle className="text-2xl">Basic</CardTitle>
+                <CardTitle className="text-2xl">Starter</CardTitle>
                 <CardDescription>For starting out.</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="mb-6">
-                  <span className="text-4xl font-bold text-foreground">₹299</span>
+                  <span className="text-4xl font-bold text-foreground">₹99</span>
                   <span className="text-muted-foreground">/mo</span>
                 </div>
                 <ul className="space-y-3">
                   <li className="flex items-center gap-3 text-sm text-muted-foreground">
-                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Up to 100 products
-                  </li>
-                  <li className="flex items-center gap-3 text-sm text-muted-foreground">
-                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Standard support
+                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Up to 25 active products
                   </li>
                   <li className="flex items-center gap-3 text-sm text-muted-foreground">
                     <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> WhatsApp ordering
+                  </li>
+                  <li className="flex items-center gap-3 text-sm text-muted-foreground">
+                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Search, sort &amp; never lose a product
+                  </li>
+                  <li className="flex items-center gap-3 text-sm text-muted-foreground">
+                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Email support (within 24 hours)
                   </li>
                 </ul>
               </CardContent>
@@ -187,32 +190,32 @@ export default function Home() {
               </CardFooter>
             </Card>
 
-            {/* Pro Tier (Highlighted) */}
+            {/* Growth Tier (Highlighted) */}
             <Card className="bg-background border-primary shadow-md relative scale-105 z-10">
               <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
                 Most Popular
               </div>
               <CardHeader>
-                <CardTitle className="text-2xl">Pro</CardTitle>
+                <CardTitle className="text-2xl">Growth</CardTitle>
                 <CardDescription>For growing businesses.</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="mb-6">
-                  <span className="text-4xl font-bold text-foreground">₹399</span>
+                  <span className="text-4xl font-bold text-foreground">₹199</span>
                   <span className="text-muted-foreground">/mo</span>
                 </div>
                 <ul className="space-y-3">
                   <li className="flex items-center gap-3 text-sm font-medium text-foreground">
-                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Up to 1000 products
+                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Up to 100 active products
                   </li>
                   <li className="flex items-center gap-3 text-sm font-medium text-foreground">
-                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Priority support
+                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Everything in Starter
                   </li>
                   <li className="flex items-center gap-3 text-sm font-medium text-foreground">
-                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Advanced search & sorting
+                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Size, color &amp; custom variants
                   </li>
                   <li className="flex items-center gap-3 text-sm font-medium text-foreground">
-                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Custom branding
+                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Email support (4-6 hour response)
                   </li>
                 </ul>
               </CardContent>
@@ -221,15 +224,15 @@ export default function Home() {
               </CardFooter>
             </Card>
 
-            {/* Business Tier */}
+            {/* Pro Tier */}
             <Card className="bg-background border-border shadow-sm relative">
               <CardHeader>
-                <CardTitle className="text-2xl">Business</CardTitle>
-                <CardDescription>For heavy volume.</CardDescription>
+                <CardTitle className="text-2xl">Pro</CardTitle>
+                <CardDescription>For serious sellers.</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="mb-6">
-                  <span className="text-4xl font-bold text-foreground">₹499</span>
+                  <span className="text-4xl font-bold text-foreground">₹299</span>
                   <span className="text-muted-foreground">/mo</span>
                 </div>
                 <ul className="space-y-3">
@@ -237,13 +240,22 @@ export default function Home() {
                     <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Unlimited products
                   </li>
                   <li className="flex items-center gap-3 text-sm text-muted-foreground">
-                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> 24/7 Priority support
+                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Everything in Growth
                   </li>
                   <li className="flex items-center gap-3 text-sm text-muted-foreground">
-                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Advanced analytics
+                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Custom store branding (logo + tagline)
                   </li>
                   <li className="flex items-center gap-3 text-sm text-muted-foreground">
-                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Custom domain support
+                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Bulk CSV import
+                  </li>
+                  <li className="flex items-center gap-3 text-sm text-muted-foreground">
+                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Monthly store data export
+                  </li>
+                  <li className="flex items-center gap-3 text-sm text-muted-foreground">
+                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Up to 3 staff logins
+                  </li>
+                  <li className="flex items-center gap-3 text-sm text-muted-foreground">
+                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> WhatsApp + phone support, 24/7 instant response
                   </li>
                 </ul>
               </CardContent>

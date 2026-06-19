@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { sellersTable } from "@workspace/db/schema";
 import { eq, and, ne } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
+import { getSellerPlan, getPlanLimits } from "../lib/planLimits.js";
 
 const router = Router();
 
@@ -30,6 +31,18 @@ router.patch("/sellers/me", requireAuth, async (req, res) => {
       tagline?: string | null;
       subdomain?: string;
     };
+
+    const hasBrandingUpdate = bannerImageUrl !== undefined || tagline !== undefined;
+    if (hasBrandingUpdate) {
+      const plan = await getSellerPlan(req.seller!.sellerId);
+      if (!getPlanLimits(plan).brandingEnabled) {
+        res.status(403).json({
+          error: "Custom store branding (logo and tagline) is available on the Pro plan. Upgrade to customise your store.",
+          upgradeRequired: true,
+        });
+        return;
+      }
+    }
 
     const updates: Partial<typeof sellersTable.$inferInsert> = {
       updatedAt: new Date(),

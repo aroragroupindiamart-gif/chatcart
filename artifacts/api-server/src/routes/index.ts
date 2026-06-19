@@ -10,6 +10,8 @@ import storageRouter from "./storage";
 import publicStoreRouter from "./publicStore";
 import contactRouter from "./contact";
 import adminRouter from "./admin";
+import exportRouter from "./export";
+import importCsvRouter from "./importCsv";
 
 const router: IRouter = Router();
 
@@ -24,5 +26,7 @@ router.use(storageRouter);
 router.use(publicStoreRouter);
 router.use(contactRouter);
 router.use(adminRouter);
+router.use(exportRouter);
+router.use(importCsvRouter);
 
 export default router;
