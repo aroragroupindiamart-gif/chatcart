@@ -1,6 +1,9 @@
-import { pgTable, serial, text, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, boolean, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+
+export const subscriptionPlanEnum = pgEnum("subscription_plan", ["trial", "basic", "pro", "business"]);
+export const subscriptionStatusEnum = pgEnum("subscription_status", ["active", "trial", "expired", "cancelled", "suspended"]);
 
 export const sellersTable = pgTable("sellers", {
   id: serial("id").primaryKey(),
@@ -11,6 +14,13 @@ export const sellersTable = pgTable("sellers", {
   bannerImageUrl: text("banner_image_url"),
   tagline: text("tagline"),
   tokenVersion: integer("token_version").notNull().default(1),
+  subscriptionPlan: subscriptionPlanEnum("subscription_plan").default("trial").notNull(),
+  subscriptionStatus: subscriptionStatusEnum("subscription_status").default("trial").notNull(),
+  subscriptionStartDate: timestamp("subscription_start_date"),
+  subscriptionEndDate: timestamp("subscription_end_date"),
+  isSuspended: boolean("is_suspended").default(false).notNull(),
+  suspensionReason: text("suspension_reason"),
+  suspendedAt: timestamp("suspended_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

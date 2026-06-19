@@ -1,1 +1,2 @@
 - [Chatcart project overview](chatcart-overview.md) — WhatsApp-first seller catalogue; seeded seller is subdomain `sharma-general`, phone +919876543210.
+- [Chatcart admin auth](chatcart-admin-auth.md) — Admin uses email+password with separate JWT secret suffix; seeded as admin@chatcart.in.

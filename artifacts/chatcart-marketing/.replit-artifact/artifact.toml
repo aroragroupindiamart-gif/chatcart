@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/marketing/"
+title = "Chatcart Marketing"
+version = "1.0.0"
+id = "artifacts/chatcart-marketing"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/marketing/" ]
+localPort = 22496
+
+[services.development]
+run = "pnpm --filter @workspace/chatcart-marketing run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/chatcart-marketing", "run", "build" ]
+publicDir = "artifacts/chatcart-marketing/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22496"
+BASE_PATH = "/marketing/"
