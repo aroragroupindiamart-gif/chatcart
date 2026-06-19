@@ -62,7 +62,7 @@ export default function StoreFront() {
     });
   };
 
-  const goToProduct = (id: number) => navigate(`${BASE}/${subdomain}/p/${id}`);
+  const goToProduct = (id: number) => navigate(`/${subdomain}/p/${id}`);
 
   if (loading) {
     return (
@@ -262,45 +262,92 @@ function ProductCard({
 }) {
   const primaryImage = product.images[0];
   const [imageError, setImageError] = useState(false);
+  const { items, addToCart, updateQuantity } = useCart();
   const isOutOfStock = product.status === "out_of_stock";
   const hasPrice = product.price != null;
 
+  const cartKey = `${product.id}__`;
+  const qty = items.find((i) => i.key === cartKey)?.quantity ?? 0;
+
+  const handleAdd = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    addToCart(product, {});
+  };
+  const handleIncrement = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    updateQuantity(cartKey, qty + 1);
+  };
+  const handleDecrement = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    updateQuantity(cartKey, qty - 1);
+  };
+
+  const showQtyControls = hasPrice && !isOutOfStock;
+
   return (
-    <button
-      onClick={onClick}
-      className="group text-left bg-card border border-card-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-lg transition-all duration-200 w-full"
-    >
-      <div className="aspect-square bg-muted overflow-hidden relative">
-        {primaryImage && !imageError ? (
-          <img
-            src={imgSrc(primaryImage.url)}
-            alt={product.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            onError={() => setImageError(true)}
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <Store className="w-8 h-8 text-muted-foreground opacity-20" />
-          </div>
-        )}
-        {isOutOfStock && (
-          <div className="absolute bottom-0 inset-x-0 bg-background/80 text-center py-1">
-            <span className="text-xs text-muted-foreground font-medium">Out of stock</span>
-          </div>
-        )}
-      </div>
-      <div className="p-2.5 space-y-1">
-        <p className="text-sm font-medium leading-tight line-clamp-2 text-foreground">
-          {product.name}
-        </p>
-        {hasPrice ? (
-          <span className="text-sm font-semibold text-primary">
-            {formatPrice(product.price!)}
-          </span>
-        ) : (
-          <span className="text-xs text-muted-foreground italic">Price on request</span>
-        )}
-      </div>
-    </button>
+    <div className="group bg-card border border-card-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-lg transition-all duration-200 w-full">
+      <button onClick={onClick} className="w-full text-left">
+        <div className="aspect-square bg-muted overflow-hidden relative">
+          {primaryImage && !imageError ? (
+            <img
+              src={imgSrc(primaryImage.url)}
+              alt={product.name}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              onError={() => setImageError(true)}
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <Store className="w-8 h-8 text-muted-foreground opacity-20" />
+            </div>
+          )}
+          {isOutOfStock && (
+            <div className="absolute bottom-0 inset-x-0 bg-background/80 text-center py-1">
+              <span className="text-xs text-muted-foreground font-medium">Out of stock</span>
+            </div>
+          )}
+        </div>
+        <div className="px-2.5 pt-2.5 pb-1 space-y-0.5">
+          <p className="text-sm font-medium leading-tight line-clamp-2 text-foreground">
+            {product.name}
+          </p>
+          {hasPrice ? (
+            <span className="text-sm font-semibold text-primary">
+              {formatPrice(product.price!)}
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground italic">Price on request</span>
+          )}
+        </div>
+      </button>
+
+      {showQtyControls && (
+        <div className="px-2.5 pb-2.5 pt-1">
+          {qty === 0 ? (
+            <button
+              onClick={handleAdd}
+              className="w-full py-1.5 rounded-lg border border-primary/40 text-primary text-sm font-semibold hover:bg-primary/5 active:bg-primary/10 transition-colors"
+            >
+              + Add
+            </button>
+          ) : (
+            <div className="flex items-center justify-between bg-primary/8 rounded-lg px-1 py-0.5">
+              <button
+                onClick={handleDecrement}
+                className="w-8 h-8 flex items-center justify-center rounded-md text-primary hover:bg-primary/15 active:bg-primary/20 transition-colors text-lg font-bold leading-none"
+              >
+                −
+              </button>
+              <span className="text-sm font-bold text-primary min-w-[1.5rem] text-center">{qty}</span>
+              <button
+                onClick={handleIncrement}
+                className="w-8 h-8 flex items-center justify-center rounded-md text-primary hover:bg-primary/15 active:bg-primary/20 transition-colors text-lg font-bold leading-none"
+              >
+                +
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

@@ -91,7 +91,7 @@ export default function ProductPage() {
           <p className="text-sm text-muted-foreground">
             {error ?? "This product doesn't exist."}
           </p>
-          <Button variant="outline" onClick={() => navigate(`${BASE}/${subdomain}`)}>
+          <Button variant="outline" onClick={() => navigate(`/${subdomain}`)}>
             Back to store
           </Button>
         </div>
@@ -109,7 +109,7 @@ export default function ProductPage() {
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur border-b border-border/50">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
           <button
-            onClick={() => navigate(`${BASE}/${subdomain}`)}
+            onClick={() => navigate(`/${subdomain}`)}
             className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />

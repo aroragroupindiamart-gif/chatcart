@@ -44,7 +44,7 @@ export default function CheckoutPage({ seller, onBack }: CheckoutPageProps) {
         })),
       });
       clearCart();
-      navigate(`${BASE}/orders/${order.id}`);
+      navigate(`/orders/${order.id}`);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to place order. Try again."

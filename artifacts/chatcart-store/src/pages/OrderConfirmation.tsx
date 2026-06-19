@@ -170,9 +170,9 @@ export default function OrderConfirmation() {
             className="w-full"
             onClick={() => {
               if (order.sellerSubdomain) {
-                navigate(`${BASE}/${order.sellerSubdomain}`);
+                navigate(`/${order.sellerSubdomain}`);
               } else {
-                navigate(BASE + "/");
+                navigate("/");
               }
             }}
           >
