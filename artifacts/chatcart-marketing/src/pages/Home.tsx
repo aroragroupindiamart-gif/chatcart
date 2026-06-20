@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -53,6 +54,21 @@ const comparisonRows = [
 ];
 
 export default function Home() {
+  useEffect(() => {
+    const scrollIfHash = () => {
+      if (window.location.hash === "#pricing") {
+        const el = document.getElementById("pricing");
+        if (el) el.scrollIntoView({ behavior: "smooth" });
+      }
+    };
+    const timer = setTimeout(scrollIfHash, 50);
+    window.addEventListener("hashchange", scrollIfHash);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("hashchange", scrollIfHash);
+    };
+  }, []);
+
   return (
     <div className="flex flex-col w-full">
       {/* Hero Section */}

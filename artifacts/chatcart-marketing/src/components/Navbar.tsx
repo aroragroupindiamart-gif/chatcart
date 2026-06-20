@@ -3,6 +3,15 @@ import { Button } from "@/components/ui/button";
 import { Menu, X } from "lucide-react";
 import { useState } from "react";
 
+function scrollToPricing(e: React.MouseEvent<HTMLAnchorElement>) {
+  const el = document.getElementById("pricing");
+  if (el) {
+    e.preventDefault();
+    el.scrollIntoView({ behavior: "smooth" });
+    history.pushState(null, "", "/#pricing");
+  }
+}
+
 export function Navbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -23,7 +32,7 @@ export function Navbar() {
           <div className="hidden md:flex items-center space-x-8">
             <Link href="/" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Home</Link>
             <Link href="/about" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">About</Link>
-            <Link href="/#pricing" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Pricing</Link>
+            <a href="/#pricing" onClick={scrollToPricing} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Pricing</a>
             <Link href="/contact" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Contact</Link>
             <Button asChild className="font-medium bg-primary text-primary-foreground hover:bg-primary/90">
               <a href="/app/">Get Started</a>
@@ -45,7 +54,7 @@ export function Navbar() {
           <div className="space-y-1 px-4 pb-4 pt-2">
             <Link href="/" className="block py-2 text-base font-medium text-muted-foreground hover:text-foreground" onClick={() => setIsMobileMenuOpen(false)}>Home</Link>
             <Link href="/about" className="block py-2 text-base font-medium text-muted-foreground hover:text-foreground" onClick={() => setIsMobileMenuOpen(false)}>About</Link>
-            <Link href="/#pricing" className="block py-2 text-base font-medium text-muted-foreground hover:text-foreground" onClick={() => setIsMobileMenuOpen(false)}>Pricing</Link>
+            <a href="/#pricing" className="block py-2 text-base font-medium text-muted-foreground hover:text-foreground" onClick={(e) => { setIsMobileMenuOpen(false); scrollToPricing(e); }}>Pricing</a>
             <Link href="/contact" className="block py-2 text-base font-medium text-muted-foreground hover:text-foreground" onClick={() => setIsMobileMenuOpen(false)}>Contact</Link>
             <Button asChild className="w-full mt-4 bg-primary text-primary-foreground hover:bg-primary/90">
               <a href="/app/">Get Started</a>
