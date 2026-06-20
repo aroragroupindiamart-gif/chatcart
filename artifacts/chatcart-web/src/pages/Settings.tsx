@@ -216,7 +216,8 @@ function SettingsContent() {
   const [newCatName, setNewCatName] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editCatName, setEditCatName] = useState("");
-  const [editDozenDiscount, setEditDozenDiscount] = useState("");
+  const [editBulkPercent, setEditBulkPercent] = useState("");
+  const [editBulkMinQty, setEditBulkMinQty] = useState("");
 
   const handleAddCategory = async () => {
     if (!newCatName) return;
@@ -232,14 +233,35 @@ function SettingsContent() {
 
   const handleUpdateCategory = async (id: number) => {
     if (!editCatName) return;
-    const discountNum = editDozenDiscount.trim() === "" ? null : parseFloat(editDozenDiscount);
-    const validDiscount = discountNum === null || (!isNaN(discountNum) && discountNum >= 0 && discountNum <= 100);
-    if (!validDiscount) {
-      toast({ title: "Invalid discount", description: "Enter a value between 0 and 100.", variant: "destructive" });
+
+    const pctRaw = editBulkPercent.trim();
+    const qtyRaw = editBulkMinQty.trim();
+    const bothBlank = pctRaw === "" && qtyRaw === "";
+    const eitherSet = pctRaw !== "" || qtyRaw !== "";
+
+    if (eitherSet && (pctRaw === "" || qtyRaw === "")) {
+      toast({ title: "Set both fields", description: "Enter both a minimum quantity and a discount % — or leave both blank for no discount.", variant: "destructive" });
       return;
     }
+
+    let discountNum: number | null = null;
+    let minQtyNum: number | null = null;
+
+    if (!bothBlank) {
+      discountNum = parseFloat(pctRaw);
+      if (isNaN(discountNum) || discountNum < 0 || discountNum > 100) {
+        toast({ title: "Invalid discount %", description: "Enter a value between 0 and 100.", variant: "destructive" });
+        return;
+      }
+      minQtyNum = parseInt(qtyRaw, 10);
+      if (isNaN(minQtyNum) || minQtyNum < 1 || String(minQtyNum) !== qtyRaw) {
+        toast({ title: "Invalid minimum quantity", description: "Enter a whole number of 1 or more.", variant: "destructive" });
+        return;
+      }
+    }
+
     try {
-      await updateCategory.mutateAsync({ categoryId: id, data: { name: editCatName, dozenDiscountPercent: discountNum } });
+      await updateCategory.mutateAsync({ categoryId: id, data: { name: editCatName, dozenDiscountPercent: discountNum, bulkDiscountMinQty: minQtyNum } as any });
       setEditingId(null);
       queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() });
       toast({ title: "Category updated" });
@@ -567,18 +589,31 @@ function SettingsContent() {
                       placeholder="Category name"
                       autoFocus
                     />
+                    <p className="text-xs text-slate-500 -mb-1">
+                      Bulk discount — set a minimum quantity and discount % (leave both blank for no discount)
+                    </p>
                     <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={editBulkMinQty}
+                        onChange={e => setEditBulkMinQty(e.target.value)}
+                        placeholder="Min qty (e.g. 6)"
+                        className="w-36"
+                      />
+                      <span className="text-xs text-slate-400 shrink-0">units triggers</span>
                       <Input
                         type="number"
                         min="0"
                         max="100"
                         step="0.5"
-                        value={editDozenDiscount}
-                        onChange={e => setEditDozenDiscount(e.target.value)}
-                        placeholder="Dozen discount % (e.g. 10)"
-                        className="w-52"
+                        value={editBulkPercent}
+                        onChange={e => setEditBulkPercent(e.target.value)}
+                        placeholder="Discount % (e.g. 10)"
+                        className="w-40"
                       />
-                      <span className="text-xs text-slate-500 shrink-0">% off for 12+ qty</span>
+                      <span className="text-xs text-slate-400 shrink-0">% off</span>
                     </div>
                     <div className="flex gap-2">
                       <Button size="sm" onClick={() => handleUpdateCategory(category.id)}>
@@ -597,9 +632,9 @@ function SettingsContent() {
                       <p className="font-medium text-slate-900">{category.name}</p>
                       <div className="flex items-center gap-3 mt-0.5">
                         <p className="text-xs text-slate-500">{category.productCount} products</p>
-                        {(category as any).dozenDiscountPercent != null && (category as any).dozenDiscountPercent > 0 && (
+                        {(category as any).dozenDiscountPercent != null && (category as any).dozenDiscountPercent > 0 && (category as any).bulkDiscountMinQty != null && (
                           <span className="text-xs text-green-600 font-medium bg-green-50 border border-green-200 px-1.5 py-0.5 rounded">
-                            {(category as any).dozenDiscountPercent}% off 12+
+                            {(category as any).dozenDiscountPercent}% off {(category as any).bulkDiscountMinQty}+
                           </span>
                         )}
                       </div>
@@ -608,9 +643,14 @@ function SettingsContent() {
                       <Button size="icon" variant="ghost" onClick={() => {
                         setEditingId(category.id);
                         setEditCatName(category.name);
-                        setEditDozenDiscount(
+                        setEditBulkPercent(
                           (category as any).dozenDiscountPercent != null
                             ? String((category as any).dozenDiscountPercent)
+                            : ""
+                        );
+                        setEditBulkMinQty(
+                          (category as any).bulkDiscountMinQty != null
+                            ? String((category as any).bulkDiscountMinQty)
                             : ""
                         );
                       }}>

@@ -10,6 +10,7 @@ export const categoriesTable = pgTable("categories", {
     .references(() => sellersTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   dozenDiscountPercent: numeric("dozen_discount_percent", { precision: 5, scale: 2 }),
+  bulkDiscountMinQty: integer("bulk_discount_min_qty"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

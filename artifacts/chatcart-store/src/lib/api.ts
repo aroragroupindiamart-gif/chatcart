@@ -73,6 +73,7 @@ export interface Category {
   id: number;
   name: string;
   dozenDiscountPercent: number | null;
+  bulkDiscountMinQty: number | null;
 }
 
 export const api = {

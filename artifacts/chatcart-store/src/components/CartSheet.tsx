@@ -93,7 +93,7 @@ export default function CartSheet({ open, onClose, seller }: CartSheetProps) {
                             <div className="flex items-center gap-1">
                               <Tag className="w-3 h-3 text-green-600" />
                               <span className="text-xs text-green-600 font-medium">
-                                {pricing.discountPct}% off (12+ qty)
+                                {pricing.discountPct}% off ({pricing.bulkMinQty ?? 12}+ qty)
                               </span>
                             </div>
                           )}

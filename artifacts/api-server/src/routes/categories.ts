@@ -6,6 +6,18 @@ import { requireAuth } from "../middleware/auth.js";
 
 const router = Router();
 
+function serializeCategory(c: typeof categoriesTable.$inferSelect & { productCount?: number }) {
+  return {
+    ...c,
+    dozenDiscountPercent:
+      c.dozenDiscountPercent != null
+        ? parseFloat(c.dozenDiscountPercent as unknown as string)
+        : null,
+    bulkDiscountMinQty: c.bulkDiscountMinQty ?? null,
+    productCount: c.productCount ?? 0,
+  };
+}
+
 router.get("/categories", requireAuth, async (req, res) => {
   try {
     const categories = await db
@@ -13,16 +25,7 @@ router.get("/categories", requireAuth, async (req, res) => {
       .from(categoriesTable)
       .where(eq(categoriesTable.sellerId, req.seller!.sellerId))
       .orderBy(categoriesTable.name);
-    res.json(
-      categories.map((c) => ({
-        ...c,
-        dozenDiscountPercent:
-          c.dozenDiscountPercent != null
-            ? parseFloat(c.dozenDiscountPercent as unknown as string)
-            : null,
-        productCount: 0,
-      }))
-    );
+    res.json(categories.map(c => serializeCategory(c)));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to list categories" });
@@ -31,9 +34,10 @@ router.get("/categories", requireAuth, async (req, res) => {
 
 router.post("/categories", requireAuth, async (req, res) => {
   try {
-    const { name, dozenDiscountPercent } = req.body as {
+    const { name, dozenDiscountPercent, bulkDiscountMinQty } = req.body as {
       name: string;
       dozenDiscountPercent?: number | null;
+      bulkDiscountMinQty?: number | null;
     };
     if (!name?.trim()) {
       res.status(400).json({ error: "Category name required" });
@@ -46,16 +50,10 @@ router.post("/categories", requireAuth, async (req, res) => {
         name: name.trim(),
         dozenDiscountPercent:
           dozenDiscountPercent != null ? String(dozenDiscountPercent) : null,
+        bulkDiscountMinQty: bulkDiscountMinQty ?? null,
       })
       .returning();
-    res.status(201).json({
-      ...category,
-      dozenDiscountPercent:
-        category.dozenDiscountPercent != null
-          ? parseFloat(category.dozenDiscountPercent as unknown as string)
-          : null,
-      productCount: 0,
-    });
+    res.status(201).json(serializeCategory(category));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to create category" });
@@ -65,9 +63,10 @@ router.post("/categories", requireAuth, async (req, res) => {
 router.patch("/categories/:categoryId", requireAuth, async (req, res) => {
   try {
     const categoryId = parseInt(String(req.params.categoryId));
-    const { name, dozenDiscountPercent } = req.body as {
+    const { name, dozenDiscountPercent, bulkDiscountMinQty } = req.body as {
       name: string;
       dozenDiscountPercent?: number | null;
+      bulkDiscountMinQty?: number | null;
     };
     if (!name?.trim()) {
       res.status(400).json({ error: "Category name required" });
@@ -77,6 +76,9 @@ router.patch("/categories/:categoryId", requireAuth, async (req, res) => {
     if (dozenDiscountPercent !== undefined) {
       updateValues.dozenDiscountPercent =
         dozenDiscountPercent != null ? String(dozenDiscountPercent) : null;
+    }
+    if (bulkDiscountMinQty !== undefined) {
+      updateValues.bulkDiscountMinQty = bulkDiscountMinQty ?? null;
     }
     const [updated] = await db
       .update(categoriesTable)
@@ -92,14 +94,7 @@ router.patch("/categories/:categoryId", requireAuth, async (req, res) => {
       res.status(404).json({ error: "Category not found" });
       return;
     }
-    res.json({
-      ...updated,
-      dozenDiscountPercent:
-        updated.dozenDiscountPercent != null
-          ? parseFloat(updated.dozenDiscountPercent as unknown as string)
-          : null,
-      productCount: 0,
-    });
+    res.json(serializeCategory(updated));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to update category" });

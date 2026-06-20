@@ -111,7 +111,8 @@ export const ListCategoriesResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "productCount": zod.number(),
-  "dozenDiscountPercent": zod.number().nullish()
+  "dozenDiscountPercent": zod.number().nullish(),
+  "bulkDiscountMinQty": zod.number().nullish()
 })
 export const ListCategoriesResponse = zod.array(ListCategoriesResponseItem)
 
@@ -121,7 +122,8 @@ export const ListCategoriesResponse = zod.array(ListCategoriesResponseItem)
  */
 export const CreateCategoryBody = zod.object({
   "name": zod.string(),
-  "dozenDiscountPercent": zod.number().nullish()
+  "dozenDiscountPercent": zod.number().nullish(),
+  "bulkDiscountMinQty": zod.number().nullish()
 })
 
 
@@ -134,14 +136,16 @@ export const UpdateCategoryParams = zod.object({
 
 export const UpdateCategoryBody = zod.object({
   "name": zod.string(),
-  "dozenDiscountPercent": zod.number().nullish()
+  "dozenDiscountPercent": zod.number().nullish(),
+  "bulkDiscountMinQty": zod.number().nullish()
 })
 
 export const UpdateCategoryResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
   "productCount": zod.number(),
-  "dozenDiscountPercent": zod.number().nullish()
+  "dozenDiscountPercent": zod.number().nullish(),
+  "bulkDiscountMinQty": zod.number().nullish()
 })
 
 

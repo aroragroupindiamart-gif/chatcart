@@ -52,6 +52,7 @@ router.get("/public/sellers/:subdomain/categories", async (req, res) => {
         id: categoriesTable.id,
         name: categoriesTable.name,
         dozenDiscountPercent: categoriesTable.dozenDiscountPercent,
+        bulkDiscountMinQty: categoriesTable.bulkDiscountMinQty,
       })
       .from(categoriesTable)
       .where(eq(categoriesTable.sellerId, seller.id))
@@ -65,6 +66,7 @@ router.get("/public/sellers/:subdomain/categories", async (req, res) => {
           c.dozenDiscountPercent != null
             ? parseFloat(c.dozenDiscountPercent as unknown as string)
             : null,
+        bulkDiscountMinQty: c.bulkDiscountMinQty ?? null,
       }))
     );
   } catch (err) {

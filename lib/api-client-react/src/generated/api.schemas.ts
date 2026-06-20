@@ -85,16 +85,19 @@ export interface Category {
   name: string;
   productCount: number;
   dozenDiscountPercent?: number | null;
+  bulkDiscountMinQty?: number | null;
 }
 
 export interface CreateCategoryRequest {
   name: string;
   dozenDiscountPercent?: number | null;
+  bulkDiscountMinQty?: number | null;
 }
 
 export interface UpdateCategoryRequest {
   name: string;
   dozenDiscountPercent?: number | null;
+  bulkDiscountMinQty?: number | null;
 }
 
 export type ProductStatus = typeof ProductStatus[keyof typeof ProductStatus];

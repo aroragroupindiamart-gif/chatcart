@@ -945,6 +945,9 @@ components:
         dozenDiscountPercent:
           type: number
           nullable: true
+        bulkDiscountMinQty:
+          type: integer
+          nullable: true
       required:
         - id
         - name
@@ -958,6 +961,9 @@ components:
         dozenDiscountPercent:
           type: number
           nullable: true
+        bulkDiscountMinQty:
+          type: integer
+          nullable: true
       required:
         - name
 
@@ -968,6 +974,9 @@ components:
           type: string
         dozenDiscountPercent:
           type: number
+          nullable: true
+        bulkDiscountMinQty:
+          type: integer
           nullable: true
       required:
         - name

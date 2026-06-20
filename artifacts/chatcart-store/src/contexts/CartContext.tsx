@@ -14,6 +14,7 @@ export interface CartItemPricing {
   savings: number;
   hasDiscount: boolean;
   discountPct: number;
+  bulkMinQty: number | null;
 }
 
 function makeKey(productId: number, variants: Record<string, string>): string {
@@ -86,29 +87,28 @@ export function CartProvider({ children }: { children: ReactNode }) {
       const price = item.product.price ?? 0;
       let effectiveUnitPrice = price;
       let discountPct = 0;
-      if (
-        item.quantity >= 12 &&
-        item.product.categoryId != null &&
-        price > 0
-      ) {
+      if (item.product.categoryId != null && price > 0) {
         const cat = catMap.get(item.product.categoryId);
+        const minQty = cat?.bulkDiscountMinQty ?? null;
         const pct =
           cat?.dozenDiscountPercent != null
             ? parseFloat(String(cat.dozenDiscountPercent))
             : 0;
-        if (pct > 0) {
+        if (minQty != null && pct > 0 && item.quantity >= minQty) {
           discountPct = pct;
           effectiveUnitPrice = price * (1 - pct / 100);
         }
       }
       const lineTotal = effectiveUnitPrice * item.quantity;
       const originalLineTotal = price * item.quantity;
+      const cat = item.product.categoryId != null ? catMap.get(item.product.categoryId) : undefined;
       map.set(item.key, {
         effectiveUnitPrice,
         lineTotal,
         savings: originalLineTotal - lineTotal,
         hasDiscount: discountPct > 0,
         discountPct,
+        bulkMinQty: cat?.bulkDiscountMinQty ?? null,
       });
     }
     return map;
@@ -134,6 +134,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         savings: 0,
         hasDiscount: false,
         discountPct: 0,
+        bulkMinQty: null,
       },
     [pricingMap]
   );

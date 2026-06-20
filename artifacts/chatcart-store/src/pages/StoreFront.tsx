@@ -188,9 +188,9 @@ export default function StoreFront() {
                 }`}
               >
                 {cat.name}
-                {cat.dozenDiscountPercent != null && cat.dozenDiscountPercent > 0 && (
+                {cat.dozenDiscountPercent != null && cat.dozenDiscountPercent > 0 && cat.bulkDiscountMinQty != null && (
                   <span className="ml-1.5 text-xs opacity-80">
-                    {cat.dozenDiscountPercent}% off 12+
+                    {cat.dozenDiscountPercent}% off {cat.bulkDiscountMinQty}+
                   </span>
                 )}
               </button>
