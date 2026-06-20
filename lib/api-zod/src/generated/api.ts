@@ -310,7 +310,7 @@ export const ReorderProductsResponse = zod.object({
  * @summary Bulk-import products from a CSV file upload (Pro plan only)
  */
 export const ImportProductsCsvBody = zod.object({
-  "file": zod.instanceof(File).describe('CSV file with header row and columns: name, price, description, category, status')
+  "file": zod.string().describe('CSV file with header row and columns: name, price, description, category, status')
 })
 
 export const ImportProductsCsvResponse = zod.object({

@@ -165,7 +165,7 @@ export interface ReorderProductsRequest {
 
 export interface CsvFileUpload {
   /** CSV file with header row and columns: name, price, description, category, status */
-  file: Blob;
+  file: string;
 }
 
 export interface ImportResult {

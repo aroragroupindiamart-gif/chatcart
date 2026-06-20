@@ -303,6 +303,16 @@ function SettingsContent() {
               <p className="text-xs text-slate-400 mt-0.5">
                 {planName === "Starter" ? "Within 24 hours" : planName === "Growth" ? "4-6 hour response" : "Instant response"}
               </p>
+              {planName === "Pro" && (
+                <a
+                  href="https://wa.me/919876500000"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 mt-1 text-xs text-green-600 hover:underline font-medium"
+                >
+                  WhatsApp us · +91 98765 00000
+                </a>
+              )}
             </div>
           </div>
         </CardContent>
