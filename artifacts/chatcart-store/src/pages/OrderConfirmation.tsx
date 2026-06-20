@@ -52,6 +52,16 @@ export default function OrderConfirmation() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const meta = document.createElement("meta");
+    meta.name = "robots";
+    meta.content = "noindex, nofollow";
+    document.head.appendChild(meta);
+    return () => {
+      document.head.removeChild(meta);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!orderId) return;
     api
       .getOrder(orderId)
