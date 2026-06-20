@@ -26,7 +26,7 @@ export function Navbar() {
             <Link href="/#pricing" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Pricing</Link>
             <Link href="/contact" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Contact</Link>
             <Button asChild className="font-medium bg-primary text-primary-foreground hover:bg-primary/90">
-              <Link href="/">Get Started</Link>
+              <a href="/app/">Get Started</a>
             </Button>
           </div>
 
@@ -48,7 +48,7 @@ export function Navbar() {
             <Link href="/#pricing" className="block py-2 text-base font-medium text-muted-foreground hover:text-foreground" onClick={() => setIsMobileMenuOpen(false)}>Pricing</Link>
             <Link href="/contact" className="block py-2 text-base font-medium text-muted-foreground hover:text-foreground" onClick={() => setIsMobileMenuOpen(false)}>Contact</Link>
             <Button asChild className="w-full mt-4 bg-primary text-primary-foreground hover:bg-primary/90">
-              <Link href="/">Get Started</Link>
+              <a href="/app/">Get Started</a>
             </Button>
           </div>
         </div>

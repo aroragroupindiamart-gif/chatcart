@@ -73,7 +73,7 @@ export default function Home() {
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
                 <Button size="lg" asChild className="h-14 px-8 text-lg font-semibold w-full sm:w-auto bg-primary text-primary-foreground hover:bg-primary/90">
-                  <Link href="/">Create Your Catalog</Link>
+                  <a href="/app/">Create Your Catalog</a>
                 </Button>
                 <p className="text-sm text-muted-foreground sm:ml-4">Takes 2 minutes. No credit card required.</p>
               </div>
@@ -287,7 +287,7 @@ export default function Home() {
                 </ul>
               </CardContent>
               <CardFooter>
-                <Button variant="outline" className="w-full">Get Started</Button>
+                <Button variant="outline" className="w-full" asChild><a href="/app/">Get Started</a></Button>
               </CardFooter>
             </Card>
 
@@ -318,7 +318,7 @@ export default function Home() {
                 </ul>
               </CardContent>
               <CardFooter>
-                <Button variant="outline" className="w-full">Get Started</Button>
+                <Button variant="outline" className="w-full" asChild><a href="/app/">Get Started</a></Button>
               </CardFooter>
             </Card>
 
@@ -358,7 +358,7 @@ export default function Home() {
                 </ul>
               </CardContent>
               <CardFooter>
-                <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-12 text-lg">Get Started</Button>
+                <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-12 text-lg" asChild><a href="/app/">Get Started</a></Button>
               </CardFooter>
             </Card>
           </div>
@@ -376,7 +376,7 @@ export default function Home() {
               Join the sellers who stopped fighting bugs and started taking more orders.
             </p>
             <Button size="lg" variant="secondary" asChild className="h-14 px-8 text-lg font-bold bg-background text-primary hover:bg-background/90 shadow-lg">
-              <Link href="/">Create Your Catalog Now</Link>
+              <a href="/app/">Create Your Catalog Now</a>
             </Button>
           </div>
         </div>
