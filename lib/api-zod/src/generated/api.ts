@@ -110,7 +110,8 @@ export const UpdateSellerResponse = zod.object({
 export const ListCategoriesResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
-  "productCount": zod.number()
+  "productCount": zod.number(),
+  "dozenDiscountPercent": zod.number().nullish()
 })
 export const ListCategoriesResponse = zod.array(ListCategoriesResponseItem)
 
@@ -119,7 +120,8 @@ export const ListCategoriesResponse = zod.array(ListCategoriesResponseItem)
  * @summary Create a new category
  */
 export const CreateCategoryBody = zod.object({
-  "name": zod.string()
+  "name": zod.string(),
+  "dozenDiscountPercent": zod.number().nullish()
 })
 
 
@@ -131,13 +133,15 @@ export const UpdateCategoryParams = zod.object({
 })
 
 export const UpdateCategoryBody = zod.object({
-  "name": zod.string()
+  "name": zod.string(),
+  "dozenDiscountPercent": zod.number().nullish()
 })
 
 export const UpdateCategoryResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
-  "productCount": zod.number()
+  "productCount": zod.number(),
+  "dozenDiscountPercent": zod.number().nullish()
 })
 
 
@@ -459,6 +463,7 @@ export const GetOrderResponse = zod.object({
   "productNameSnapshot": zod.string(),
   "priceSnapshot": zod.number(),
   "variantSnapshot": zod.string().optional(),
+  "productImageSnapshot": zod.string().nullish(),
   "quantity": zod.number()
 }))
 }))
@@ -595,6 +600,7 @@ export const ExportStoreDataResponse = zod.object({
   "productNameSnapshot": zod.string(),
   "priceSnapshot": zod.number(),
   "variantSnapshot": zod.string().optional(),
+  "productImageSnapshot": zod.string().nullish(),
   "quantity": zod.number()
 }))
 })))

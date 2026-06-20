@@ -13,7 +13,7 @@ export function Footer() {
               Chatcart
             </Link>
             <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
-              The WhatsApp catalog that never lets you down. Built by sellers, for sellers.
+              The catalog that never lets you down. Built by sellers, for sellers.
             </p>
           </div>
           

@@ -48,12 +48,25 @@ router.get("/public/sellers/:subdomain/categories", async (req, res) => {
     }
 
     const categories = await db
-      .select({ id: categoriesTable.id, name: categoriesTable.name })
+      .select({
+        id: categoriesTable.id,
+        name: categoriesTable.name,
+        dozenDiscountPercent: categoriesTable.dozenDiscountPercent,
+      })
       .from(categoriesTable)
       .where(eq(categoriesTable.sellerId, seller.id))
       .orderBy(asc(categoriesTable.id));
 
-    res.json(categories);
+    res.json(
+      categories.map((c) => ({
+        id: c.id,
+        name: c.name,
+        dozenDiscountPercent:
+          c.dozenDiscountPercent != null
+            ? parseFloat(c.dozenDiscountPercent as unknown as string)
+            : null,
+      }))
+    );
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch categories" });
@@ -208,6 +221,7 @@ router.post("/public/orders", async (req, res) => {
         productNameSnapshot: string;
         priceSnapshot: string;
         variantSnapshot?: string;
+        productImageSnapshot?: string;
         quantity?: number;
       }>;
     };
@@ -255,6 +269,7 @@ router.post("/public/orders", async (req, res) => {
           productNameSnapshot: item.productNameSnapshot,
           priceSnapshot: item.priceSnapshot,
           variantSnapshot: item.variantSnapshot,
+          productImageSnapshot: item.productImageSnapshot ?? null,
           quantity: item.quantity ?? 1,
         }))
       )
@@ -272,6 +287,7 @@ router.post("/public/orders", async (req, res) => {
         productNameSnapshot: item.productNameSnapshot,
         priceSnapshot: parseFloat(item.priceSnapshot as unknown as string),
         variantSnapshot: item.variantSnapshot,
+        productImageSnapshot: item.productImageSnapshot,
         quantity: item.quantity,
       })),
     });
@@ -326,6 +342,7 @@ router.get("/public/orders/:orderId", async (req, res) => {
         productNameSnapshot: item.productNameSnapshot,
         priceSnapshot: parseFloat(item.priceSnapshot as unknown as string),
         variantSnapshot: item.variantSnapshot,
+        productImageSnapshot: item.productImageSnapshot,
         quantity: item.quantity,
       })),
     });

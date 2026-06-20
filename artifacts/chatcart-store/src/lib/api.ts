@@ -39,6 +39,7 @@ export interface OrderItem {
   productNameSnapshot: string;
   priceSnapshot: number;
   variantSnapshot: string | null;
+  productImageSnapshot: string | null;
   quantity: number;
 }
 
@@ -71,6 +72,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 export interface Category {
   id: number;
   name: string;
+  dozenDiscountPercent: number | null;
 }
 
 export const api = {
@@ -93,6 +95,7 @@ export const api = {
       productNameSnapshot: string;
       priceSnapshot: string;
       variantSnapshot?: string;
+      productImageSnapshot?: string;
       quantity?: number;
     }>;
   }) =>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, Tag } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
 import { api, formatPrice, imgSrc, type Seller } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ interface CheckoutPageProps {
 
 export default function CheckoutPage({ seller, onBack }: CheckoutPageProps) {
   const [, navigate] = useLocation();
-  const { items, totalAmount, clearCart } = useCart();
+  const { items, totalAmount, totalSavings, clearCart, getItemPricing } = useCart();
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
   const [name, setName] = useState("");
@@ -31,20 +31,24 @@ export default function CheckoutPage({ seller, onBack }: CheckoutPageProps) {
       const order = await api.createOrder({
         sellerId: seller.id,
         customerContact: `Name: ${name.trim()}, Phone: ${phone.trim()}`,
-        items: items.map((item) => ({
-          productNameSnapshot: item.product.name,
-          priceSnapshot: (item.product.price ?? 0).toFixed(2),
-          variantSnapshot:
-            Object.keys(item.variantSelections).length > 0
-              ? Object.entries(item.variantSelections)
-                  .map(([k, v]) => `${k}: ${v}`)
-                  .join(", ")
-              : undefined,
-          quantity: item.quantity,
-        })),
+        items: items.map((item) => {
+          const pricing = getItemPricing(item.key);
+          return {
+            productNameSnapshot: item.product.name,
+            priceSnapshot: pricing.effectiveUnitPrice.toFixed(2),
+            variantSnapshot:
+              Object.keys(item.variantSelections).length > 0
+                ? Object.entries(item.variantSelections)
+                    .map(([k, v]) => `${k}: ${v}`)
+                    .join(", ")
+                : undefined,
+            productImageSnapshot: item.product.images[0]?.url ?? undefined,
+            quantity: item.quantity,
+          };
+        }),
       });
       clearCart();
-      navigate(`/orders/${order.id}`);
+      navigate(`${BASE}/orders/${order.id}`);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to place order. Try again."
@@ -71,39 +75,73 @@ export default function CheckoutPage({ seller, onBack }: CheckoutPageProps) {
             Order summary
           </h3>
           <div className="rounded-xl border border-border overflow-hidden divide-y divide-border">
-            {items.map((item) => (
-              <div key={item.key} className="flex gap-3 p-3">
-                {item.product.images[0] && (
-                  <img
-                    src={imgSrc(item.product.images[0].url)}
-                    alt={item.product.name}
-                    className="w-12 h-12 rounded-lg object-cover shrink-0"
-                  />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">
-                    {item.product.name}
-                  </p>
-                  {Object.keys(item.variantSelections).length > 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      {Object.entries(item.variantSelections)
-                        .map(([k, v]) => `${k}: ${v}`)
-                        .join(" · ")}
-                    </p>
+            {items.map((item) => {
+              const pricing = getItemPricing(item.key);
+              return (
+                <div key={item.key} className="flex gap-3 p-3">
+                  {item.product.images[0] && (
+                    <img
+                      src={imgSrc(item.product.images[0].url)}
+                      alt={item.product.name}
+                      className="w-12 h-12 rounded-lg object-cover shrink-0"
+                    />
                   )}
-                  <p className="text-xs text-muted-foreground">
-                    {item.product.price != null
-                      ? `${formatPrice(item.product.price)} × ${item.quantity}`
-                      : `Qty: ${item.quantity}`}
-                  </p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {item.product.name}
+                    </p>
+                    {Object.keys(item.variantSelections).length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        {Object.entries(item.variantSelections)
+                          .map(([k, v]) => `${k}: ${v}`)
+                          .join(" · ")}
+                      </p>
+                    )}
+                    {pricing.hasDiscount ? (
+                      <p className="text-xs text-green-600 flex items-center gap-1">
+                        <Tag className="w-3 h-3" />
+                        {pricing.discountPct}% off · {formatPrice(pricing.effectiveUnitPrice)} × {item.quantity}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        {item.product.price != null
+                          ? `${formatPrice(item.product.price)} × ${item.quantity}`
+                          : `Qty: ${item.quantity}`}
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-right shrink-0">
+                    {pricing.hasDiscount ? (
+                      <div>
+                        <p className="text-xs line-through text-muted-foreground">
+                          {formatPrice((item.product.price ?? 0) * item.quantity)}
+                        </p>
+                        <p className="text-sm font-semibold text-green-600">
+                          {formatPrice(pricing.lineTotal)}
+                        </p>
+                      </div>
+                    ) : (
+                      <span className="text-sm font-semibold">
+                        {item.product.price != null
+                          ? formatPrice(pricing.lineTotal)
+                          : "—"}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <span className="text-sm font-semibold shrink-0">
-                  {item.product.price != null
-                    ? formatPrice(item.product.price * item.quantity)
-                    : "—"}
+              );
+            })}
+            {totalSavings > 0 && (
+              <div className="flex justify-between items-center p-3 bg-green-50">
+                <span className="text-xs text-green-700 flex items-center gap-1">
+                  <Tag className="w-3 h-3" />
+                  Dozen discount savings
+                </span>
+                <span className="text-xs font-semibold text-green-700">
+                  −{formatPrice(totalSavings)}
                 </span>
               </div>
-            ))}
+            )}
             <div className="flex justify-between items-center p-3 bg-muted/50">
               <span className="font-semibold text-sm">Total</span>
               <span className="font-bold text-primary">

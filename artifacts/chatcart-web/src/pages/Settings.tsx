@@ -216,6 +216,7 @@ function SettingsContent() {
   const [newCatName, setNewCatName] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editCatName, setEditCatName] = useState("");
+  const [editDozenDiscount, setEditDozenDiscount] = useState("");
 
   const handleAddCategory = async () => {
     if (!newCatName) return;
@@ -231,8 +232,14 @@ function SettingsContent() {
 
   const handleUpdateCategory = async (id: number) => {
     if (!editCatName) return;
+    const discountNum = editDozenDiscount.trim() === "" ? null : parseFloat(editDozenDiscount);
+    const validDiscount = discountNum === null || (!isNaN(discountNum) && discountNum >= 0 && discountNum <= 100);
+    if (!validDiscount) {
+      toast({ title: "Invalid discount", description: "Enter a value between 0 and 100.", variant: "destructive" });
+      return;
+    }
     try {
-      await updateCategory.mutateAsync({ categoryId: id, data: { name: editCatName } });
+      await updateCategory.mutateAsync({ categoryId: id, data: { name: editCatName, dozenDiscountPercent: discountNum } });
       setEditingId(null);
       queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() });
       toast({ title: "Category updated" });
@@ -553,30 +560,59 @@ function SettingsContent() {
             {categories?.map(category => (
               <div key={category.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
                 {editingId === category.id ? (
-                  <div className="flex items-center gap-2 flex-1 mr-4">
+                  <div className="flex flex-col gap-2 flex-1 mr-4">
                     <Input
                       value={editCatName}
                       onChange={e => setEditCatName(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && handleUpdateCategory(category.id)}
+                      placeholder="Category name"
                       autoFocus
                     />
-                    <Button size="icon" variant="ghost" onClick={() => handleUpdateCategory(category.id)}>
-                      <Check className="w-4 h-4 text-green-600" />
-                    </Button>
-                    <Button size="icon" variant="ghost" onClick={() => setEditingId(null)}>
-                      <X className="w-4 h-4 text-slate-400" />
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                        value={editDozenDiscount}
+                        onChange={e => setEditDozenDiscount(e.target.value)}
+                        placeholder="Dozen discount % (e.g. 10)"
+                        className="w-52"
+                      />
+                      <span className="text-xs text-slate-500 shrink-0">% off for 12+ qty</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={() => handleUpdateCategory(category.id)}>
+                        <Check className="w-4 h-4 mr-1" />
+                        Save
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
+                        <X className="w-4 h-4 mr-1" />
+                        Cancel
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <>
                     <div>
                       <p className="font-medium text-slate-900">{category.name}</p>
-                      <p className="text-xs text-slate-500">{category.productCount} products</p>
+                      <div className="flex items-center gap-3 mt-0.5">
+                        <p className="text-xs text-slate-500">{category.productCount} products</p>
+                        {(category as any).dozenDiscountPercent != null && (category as any).dozenDiscountPercent > 0 && (
+                          <span className="text-xs text-green-600 font-medium bg-green-50 border border-green-200 px-1.5 py-0.5 rounded">
+                            {(category as any).dozenDiscountPercent}% off 12+
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-1">
                       <Button size="icon" variant="ghost" onClick={() => {
                         setEditingId(category.id);
                         setEditCatName(category.name);
+                        setEditDozenDiscount(
+                          (category as any).dozenDiscountPercent != null
+                            ? String((category as any).dozenDiscountPercent)
+                            : ""
+                        );
                       }}>
                         <Edit2 className="w-4 h-4 text-slate-500" />
                       </Button>

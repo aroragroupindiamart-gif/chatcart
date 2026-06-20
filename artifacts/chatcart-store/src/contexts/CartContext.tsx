@@ -1,11 +1,19 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from "react";
-import type { Product } from "@/lib/api";
+import { createContext, useContext, useState, useCallback, useMemo, ReactNode } from "react";
+import type { Product, Category } from "@/lib/api";
 
 export interface CartItem {
   product: Product;
   variantSelections: Record<string, string>;
   quantity: number;
   key: string;
+}
+
+export interface CartItemPricing {
+  effectiveUnitPrice: number;
+  lineTotal: number;
+  savings: number;
+  hasDiscount: boolean;
+  discountPct: number;
 }
 
 function makeKey(productId: number, variants: Record<string, string>): string {
@@ -20,6 +28,9 @@ interface CartContextValue {
   items: CartItem[];
   totalItems: number;
   totalAmount: number;
+  totalSavings: number;
+  getItemPricing: (key: string) => CartItemPricing;
+  setCategories: (cats: Category[]) => void;
   addToCart: (product: Product, variants: Record<string, string>, qty?: number) => void;
   removeFromCart: (key: string) => void;
   updateQuantity: (key: string, qty: number) => void;
@@ -30,6 +41,7 @@ const CartContext = createContext<CartContextValue | null>(null);
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
 
   const addToCart = useCallback(
     (product: Product, variantSelections: Record<string, string>, qty = 1) => {
@@ -63,10 +75,67 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const clearCart = useCallback(() => setItems([]), []);
 
+  const handleSetCategories = useCallback((cats: Category[]) => {
+    setCategories(cats);
+  }, []);
+
+  const pricingMap = useMemo(() => {
+    const catMap = new Map(categories.map((c) => [c.id, c]));
+    const map = new Map<string, CartItemPricing>();
+    for (const item of items) {
+      const price = item.product.price ?? 0;
+      let effectiveUnitPrice = price;
+      let discountPct = 0;
+      if (
+        item.quantity >= 12 &&
+        item.product.categoryId != null &&
+        price > 0
+      ) {
+        const cat = catMap.get(item.product.categoryId);
+        const pct =
+          cat?.dozenDiscountPercent != null
+            ? parseFloat(String(cat.dozenDiscountPercent))
+            : 0;
+        if (pct > 0) {
+          discountPct = pct;
+          effectiveUnitPrice = price * (1 - pct / 100);
+        }
+      }
+      const lineTotal = effectiveUnitPrice * item.quantity;
+      const originalLineTotal = price * item.quantity;
+      map.set(item.key, {
+        effectiveUnitPrice,
+        lineTotal,
+        savings: originalLineTotal - lineTotal,
+        hasDiscount: discountPct > 0,
+        discountPct,
+      });
+    }
+    return map;
+  }, [items, categories]);
+
   const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
-  const totalAmount = items.reduce(
-    (sum, i) => sum + (i.product.price ?? 0) * i.quantity,
-    0
+
+  const totalAmount = useMemo(
+    () => Array.from(pricingMap.values()).reduce((sum, p) => sum + p.lineTotal, 0),
+    [pricingMap]
+  );
+
+  const totalSavings = useMemo(
+    () => Array.from(pricingMap.values()).reduce((sum, p) => sum + p.savings, 0),
+    [pricingMap]
+  );
+
+  const getItemPricing = useCallback(
+    (key: string): CartItemPricing =>
+      pricingMap.get(key) ?? {
+        effectiveUnitPrice: 0,
+        lineTotal: 0,
+        savings: 0,
+        hasDiscount: false,
+        discountPct: 0,
+      },
+    [pricingMap]
   );
 
   return (
@@ -75,6 +144,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
         items,
         totalItems,
         totalAmount,
+        totalSavings,
+        getItemPricing,
+        setCategories: handleSetCategories,
         addToCart,
         removeFromCart,
         updateQuantity,

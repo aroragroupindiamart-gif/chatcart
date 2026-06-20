@@ -1,5 +1,5 @@
 kind = "web"
-previewPath = "/marketing/"
+previewPath = "/"
 title = "Chatcart Marketing"
 version = "1.0.0"
 id = "artifacts/chatcart-marketing"
@@ -11,7 +11,7 @@ version = "1.0.0"
 
 [[services]]
 name = "web"
-paths = [ "/marketing/" ]
+paths = [ "/" ]
 localPort = 22496
 
 [services.development]
@@ -28,4 +28,4 @@ to = "/index.html"
 
 [services.env]
 PORT = "22496"
-BASE_PATH = "/marketing/"
+BASE_PATH = "/"

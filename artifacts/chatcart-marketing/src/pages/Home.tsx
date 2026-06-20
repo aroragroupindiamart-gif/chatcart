@@ -1,8 +1,56 @@
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { CheckCircle2, MessageSquare, Search, ArrowRight, Share2, Smartphone } from "lucide-react";
+import { CheckCircle2, MessageSquare, Search, ArrowRight, Share2, X } from "lucide-react";
 import { motion } from "framer-motion";
+
+const comparisonRows = [
+  {
+    feature: "Products disappearing when marked sold out",
+    whatsapp: "Happens randomly (background sync bugs)",
+    chatcart: "Never — archived, never deleted",
+  },
+  {
+    feature: "Search your own catalog",
+    whatsapp: "Not available",
+    chatcart: "Full search by name",
+  },
+  {
+    feature: "Filter by category or status",
+    whatsapp: "Not available",
+    chatcart: "Yes",
+  },
+  {
+    feature: "Assign category when adding a product",
+    whatsapp: "Upload first, edit separately later",
+    chatcart: "Assign category right away",
+  },
+  {
+    feature: "New products sort order",
+    whatsapp: "Often buried / randomised",
+    chatcart: "Newest-first, or sort manually",
+  },
+  {
+    feature: "Manual reorder of products",
+    whatsapp: "Not available",
+    chatcart: "Drag-and-drop reorder",
+  },
+  {
+    feature: "Size / color / custom variants",
+    whatsapp: "Not available",
+    chatcart: "Yes",
+  },
+  {
+    feature: "Your own branding (logo + tagline)",
+    whatsapp: "Not available",
+    chatcart: "Yes (Pro plan)",
+  },
+  {
+    feature: "Bulk import existing catalog",
+    whatsapp: "Not available",
+    chatcart: "Yes (Pro plan)",
+  },
+];
 
 export default function Home() {
   return (
@@ -17,7 +65,7 @@ export default function Home() {
               transition={{ duration: 0.5 }}
             >
               <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-foreground mb-6 leading-tight">
-                The WhatsApp catalog <br className="hidden md:block"/>
+                The catalog <br className="hidden md:block"/>
                 <span className="text-primary">that never lets you down.</span>
               </h1>
               <p className="text-xl md:text-2xl text-muted-foreground mb-10 max-w-2xl mx-auto font-medium">
@@ -101,8 +149,61 @@ export default function Home() {
         </div>
       </section>
 
-      {/* How it Works */}
+      {/* Comparison Table */}
       <section className="py-24 bg-background">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-3xl mx-auto mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground mb-4">
+              Chatcart vs WhatsApp Catalog
+            </h2>
+            <p className="text-lg text-muted-foreground">
+              Side by side, the difference is clear.
+            </p>
+          </div>
+
+          <div className="max-w-4xl mx-auto overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr>
+                  <th className="text-left py-4 px-4 text-sm font-semibold text-foreground w-1/2"></th>
+                  <th className="py-4 px-4 text-sm font-semibold text-muted-foreground text-center w-1/4">
+                    <div className="flex flex-col items-center gap-1">
+                      <span className="text-base">WhatsApp Catalog</span>
+                    </div>
+                  </th>
+                  <th className="py-4 px-4 text-sm font-semibold text-center w-1/4">
+                    <div className="flex flex-col items-center gap-1 text-primary">
+                      <span className="text-base font-bold">Chatcart</span>
+                    </div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {comparisonRows.map((row, i) => (
+                  <tr key={i} className={i % 2 === 0 ? "bg-muted/30" : "bg-background"}>
+                    <td className="py-3.5 px-4 text-sm text-foreground font-medium">{row.feature}</td>
+                    <td className="py-3.5 px-4 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <X className="w-4 h-4 text-red-400 shrink-0" />
+                        <span className="text-xs text-muted-foreground">{row.whatsapp}</span>
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
+                        <span className="text-xs text-foreground font-medium">{row.chatcart}</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      {/* How it Works */}
+      <section className="py-24 bg-card border-y border-border">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground mb-4">
@@ -147,7 +248,7 @@ export default function Home() {
       </section>
 
       {/* Pricing Section */}
-      <section id="pricing" className="py-24 bg-card border-y border-border scroll-m-20">
+      <section id="pricing" className="py-24 bg-background scroll-m-20">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground mb-4">
@@ -190,11 +291,8 @@ export default function Home() {
               </CardFooter>
             </Card>
 
-            {/* Growth Tier (Highlighted) */}
-            <Card className="bg-background border-primary shadow-md relative scale-105 z-10">
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
-                Most Popular
-              </div>
+            {/* Growth Tier — standard card, no badge */}
+            <Card className="bg-background border-border shadow-sm relative">
               <CardHeader>
                 <CardTitle className="text-2xl">Growth</CardTitle>
                 <CardDescription>For growing businesses.</CardDescription>
@@ -205,27 +303,30 @@ export default function Home() {
                   <span className="text-muted-foreground">/mo</span>
                 </div>
                 <ul className="space-y-3">
-                  <li className="flex items-center gap-3 text-sm font-medium text-foreground">
+                  <li className="flex items-center gap-3 text-sm text-muted-foreground">
                     <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Up to 100 active products
                   </li>
-                  <li className="flex items-center gap-3 text-sm font-medium text-foreground">
+                  <li className="flex items-center gap-3 text-sm text-muted-foreground">
                     <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Everything in Starter
                   </li>
-                  <li className="flex items-center gap-3 text-sm font-medium text-foreground">
+                  <li className="flex items-center gap-3 text-sm text-muted-foreground">
                     <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Size, color &amp; custom variants
                   </li>
-                  <li className="flex items-center gap-3 text-sm font-medium text-foreground">
+                  <li className="flex items-center gap-3 text-sm text-muted-foreground">
                     <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Email support (4-6 hour response)
                   </li>
                 </ul>
               </CardContent>
               <CardFooter>
-                <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-12 text-lg">Get Started</Button>
+                <Button variant="outline" className="w-full">Get Started</Button>
               </CardFooter>
             </Card>
 
-            {/* Pro Tier */}
-            <Card className="bg-background border-border shadow-sm relative">
+            {/* Pro Tier — highlighted as Most Popular */}
+            <Card className="bg-background border-primary shadow-md relative scale-105 z-10">
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                Most Popular
+              </div>
               <CardHeader>
                 <CardTitle className="text-2xl">Pro</CardTitle>
                 <CardDescription>For serious sellers.</CardDescription>
@@ -236,31 +337,28 @@ export default function Home() {
                   <span className="text-muted-foreground">/mo</span>
                 </div>
                 <ul className="space-y-3">
-                  <li className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <li className="flex items-center gap-3 text-sm font-medium text-foreground">
                     <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Unlimited products
                   </li>
-                  <li className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <li className="flex items-center gap-3 text-sm font-medium text-foreground">
                     <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Everything in Growth
                   </li>
-                  <li className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <li className="flex items-center gap-3 text-sm font-medium text-foreground">
                     <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Custom store branding (logo + tagline)
                   </li>
-                  <li className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <li className="flex items-center gap-3 text-sm font-medium text-foreground">
                     <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Bulk CSV import
                   </li>
-                  <li className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <li className="flex items-center gap-3 text-sm font-medium text-foreground">
                     <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Monthly store data export
                   </li>
-                  <li className="flex items-center gap-3 text-sm text-muted-foreground">
-                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Up to 3 staff logins
-                  </li>
-                  <li className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <li className="flex items-center gap-3 text-sm font-medium text-foreground">
                     <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> WhatsApp + phone support, 24/7 instant response
                   </li>
                 </ul>
               </CardContent>
               <CardFooter>
-                <Button variant="outline" className="w-full">Get Started</Button>
+                <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-12 text-lg">Get Started</Button>
               </CardFooter>
             </Card>
           </div>

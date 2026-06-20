@@ -84,14 +84,17 @@ export interface Category {
   id: number;
   name: string;
   productCount: number;
+  dozenDiscountPercent?: number | null;
 }
 
 export interface CreateCategoryRequest {
   name: string;
+  dozenDiscountPercent?: number | null;
 }
 
 export interface UpdateCategoryRequest {
   name: string;
+  dozenDiscountPercent?: number | null;
 }
 
 export type ProductStatus = typeof ProductStatus[keyof typeof ProductStatus];
@@ -223,6 +226,7 @@ export interface OrderItem {
   productNameSnapshot: string;
   priceSnapshot: number;
   variantSnapshot?: string;
+  productImageSnapshot?: string | null;
   quantity: number;
 }
 

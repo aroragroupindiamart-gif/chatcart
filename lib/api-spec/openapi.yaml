@@ -942,6 +942,9 @@ components:
           type: string
         productCount:
           type: integer
+        dozenDiscountPercent:
+          type: number
+          nullable: true
       required:
         - id
         - name
@@ -952,6 +955,9 @@ components:
       properties:
         name:
           type: string
+        dozenDiscountPercent:
+          type: number
+          nullable: true
       required:
         - name
 
@@ -960,6 +966,9 @@ components:
       properties:
         name:
           type: string
+        dozenDiscountPercent:
+          type: number
+          nullable: true
       required:
         - name
 
@@ -1236,6 +1245,9 @@ components:
           type: number
         variantSnapshot:
           type: string
+        productImageSnapshot:
+          type: string
+          nullable: true
         quantity:
           type: integer
       required:

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
-import { ShoppingCart, Store, Search, X, ChevronRight, ChevronUp } from "lucide-react";
+import { ShoppingCart, Store, Search, X } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
 import { api, imgSrc, formatPrice, type Seller, type Product, type Category } from "@/lib/api";
 import { Input } from "@/components/ui/input";
@@ -9,16 +9,16 @@ import CartSheet from "@/components/CartSheet";
 export default function StoreFront() {
   const { subdomain } = useParams<{ subdomain: string }>();
   const [, navigate] = useLocation();
-  const { totalItems } = useCart();
+  const { totalItems, setCategories } = useCart();
 
   const [seller, setSeller] = useState<Seller | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategoriesState] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [cartOpen, setCartOpen] = useState(false);
-  const [expandedCategories, setExpandedCategories] = useState<Set<number>>(new Set());
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!subdomain) return;
@@ -32,11 +32,12 @@ export default function StoreFront() {
       .then(([sellerData, productsData, categoriesData]) => {
         setSeller(sellerData);
         setProducts(productsData);
+        setCategoriesState(categoriesData);
         setCategories(categoriesData);
       })
       .catch((err) => setError(err.message ?? "Failed to load store"))
       .finally(() => setLoading(false));
-  }, [subdomain]);
+  }, [subdomain, setCategories]);
 
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
   const isSearching = search.trim().length > 0;
@@ -45,22 +46,13 @@ export default function StoreFront() {
     products.filter((p) => p.categoryId !== null).map((p) => p.categoryId)
   );
   const visibleCategories = categories.filter((c) => usedCategoryIds.has(c.id));
-  const uncategorized = products.filter((p) => p.categoryId === null);
+  const showTabs = visibleCategories.length > 0;
 
-  const filtered = products.filter(
-    (p) => !search || p.name.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const usesCategorySections = !isSearching && visibleCategories.length >= 2;
-
-  const toggleCategory = (catId: number) => {
-    setExpandedCategories((prev) => {
-      const next = new Set(prev);
-      if (next.has(catId)) next.delete(catId);
-      else next.add(catId);
-      return next;
-    });
-  };
+  const filtered = isSearching
+    ? products.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()))
+    : selectedCategoryId === null
+    ? products
+    : products.filter((p) => p.categoryId === selectedCategoryId);
 
   const goToProduct = (id: number) => navigate(`/${subdomain}/p/${id}`);
 
@@ -127,7 +119,7 @@ export default function StoreFront() {
         </div>
       </header>
 
-      {/* ── Brand banner (only when set) ── */}
+      {/* ── Brand banner ── */}
       {hasBanner && (
         <div className="bg-card border-b border-border/30">
           <div className="max-w-3xl mx-auto px-4 py-5 flex items-center gap-4">
@@ -152,7 +144,7 @@ export default function StoreFront() {
         </div>
       )}
 
-      <main className="max-w-3xl mx-auto px-4 py-5 space-y-6">
+      <main className="max-w-3xl mx-auto px-4 py-5 space-y-4">
         {/* ── Search ── */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -172,76 +164,55 @@ export default function StoreFront() {
           )}
         </div>
 
-        {/* ── Product content ── */}
-        {isSearching ? (
-          filtered.length === 0 ? (
-            <div className="text-center py-16 space-y-2">
-              <p className="text-muted-foreground">No products found for "{search}"</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {filtered.map((p) => (
-                <ProductCard key={p.id} product={p} onClick={() => goToProduct(p.id)} />
-              ))}
-            </div>
-          )
-        ) : usesCategorySections ? (
-          <div className="space-y-8">
-            {visibleCategories.map((cat) => {
-              const catProducts = products.filter((p) => p.categoryId === cat.id);
-              const isExpanded = expandedCategories.has(cat.id);
-              return (
-                <section key={cat.id}>
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-base font-bold text-foreground">{cat.name}</h2>
-                    <button
-                      onClick={() => toggleCategory(cat.id)}
-                      className="text-primary text-sm font-medium flex items-center gap-0.5 hover:text-primary/80 transition-colors shrink-0"
-                    >
-                      {isExpanded ? (
-                        <>Show less <ChevronUp className="w-3.5 h-3.5" /></>
-                      ) : (
-                        <>See all <ChevronRight className="w-3.5 h-3.5" /></>
-                      )}
-                    </button>
-                  </div>
-                  {isExpanded ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {catProducts.map((p) => (
-                        <ProductCard key={p.id} product={p} onClick={() => goToProduct(p.id)} />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                      {catProducts.map((p) => (
-                        <div key={p.id} className="shrink-0 w-40 snap-start">
-                          <ProductCard product={p} onClick={() => goToProduct(p.id)} />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </section>
-              );
-            })}
-            {uncategorized.length > 0 && (
-              <section>
-                <h2 className="text-base font-bold text-foreground mb-3">Other Items</h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {uncategorized.map((p) => (
-                    <ProductCard key={p.id} product={p} onClick={() => goToProduct(p.id)} />
-                  ))}
-                </div>
-              </section>
-            )}
+        {/* ── Category tabs ── */}
+        {showTabs && !isSearching && (
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <button
+              onClick={() => setSelectedCategoryId(null)}
+              className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                selectedCategoryId === null
+                  ? "bg-primary text-white border-primary"
+                  : "bg-card border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+              }`}
+            >
+              All Items
+            </button>
+            {visibleCategories.map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedCategoryId(cat.id)}
+                className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                  selectedCategoryId === cat.id
+                    ? "bg-primary text-white border-primary"
+                    : "bg-card border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                }`}
+              >
+                {cat.name}
+                {cat.dozenDiscountPercent != null && cat.dozenDiscountPercent > 0 && (
+                  <span className="ml-1.5 text-xs opacity-80">
+                    {cat.dozenDiscountPercent}% off 12+
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
-        ) : products.length === 0 ? (
+        )}
+
+        {/* ── Products ── */}
+        {filtered.length === 0 ? (
           <div className="text-center py-16 space-y-2">
-            <Store className="w-10 h-10 text-muted-foreground mx-auto opacity-20" />
-            <p className="text-muted-foreground">No products available yet</p>
+            {isSearching ? (
+              <p className="text-muted-foreground">No products found for "{search}"</p>
+            ) : (
+              <>
+                <Store className="w-10 h-10 text-muted-foreground mx-auto opacity-20" />
+                <p className="text-muted-foreground">No products available yet</p>
+              </>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {products.map((p) => (
+            {filtered.map((p) => (
               <ProductCard key={p.id} product={p} onClick={() => goToProduct(p.id)} />
             ))}
           </div>

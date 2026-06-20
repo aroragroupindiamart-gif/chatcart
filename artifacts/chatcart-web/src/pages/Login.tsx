@@ -5,7 +5,7 @@ import { setToken } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Store, ArrowRight, CheckCircle2 } from "lucide-react";
+import { ArrowRight, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Login() {
@@ -52,12 +52,13 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
-        <div className="bg-slate-900 p-8 text-white text-center">
-          <div className="mx-auto bg-white/10 w-16 h-16 rounded-2xl flex items-center justify-center mb-6">
-            <Store className="w-8 h-8" />
+        {/* Light-themed header with Chatcart C logo */}
+        <div className="bg-primary p-8 text-white text-center">
+          <div className="mx-auto bg-white/20 w-16 h-16 rounded-2xl flex items-center justify-center mb-6">
+            <span className="text-white text-3xl font-extrabold leading-none">C</span>
           </div>
           <h1 className="text-2xl font-bold mb-2">Welcome to Chatcart</h1>
-          <p className="text-slate-400">Manage your WhatsApp store</p>
+          <p className="text-white/80">Manage your catalogue, your way</p>
         </div>
 
         <div className="p-8">

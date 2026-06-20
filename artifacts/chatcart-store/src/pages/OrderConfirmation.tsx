@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import { CheckCircle, MessageCircle, Store, Loader2 } from "lucide-react";
-import { api, formatPrice, type Order } from "@/lib/api";
+import { api, formatPrice, imgSrc, type Order } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 
 function normalizePhone(phone: string | null): string | null {
@@ -11,7 +11,7 @@ function normalizePhone(phone: string | null): string | null {
   return null;
 }
 
-function buildWhatsAppText(order: Order): string {
+function buildWhatsAppText(order: Order, orderUrl: string): string {
   const lines: string[] = [
     `Hi! I'd like to confirm my order 🛍️`,
     ``,
@@ -35,6 +35,9 @@ function buildWhatsAppText(order: Order): string {
     lines.push(``);
     lines.push(`*My details:* ${order.customerContact}`);
   }
+
+  lines.push(``);
+  lines.push(`📸 View order with photos: ${orderUrl}`);
 
   return lines.join("\n");
 }
@@ -80,7 +83,8 @@ export default function OrderConfirmation() {
   }
 
   const phone = normalizePhone(order.sellerWhatsappNumber);
-  const waText = buildWhatsAppText(order);
+  const orderUrl = `${window.location.origin}${BASE}/orders/${order.id}`;
+  const waText = buildWhatsAppText(order, orderUrl);
   const waUrl = phone
     ? `https://wa.me/${phone}?text=${encodeURIComponent(waText)}`
     : null;
@@ -118,9 +122,16 @@ export default function OrderConfirmation() {
             {order.items.map((item) => (
               <div
                 key={item.id}
-                className="px-4 py-3 flex justify-between gap-3"
+                className="px-4 py-3 flex gap-3 items-start"
               >
-                <div className="min-w-0">
+                {item.productImageSnapshot && (
+                  <img
+                    src={imgSrc(item.productImageSnapshot)}
+                    alt={item.productNameSnapshot}
+                    className="w-12 h-12 rounded-lg object-cover shrink-0 border border-border/40"
+                  />
+                )}
+                <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium">
                     {item.quantity}× {item.productNameSnapshot}
                   </p>
