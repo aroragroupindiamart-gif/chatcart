@@ -123,7 +123,7 @@ router.get("/admin/sellers/:id", requireAdminAuth, async (req, res) => {
 router.patch("/admin/sellers/:id/subscription", requireAdminAuth, async (req, res) => {
   const id = Number(req.params.id);
   const parsed = z.object({
-    plan: z.enum(["trial", "basic", "pro", "business"]).optional(),
+    plan: z.enum(["pending", "starter", "growth", "pro"]).optional(),
     status: z.enum(["active", "trial", "expired", "cancelled", "suspended"]).optional(),
     startDate: z.string().datetime().optional(),
     endDate: z.string().datetime().optional(),

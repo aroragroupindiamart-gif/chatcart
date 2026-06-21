@@ -3,12 +3,25 @@ import { Link } from 'wouter';
 import { Layout } from '@/components/Layout';
 import { useSellers } from '@/hooks/useAdminApi';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Search, Filter, Phone, Store } from 'lucide-react';
+import { Search, Phone, Store, Clock } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+function PlanBadge({ plan }: { plan: string }) {
+  if (plan === 'pending') {
+    return (
+      <Badge className="bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-100 gap-1">
+        <Clock className="w-3 h-3" />
+        Pending
+      </Badge>
+    );
+  }
+  if (plan === 'pro') return <Badge className="bg-purple-100 text-purple-800 border border-purple-200 hover:bg-purple-100">Pro</Badge>;
+  if (plan === 'growth') return <Badge className="bg-blue-100 text-blue-800 border border-blue-200 hover:bg-blue-100">Growth</Badge>;
+  return <Badge variant="secondary" className="capitalize">{plan}</Badge>;
+}
 
 export default function Sellers() {
   const [q, setQ] = useState('');
@@ -21,12 +34,25 @@ export default function Sellers() {
     plan: plan !== 'all' ? plan : undefined,
   });
 
+  const pendingCount = sellers?.filter(s => s.subscriptionPlan === 'pending').length ?? 0;
+
   return (
     <Layout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Sellers</h1>
-          <p className="text-muted-foreground text-sm">Manage all seller accounts on the platform.</p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Sellers</h1>
+            <p className="text-muted-foreground text-sm">Manage all seller accounts on the platform.</p>
+          </div>
+          {pendingCount > 0 && plan === 'all' && status === 'all' && !q && (
+            <button
+              onClick={() => setPlan('pending')}
+              className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 text-sm font-medium px-3 py-2 rounded-lg hover:bg-amber-100 transition-colors"
+            >
+              <Clock className="w-4 h-4" />
+              {pendingCount} awaiting activation
+            </button>
+          )}
         </div>
 
         <div className="flex flex-col sm:flex-row gap-4">
@@ -49,8 +75,8 @@ export default function Sellers() {
                 <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="trial">Trial</SelectItem>
-                <SelectItem value="past_due">Past Due</SelectItem>
-                <SelectItem value="canceled">Canceled</SelectItem>
+                <SelectItem value="expired">Expired</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
                 <SelectItem value="suspended">Suspended</SelectItem>
               </SelectContent>
             </Select>
@@ -61,11 +87,10 @@ export default function Sellers() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Plans</SelectItem>
-                <SelectItem value="free">Free</SelectItem>
-                <SelectItem value="trial">Trial</SelectItem>
-                <SelectItem value="basic">Basic</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="starter">Starter</SelectItem>
+                <SelectItem value="growth">Growth</SelectItem>
                 <SelectItem value="pro">Pro</SelectItem>
-                <SelectItem value="business">Business</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -104,7 +129,10 @@ export default function Sellers() {
                     </tr>
                   ) : (
                     sellers?.map((seller) => (
-                      <tr key={seller.id} className="hover:bg-muted/30 transition-colors group">
+                      <tr
+                        key={seller.id}
+                        className={`hover:bg-muted/30 transition-colors group ${seller.subscriptionPlan === 'pending' ? 'bg-amber-50/40' : ''}`}
+                      >
                         <td className="px-4 py-3">
                           <Link href={`/sellers/${seller.id}`} className="font-medium text-foreground hover:underline">
                             {seller.storeName || 'Unnamed Store'}
@@ -119,12 +147,17 @@ export default function Sellers() {
                             {seller.phone}
                           </div>
                         </td>
-                        <td className="px-4 py-3 capitalize">{seller.subscriptionPlan}</td>
+                        <td className="px-4 py-3">
+                          <PlanBadge plan={seller.subscriptionPlan} />
+                        </td>
                         <td className="px-4 py-3">
                           {seller.isSuspended ? (
                             <Badge variant="destructive">Suspended</Badge>
                           ) : (
-                            <Badge variant={seller.subscriptionStatus === 'active' || seller.subscriptionStatus === 'trial' ? 'default' : 'secondary'} className={seller.subscriptionStatus === 'active' ? 'bg-primary hover:bg-primary/90' : ''}>
+                            <Badge
+                              variant={seller.subscriptionStatus === 'active' || seller.subscriptionStatus === 'trial' ? 'default' : 'secondary'}
+                              className={seller.subscriptionStatus === 'active' ? 'bg-primary hover:bg-primary/90' : ''}
+                            >
                               {seller.subscriptionStatus}
                             </Badge>
                           )}

@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { categoriesTable } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
+import { requireActiveSubscription } from "../lib/planLimits.js";
 
 const router = Router();
 
@@ -18,7 +19,7 @@ function serializeCategory(c: typeof categoriesTable.$inferSelect & { productCou
   };
 }
 
-router.get("/categories", requireAuth, async (req, res) => {
+router.get("/categories", requireAuth, requireActiveSubscription, async (req, res) => {
   try {
     const categories = await db
       .select()
@@ -32,7 +33,7 @@ router.get("/categories", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/categories", requireAuth, async (req, res) => {
+router.post("/categories", requireAuth, requireActiveSubscription, async (req, res) => {
   try {
     const { name, dozenDiscountPercent, bulkDiscountMinQty } = req.body as {
       name: string;
@@ -60,7 +61,7 @@ router.post("/categories", requireAuth, async (req, res) => {
   }
 });
 
-router.patch("/categories/:categoryId", requireAuth, async (req, res) => {
+router.patch("/categories/:categoryId", requireAuth, requireActiveSubscription, async (req, res) => {
   try {
     const categoryId = parseInt(String(req.params.categoryId));
     const { name, dozenDiscountPercent, bulkDiscountMinQty } = req.body as {
@@ -101,7 +102,7 @@ router.patch("/categories/:categoryId", requireAuth, async (req, res) => {
   }
 });
 
-router.delete("/categories/:categoryId", requireAuth, async (req, res) => {
+router.delete("/categories/:categoryId", requireAuth, requireActiveSubscription, async (req, res) => {
   try {
     const categoryId = parseInt(String(req.params.categoryId));
     await db

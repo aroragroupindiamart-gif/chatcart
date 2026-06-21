@@ -7,7 +7,7 @@ import {
 } from "@workspace/db/schema";
 import { eq, and, ne, asc, desc, ilike, inArray, count } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
-import { getSellerPlan, getPlanLimits, getPlanDisplayName } from "../lib/planLimits.js";
+import { getSellerPlan, getPlanLimits, getPlanDisplayName, requireActiveSubscription } from "../lib/planLimits.js";
 
 const router = Router();
 
@@ -46,7 +46,7 @@ async function countActiveProducts(sellerId: number, excludeProductId?: number):
 
 // ── List & create ────────────────────────────────────────────────────────────
 
-router.get("/products", requireAuth, async (req, res) => {
+router.get("/products", requireAuth, requireActiveSubscription, async (req, res) => {
   try {
     const { categoryId, status, search } = req.query as {
       categoryId?: string;
@@ -98,7 +98,7 @@ router.get("/products", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/products", requireAuth, async (req, res) => {
+router.post("/products", requireAuth, requireActiveSubscription, async (req, res) => {
   try {
     const body = req.body as {
       name: string;
@@ -152,7 +152,7 @@ router.post("/products", requireAuth, async (req, res) => {
 
 // ── Reorder (MUST come before /:productId to avoid route shadowing) ──────────
 
-router.patch("/products/reorder", requireAuth, async (req, res) => {
+router.patch("/products/reorder", requireAuth, requireActiveSubscription, async (req, res) => {
   try {
     const { items } = req.body as { items: Array<{ id: number; sortOrder: number }> };
     if (!Array.isArray(items)) {
@@ -181,7 +181,7 @@ router.patch("/products/reorder", requireAuth, async (req, res) => {
 
 // ── Single product CRUD ──────────────────────────────────────────────────────
 
-router.get("/products/:productId", requireAuth, async (req, res) => {
+router.get("/products/:productId", requireAuth, requireActiveSubscription, async (req, res) => {
   try {
     const productId = parseInt(String(req.params.productId));
     const [product] = await db
@@ -217,7 +217,7 @@ router.get("/products/:productId", requireAuth, async (req, res) => {
   }
 });
 
-router.patch("/products/:productId", requireAuth, async (req, res) => {
+router.patch("/products/:productId", requireAuth, requireActiveSubscription, async (req, res) => {
   try {
     const productId = parseInt(String(req.params.productId));
     const body = req.body as {
@@ -291,7 +291,7 @@ router.patch("/products/:productId", requireAuth, async (req, res) => {
   }
 });
 
-router.delete("/products/:productId", requireAuth, async (req, res) => {
+router.delete("/products/:productId", requireAuth, requireActiveSubscription, async (req, res) => {
   try {
     const productId = parseInt(String(req.params.productId));
     const affected = await db
@@ -317,7 +317,7 @@ router.delete("/products/:productId", requireAuth, async (req, res) => {
 
 // ── Product images ───────────────────────────────────────────────────────────
 
-router.post("/products/:productId/images", requireAuth, async (req, res) => {
+router.post("/products/:productId/images", requireAuth, requireActiveSubscription, async (req, res) => {
   try {
     const productId = parseInt(String(req.params.productId));
     if (!(await assertProductBelongsToSeller(productId, req.seller!.sellerId))) {

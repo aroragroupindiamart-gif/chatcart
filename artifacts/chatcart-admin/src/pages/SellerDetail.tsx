@@ -231,10 +231,10 @@ export default function SellerDetail() {
                         <Select value={editPlan} onValueChange={setEditPlan}>
                           <SelectTrigger><SelectValue /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="trial">Trial</SelectItem>
-                            <SelectItem value="basic">Basic</SelectItem>
+                            <SelectItem value="pending">Pending</SelectItem>
+                            <SelectItem value="starter">Starter</SelectItem>
+                            <SelectItem value="growth">Growth</SelectItem>
                             <SelectItem value="pro">Pro</SelectItem>
-                            <SelectItem value="business">Business</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -245,8 +245,9 @@ export default function SellerDetail() {
                           <SelectContent>
                             <SelectItem value="active">Active</SelectItem>
                             <SelectItem value="trial">Trial</SelectItem>
-                            <SelectItem value="past_due">Past Due</SelectItem>
-                            <SelectItem value="canceled">Canceled</SelectItem>
+                            <SelectItem value="expired">Expired</SelectItem>
+                            <SelectItem value="cancelled">Cancelled</SelectItem>
+                            <SelectItem value="suspended">Suspended</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>

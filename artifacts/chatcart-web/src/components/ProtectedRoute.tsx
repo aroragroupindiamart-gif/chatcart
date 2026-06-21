@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { useEffect } from "react";
 import { getToken } from "@/lib/auth";
 import { Spinner } from "@/components/ui/spinner";
+import PendingActivation from "@/pages/PendingActivation";
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const [, setLocation] = useLocation();
@@ -31,6 +32,9 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (user) {
+    if ((user as any).subscriptionPlan === "pending") {
+      return <PendingActivation />;
+    }
     return <>{children}</>;
   }
 

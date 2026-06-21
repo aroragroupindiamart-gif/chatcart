@@ -3,10 +3,11 @@ import { db } from "@workspace/db";
 import { productsTable, ordersTable, orderItemsTable } from "@workspace/db/schema";
 import { eq, and, ne, count, sum, desc, inArray } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
+import { requireActiveSubscription } from "../lib/planLimits.js";
 
 const router = Router();
 
-router.get("/dashboard/stats", requireAuth, async (req, res) => {
+router.get("/dashboard/stats", requireAuth, requireActiveSubscription, async (req, res) => {
   try {
     const sellerId = req.seller!.sellerId;
 

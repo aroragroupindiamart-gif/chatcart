@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { ordersTable, orderItemsTable } from "@workspace/db/schema";
 import { eq, and, desc, count, inArray, gte } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
-import { getSellerPlan, getPlanLimits } from "../lib/planLimits.js";
+import { getSellerPlan, getPlanLimits, requireActiveSubscription } from "../lib/planLimits.js";
 
 const router = Router();
 
@@ -13,7 +13,7 @@ function generateOrderId(): string {
   return `ORD-${timestamp}${random}`;
 }
 
-router.get("/orders", requireAuth, async (req, res) => {
+router.get("/orders", requireAuth, requireActiveSubscription, async (req, res) => {
   try {
     const { status, page = "1", limit = "20" } = req.query as {
       status?: string;
@@ -88,7 +88,7 @@ router.get("/orders", requireAuth, async (req, res) => {
   }
 });
 
-router.get("/orders/:orderId", requireAuth, async (req, res) => {
+router.get("/orders/:orderId", requireAuth, requireActiveSubscription, async (req, res) => {
   try {
     const orderId = String(req.params.orderId);
     const [order] = await db
@@ -130,7 +130,7 @@ router.get("/orders/:orderId", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/orders", requireAuth, async (req, res) => {
+router.post("/orders", requireAuth, requireActiveSubscription, async (req, res) => {
   try {
     const body = req.body as {
       customerContact?: string;
@@ -199,7 +199,7 @@ router.post("/orders", requireAuth, async (req, res) => {
   }
 });
 
-router.patch("/orders/:orderId/status", requireAuth, async (req, res) => {
+router.patch("/orders/:orderId/status", requireAuth, requireActiveSubscription, async (req, res) => {
   try {
     const orderId = String(req.params.orderId);
     const { status } = req.body as {

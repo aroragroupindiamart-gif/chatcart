@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { sellersTable } from "@workspace/db/schema";
 import { eq, and, ne } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
-import { getSellerPlan, getPlanLimits } from "../lib/planLimits.js";
+import { getSellerPlan, getPlanLimits, requireActiveSubscription } from "../lib/planLimits.js";
 
 const router = Router();
 
@@ -22,7 +22,7 @@ function validateSlug(slug: string): string | null {
   return null;
 }
 
-router.patch("/sellers/me", requireAuth, async (req, res) => {
+router.patch("/sellers/me", requireAuth, requireActiveSubscription, async (req, res) => {
   try {
     const { storeName, whatsappNumber, bannerImageUrl, tagline, subdomain } = req.body as {
       storeName?: string;

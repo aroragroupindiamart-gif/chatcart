@@ -1,6 +1,7 @@
 import { db } from "@workspace/db";
 import { sellersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
+import type { Request, Response, NextFunction } from "express";
 
 export interface PlanLimits {
   maxActiveProducts: number | null;
@@ -62,5 +63,22 @@ export async function getSellerPlan(sellerId: number): Promise<string> {
     .from(sellersTable)
     .where(eq(sellersTable.id, sellerId))
     .limit(1);
-  return row?.subscriptionPlan ?? "starter";
+  return row?.subscriptionPlan ?? "pending";
+}
+
+export async function requireActiveSubscription(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const seller = (req as any).seller as { sellerId: number } | undefined;
+  if (!seller) {
+    next();
+    return;
+  }
+  const plan = await getSellerPlan(seller.sellerId);
+  if (plan === "pending") {
+    res.status(403).json({
+      error: "Account pending activation. The platform team will contact you on WhatsApp shortly.",
+      code: "PENDING_ACTIVATION",
+    });
+    return;
+  }
+  next();
 }
