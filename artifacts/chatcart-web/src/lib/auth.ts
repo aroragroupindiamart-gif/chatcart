@@ -19,3 +19,5 @@ export function initAuth() {
     return getToken();
   });
 }
+
+initAuth();

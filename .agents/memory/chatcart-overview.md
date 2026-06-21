@@ -16,6 +16,14 @@ description: Key facts about the Chatcart project — DB seed data, store URLs, 
 - Marketing: /marketing/
 - Admin: /admin/
 
+## Pending activation gate
+New sellers get `subscriptionPlan = "pending"` by default (DB default).
+- All seller API routes return HTTP 403 `{ code: "PENDING_ACTIVATION" }` via `requireActiveSubscription` middleware.
+- `/api/auth/me` always returns 200 regardless of plan.
+- ProtectedRoute.tsx renders `PendingActivation.tsx` when plan = "pending".
+- Admin activates via PATCH `/api/admin/sellers/:id/subscription` body `{ plan, status }`.
+- WhatsApp number constant in `PendingActivation.tsx` is currently a placeholder `"919999999999"` — replace with real number before going live.
+
 ## Subscription plans (enforced server-side)
 Three tiers in `artifacts/api-server/src/lib/planLimits.ts`:
 
@@ -46,8 +54,14 @@ GET /api/public/orders/:orderId  → includes sellerSubdomain, sellerWhatsappNum
 
 ## OTP auth (dev)
 OTP is logged to API server console — no SMS service. JWT expiry 30 days.
+OTP verify endpoint: POST /api/auth/verify-otp with body `{ phone, otp }` (field is `otp`, not `code`).
 
 **Why:** Avoids accidental spending on SMS in dev.
+
+## Auth token getter race condition (FIXED)
+`auth.ts` calls `initAuth()` at module load time (bottom of file). Previously it was only called in App's `useEffect`, which races with React Query's first fetch — React Query fires before the `useEffect` settles, sending requests without an Authorization header → 401.
+
+**Fix:** Added `initAuth()` call at the bottom of `artifacts/chatcart-web/src/lib/auth.ts` so `_authTokenGetter` is set synchronously on import, before any component renders.
 
 ## Codegen
 - Spec: `lib/api-spec/openapi.yaml` → `pnpm --filter @workspace/api-spec run codegen`
