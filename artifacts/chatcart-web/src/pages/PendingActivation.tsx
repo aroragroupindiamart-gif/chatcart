@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { MessageCircle, Clock, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const SUPPORT_WHATSAPP = "919999999999";
+const SUPPORT_WHATSAPP = "919319724678";
 
 export default function PendingActivation() {
   const [, setLocation] = useLocation();
