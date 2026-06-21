@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Plus, Edit2, Trash, X, Check, Upload, Loader2, Image as ImageIcon, Download, Lock, Crown, Zap, ArrowRight } from "lucide-react";
+import { Save, Plus, Edit2, Trash, X, Check, Upload, Loader2, Image as ImageIcon, Download, Lock, Crown, Zap, ArrowRight, Infinity } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -30,22 +30,25 @@ function imgSrc(url: string): string {
   return url;
 }
 
-type PlanName = "Starter" | "Growth" | "Pro";
+type PlanName = "Starter" | "Growth" | "Pro" | "Lifetime";
 
 function normalizePlan(plan: string | null | undefined): PlanName {
   if (plan === "pro" || plan === "business") return "Pro";
   if (plan === "growth" || plan === "basic") return "Growth";
+  if (plan === "lifetime") return "Lifetime";
   return "Starter";
 }
 
 function planColor(planName: PlanName): string {
   if (planName === "Pro") return "text-purple-600";
+  if (planName === "Lifetime") return "text-amber-600";
   if (planName === "Growth") return "text-blue-600";
   return "text-slate-600";
 }
 
 function planBadgeClass(planName: PlanName): string {
   if (planName === "Pro") return "bg-purple-100 text-purple-700 border-purple-200";
+  if (planName === "Lifetime") return "bg-amber-100 text-amber-700 border-amber-200";
   if (planName === "Growth") return "bg-blue-100 text-blue-700 border-blue-200";
   return "bg-slate-100 text-slate-700 border-slate-200";
 }
@@ -68,8 +71,8 @@ function SettingsContent() {
   const requestLogoUploadUrl = useRequestLogoUploadUrl();
 
   const planName = normalizePlan((seller as any)?.subscriptionPlan);
-  const isPro = planName === "Pro";
-  const isGrowthOrPro = planName === "Growth" || planName === "Pro";
+  const isPro = planName === "Pro" || planName === "Lifetime";
+  const isGrowthOrPro = planName === "Growth" || planName === "Pro" || planName === "Lifetime";
 
   const [storeName, setStoreName] = useState("");
   const [whatsappNumber, setWhatsappNumber] = useState("");
@@ -293,7 +296,7 @@ function SettingsContent() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
-              {planName === "Pro" ? <Crown className="w-5 h-5 text-purple-500" /> : <Zap className="w-5 h-5 text-blue-500" />}
+              {planName === "Lifetime" ? <Infinity className="w-5 h-5 text-amber-500" /> : planName === "Pro" ? <Crown className="w-5 h-5 text-purple-500" /> : <Zap className="w-5 h-5 text-blue-500" />}
               Your Plan
             </CardTitle>
             <span className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-semibold ${planBadgeClass(planName)}`}>
@@ -309,7 +312,7 @@ function SettingsContent() {
             <div className="rounded-lg bg-slate-50 p-4">
               <p className="text-xs text-slate-500 mb-1">Active products</p>
               <p className={`text-lg font-bold ${planColor(planName)}`}>
-                {planName === "Starter" ? "Up to 25" : planName === "Growth" ? "Up to 100" : "Unlimited"}
+                {planName === "Starter" ? "Up to 25" : planName === "Growth" ? "Up to 100" : "Unlimited ∞"}
               </p>
             </div>
             <div className="rounded-lg bg-slate-50 p-4">
@@ -327,25 +330,25 @@ function SettingsContent() {
             <div className="rounded-lg bg-slate-50 p-4">
               <p className="text-xs text-slate-500 mb-1">Support</p>
               <p className={`text-sm font-bold ${planColor(planName)}`}>
-                {planName === "Pro" ? "WhatsApp + Phone, 24/7" : "Email support"}
+                {isPro ? "WhatsApp + Phone, 24/7" : "Email support"}
               </p>
               <p className="text-xs text-slate-400 mt-0.5">
                 {planName === "Starter" ? "Within 24 hours" : planName === "Growth" ? "4-6 hour response" : "Instant response"}
               </p>
-              {planName === "Pro" && (
+              {isPro && (
                 <a
-                  href="https://wa.me/919876500000"
+                  href="https://wa.me/919319724678"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 mt-1 text-xs text-green-600 hover:underline font-medium"
                 >
-                  WhatsApp us · +91 98765 00000
+                  WhatsApp us · +91 93197 24678
                 </a>
               )}
             </div>
           </div>
         </CardContent>
-        {planName !== "Pro" && (
+        {!isPro && (
           <CardFooter className="bg-slate-50 rounded-b-xl border-t border-slate-100">
             <div className="flex items-center justify-between w-full">
               <p className="text-sm text-slate-600">

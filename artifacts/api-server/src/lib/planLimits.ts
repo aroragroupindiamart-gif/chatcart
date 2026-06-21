@@ -25,7 +25,7 @@ export async function getLifetimeCount(): Promise<number> {
 }
 
 export function getPlanLimits(plan: string | null | undefined): PlanLimits {
-  if (plan === "pro" || plan === "business") {
+  if (plan === "pro" || plan === "business" || plan === "lifetime") {
     return {
       maxActiveProducts: null,
       variantsEnabled: true,

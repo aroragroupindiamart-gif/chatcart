@@ -48,10 +48,10 @@ export function LtdBanner() {
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-slate-900">
-          Loved using Chatcart? Lock in lifetime access for ₹9,999
+          Lifetime access to ALL Pro features — just ₹9,999 one-time
         </p>
         <p className="text-xs text-slate-500 mt-0.5">
-          Pay once, use forever — only{" "}
+          Unlimited products, custom branding &amp; 24/7 priority support. Only{" "}
           <span className="font-semibold text-amber-700">
             {ltdStatus.remaining} of {LTD_CAP} spots
           </span>{" "}
