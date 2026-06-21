@@ -4,6 +4,7 @@ import { sellersTable, otpCodesTable, otpRateLimitsTable } from "@workspace/db/s
 import { eq, and, gt, desc, sql } from "drizzle-orm";
 import { signToken } from "../lib/jwt.js";
 import { requireAuth } from "../middleware/auth.js";
+import { sendOtp } from "../lib/sms.js";
 
 const router = Router();
 
