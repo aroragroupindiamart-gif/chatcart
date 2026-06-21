@@ -82,7 +82,8 @@ export const useHealth = () => {
 };
 
 export const useSellers = (params?: { q?: string; status?: string; plan?: string }) => {
-  const query = new URLSearchParams(params as any).toString();
+  const clean = Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v !== undefined && v !== null));
+  const query = new URLSearchParams(clean).toString();
   return useQuery<Seller[]>({
     queryKey: ['admin', 'sellers', params],
     queryFn: () => adminFetch<Seller[]>(`/api/admin/sellers${query ? `?${query}` : ''}`),
@@ -158,7 +159,8 @@ export const useReactivateSeller = () => {
 };
 
 export const useOrders = (params?: { sellerId?: string; status?: string; page?: number; limit?: number }) => {
-  const query = new URLSearchParams(params as any).toString();
+  const clean = Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v !== undefined && v !== null));
+  const query = new URLSearchParams(clean as any).toString();
   return useQuery<GlobalOrder[]>({
     queryKey: ['admin', 'orders', params],
     queryFn: () => adminFetch<GlobalOrder[]>(`/api/admin/orders${query ? `?${query}` : ''}`),
@@ -166,7 +168,8 @@ export const useOrders = (params?: { sellerId?: string; status?: string; page?: 
 };
 
 export const useAuditLogs = (params?: { action?: string; targetSellerId?: string; page?: number; limit?: number }) => {
-  const query = new URLSearchParams(params as any).toString();
+  const clean = Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v !== undefined && v !== null));
+  const query = new URLSearchParams(clean as any).toString();
   return useQuery<AuditLog[]>({
     queryKey: ['admin', 'audit-log', params],
     queryFn: () => adminFetch<AuditLog[]>(`/api/admin/audit-log${query ? `?${query}` : ''}`),
