@@ -285,6 +285,17 @@ router.get("/auth/me", requireAuth, async (req, res) => {
   }
 });
 
+router.post("/auth/token/refresh", requireAuth, async (req, res) => {
+  try {
+    const { sellerId, phone, tokenVersion } = req.seller!;
+    const newToken = signToken({ sellerId, phone, tokenVersion });
+    res.json({ token: newToken });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to refresh token" });
+  }
+});
+
 router.post("/auth/logout", requireAuth, async (req, res) => {
   try {
     await db

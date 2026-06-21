@@ -5,7 +5,7 @@ if (!envSecret && process.env.NODE_ENV === "production") {
   throw new Error("JWT_SECRET environment variable must be set in production");
 }
 const JWT_SECRET = envSecret ?? "chatcart-dev-secret-change-in-prod";
-const JWT_EXPIRES_IN = "30d";
+const JWT_EXPIRES_IN = "180d";
 
 export interface JwtPayload {
   sellerId: number;

@@ -9,7 +9,7 @@ import {
   orderItemsTable,
   categoriesTable,
 } from "@workspace/db/schema";
-import { eq, and, ne, or, asc, inArray } from "drizzle-orm";
+import { eq, and, ne, or, asc, inArray, count } from "drizzle-orm";
 
 const router = Router();
 
@@ -351,6 +351,22 @@ router.get("/public/orders/:orderId", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch order" });
+  }
+});
+
+const LTD_CAP = 100;
+
+router.get("/public/ltd-status", async (_req, res) => {
+  try {
+    const [row] = await db
+      .select({ c: count() })
+      .from(sellersTable)
+      .where(eq(sellersTable.subscriptionPlan, "lifetime" as never));
+    const claimed = Number(row?.c ?? 0);
+    res.json({ claimed, remaining: Math.max(0, LTD_CAP - claimed), capReached: claimed >= LTD_CAP });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch LTD status" });
   }
 });
 

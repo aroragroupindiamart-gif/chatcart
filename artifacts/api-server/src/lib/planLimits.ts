@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
 import { sellersTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, count } from "drizzle-orm";
 import type { Request, Response, NextFunction } from "express";
 
 export interface PlanLimits {
@@ -12,6 +12,16 @@ export interface PlanLimits {
   orderHistoryDays: number | null;
   supportChannel: string;
   supportResponseTime: string;
+}
+
+export const LTD_CAP = 100;
+
+export async function getLifetimeCount(): Promise<number> {
+  const [row] = await db
+    .select({ c: count() })
+    .from(sellersTable)
+    .where(eq(sellersTable.subscriptionPlan, "lifetime" as never));
+  return Number(row?.c ?? 0);
 }
 
 export function getPlanLimits(plan: string | null | undefined): PlanLimits {
@@ -54,6 +64,7 @@ export function getPlanLimits(plan: string | null | undefined): PlanLimits {
 export function getPlanDisplayName(plan: string | null | undefined): string {
   if (plan === "pro" || plan === "business") return "Pro";
   if (plan === "growth" || plan === "basic") return "Growth";
+  if (plan === "lifetime") return "Lifetime";
   return "Starter";
 }
 

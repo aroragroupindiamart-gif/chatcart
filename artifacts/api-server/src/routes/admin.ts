@@ -123,7 +123,7 @@ router.get("/admin/sellers/:id", requireAdminAuth, async (req, res) => {
 router.patch("/admin/sellers/:id/subscription", requireAdminAuth, async (req, res) => {
   const id = Number(req.params.id);
   const parsed = z.object({
-    plan: z.enum(["pending", "starter", "growth", "pro"]).optional(),
+    plan: z.enum(["pending", "starter", "growth", "pro", "lifetime"]).optional(),
     status: z.enum(["active", "trial", "expired", "cancelled", "suspended"]).optional(),
     startDate: z.string().datetime().optional(),
     endDate: z.string().datetime().optional(),
@@ -251,6 +251,7 @@ router.get("/admin/health", requireAdminAuth, async (req, res) => {
   const [activeSellers] = await db.select({ c: count() }).from(sellersTable).where(eq(sellersTable.subscriptionStatus, "active"));
   const [trialSellers] = await db.select({ c: count() }).from(sellersTable).where(eq(sellersTable.subscriptionStatus, "trial"));
   const [suspendedSellers] = await db.select({ c: count() }).from(sellersTable).where(eq(sellersTable.isSuspended, true));
+  const [lifetimeSellers] = await db.select({ c: count() }).from(sellersTable).where(eq(sellersTable.subscriptionPlan, "lifetime" as never));
 
   const [ordersToday] = await db.select({ c: count() }).from(ordersTable).where(gte(ordersTable.createdAt, todayStart));
   const [ordersWeek] = await db.select({ c: count() }).from(ordersTable).where(gte(ordersTable.createdAt, weekStart));
@@ -272,6 +273,7 @@ router.get("/admin/health", requireAdminAuth, async (req, res) => {
       active: Number(activeSellers?.c ?? 0),
       trial: Number(trialSellers?.c ?? 0),
       suspended: Number(suspendedSellers?.c ?? 0),
+      lifetimeCount: Number(lifetimeSellers?.c ?? 0),
     },
     orders: {
       today: Number(ordersToday?.c ?? 0),

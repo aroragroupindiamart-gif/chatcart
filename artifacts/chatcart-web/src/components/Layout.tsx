@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { useLogout, useGetMe } from "@workspace/api-client-react";
 import { removeToken } from "@/lib/auth";
+import { LtdBanner } from "@/components/LtdBanner";
 import {
   LayoutDashboard,
   Package,
@@ -107,7 +108,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main Content */}
       <main className="flex-1 md:ml-64 min-h-screen pt-14 md:pt-0 pb-20 md:pb-0">
-        <div className="p-4 md:p-8 max-w-7xl mx-auto">{children}</div>
+        <div className="p-4 md:p-8 max-w-7xl mx-auto">
+          <LtdBanner />
+          {children}
+        </div>
       </main>
 
       {/* Mobile Bottom Nav */}

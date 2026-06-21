@@ -235,6 +235,7 @@ export default function SellerDetail() {
                             <SelectItem value="starter">Starter</SelectItem>
                             <SelectItem value="growth">Growth</SelectItem>
                             <SelectItem value="pro">Pro</SelectItem>
+                            <SelectItem value="lifetime">Lifetime (LTD)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>

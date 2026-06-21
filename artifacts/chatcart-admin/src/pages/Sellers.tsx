@@ -18,6 +18,7 @@ function PlanBadge({ plan }: { plan: string }) {
       </Badge>
     );
   }
+  if (plan === 'lifetime') return <Badge className="bg-yellow-100 text-yellow-800 border border-yellow-300 hover:bg-yellow-100 gap-1">⭐ Lifetime</Badge>;
   if (plan === 'pro') return <Badge className="bg-purple-100 text-purple-800 border border-purple-200 hover:bg-purple-100">Pro</Badge>;
   if (plan === 'growth') return <Badge className="bg-blue-100 text-blue-800 border border-blue-200 hover:bg-blue-100">Growth</Badge>;
   return <Badge variant="secondary" className="capitalize">{plan}</Badge>;
@@ -91,6 +92,7 @@ export default function Sellers() {
                 <SelectItem value="starter">Starter</SelectItem>
                 <SelectItem value="growth">Growth</SelectItem>
                 <SelectItem value="pro">Pro</SelectItem>
+                <SelectItem value="lifetime">Lifetime</SelectItem>
               </SelectContent>
             </Select>
           </div>

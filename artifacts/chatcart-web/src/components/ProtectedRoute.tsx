@@ -1,7 +1,7 @@
 import { useGetMe, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
-import { useEffect } from "react";
-import { getToken } from "@/lib/auth";
+import { useEffect, useRef } from "react";
+import { getToken, setToken } from "@/lib/auth";
 import { Spinner } from "@/components/ui/spinner";
 import PendingActivation from "@/pages/PendingActivation";
 
@@ -22,6 +22,20 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       setLocation("/login");
     }
   }, [token, isError, setLocation]);
+
+  const refreshedRef = useRef(false);
+  useEffect(() => {
+    if (user && token && !refreshedRef.current) {
+      refreshedRef.current = true;
+      fetch("/api/auth/token/refresh", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (d?.token) setToken(d.token); })
+        .catch(() => {});
+    }
+  }, [(user as any)?.id]);
 
   if (isLoading || !token) {
     return (

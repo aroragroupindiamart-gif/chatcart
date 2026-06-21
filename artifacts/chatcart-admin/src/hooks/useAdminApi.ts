@@ -3,7 +3,7 @@ import { adminFetch } from '../lib/adminFetch';
 
 // Types
 export interface HealthStats {
-  sellers: { total: number; active: number; trial: number; suspended: number };
+  sellers: { total: number; active: number; trial: number; suspended: number; lifetimeCount: number };
   orders: { today: number; thisWeek: number; thisMonth: number };
   signupTrend: Array<{ date: string; count: number }>;
 }
