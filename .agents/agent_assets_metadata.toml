@@ -1,8 +1,13 @@
 uploads = []
-outputs = []
 
 [[generated]]
 id = "cUyJHi8xOiH-tjQ_m1bEU"
 uri = "file://artifacts/chatcart-mobile/assets/images/icon.png"
 type = "image"
 title = "generated_image"
+
+[[outputs]]
+id = "n0_KBmNiTQ3rsWD_i29J8"
+uri = "file://attached_assets/image_1782116986791.png"
+type = "image"
+title = "Chatcart logo"
