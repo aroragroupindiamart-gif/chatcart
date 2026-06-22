@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useMemo, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef, ReactNode } from "react";
 import type { Product, Category } from "@/lib/api";
 
 export interface CartItem {
@@ -25,6 +25,20 @@ function makeKey(productId: number, variants: Record<string, string>): string {
   return `${productId}__${variantStr}`;
 }
 
+function storageKey(slug: string) {
+  return `chatcart_cart_${slug}`;
+}
+
+function loadCartFromStorage(slug: string): CartItem[] {
+  try {
+    const raw = localStorage.getItem(storageKey(slug));
+    if (!raw) return [];
+    return JSON.parse(raw) as CartItem[];
+  } catch {
+    return [];
+  }
+}
+
 interface CartContextValue {
   items: CartItem[];
   totalItems: number;
@@ -32,9 +46,11 @@ interface CartContextValue {
   totalSavings: number;
   getItemPricing: (key: string) => CartItemPricing;
   setCategories: (cats: Category[]) => void;
+  initForSeller: (slug: string) => void;
   addToCart: (product: Product, variants: Record<string, string>, qty?: number) => void;
   removeFromCart: (key: string) => void;
   updateQuantity: (key: string, qty: number) => void;
+  replaceCartItemProduct: (key: string, product: Product, newQty?: number) => void;
   clearCart: () => void;
 }
 
@@ -43,6 +59,28 @@ const CartContext = createContext<CartContextValue | null>(null);
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const currentSlugRef = useRef<string | null>(null);
+
+  const initForSeller = useCallback((slug: string) => {
+    if (currentSlugRef.current === slug) return;
+    if (currentSlugRef.current !== null) {
+      setItems((prev) => {
+        try {
+          localStorage.setItem(storageKey(currentSlugRef.current!), JSON.stringify(prev));
+        } catch {}
+        return prev;
+      });
+    }
+    currentSlugRef.current = slug;
+    setItems(loadCartFromStorage(slug));
+  }, []);
+
+  useEffect(() => {
+    if (currentSlugRef.current === null) return;
+    try {
+      localStorage.setItem(storageKey(currentSlugRef.current), JSON.stringify(items));
+    } catch {}
+  }, [items]);
 
   const addToCart = useCallback(
     (product: Product, variantSelections: Record<string, string>, qty = 1) => {
@@ -74,7 +112,24 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const clearCart = useCallback(() => setItems([]), []);
+  const replaceCartItemProduct = useCallback((key: string, product: Product, newQty?: number) => {
+    setItems((prev) =>
+      prev.map((i) =>
+        i.key === key
+          ? { ...i, product, quantity: newQty !== undefined ? newQty : i.quantity }
+          : i
+      )
+    );
+  }, []);
+
+  const clearCart = useCallback(() => {
+    setItems([]);
+    if (currentSlugRef.current) {
+      try {
+        localStorage.removeItem(storageKey(currentSlugRef.current));
+      } catch {}
+    }
+  }, []);
 
   const handleSetCategories = useCallback((cats: Category[]) => {
     setCategories(cats);
@@ -148,9 +203,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
         totalSavings,
         getItemPricing,
         setCategories: handleSetCategories,
+        initForSeller,
         addToCart,
         removeFromCart,
         updateQuantity,
+        replaceCartItemProduct,
         clearCart,
       }}
     >

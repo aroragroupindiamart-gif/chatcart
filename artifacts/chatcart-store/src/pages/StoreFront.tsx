@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
 import { ShoppingCart, Store, Search, X } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
@@ -9,7 +9,7 @@ import CartSheet from "@/components/CartSheet";
 export default function StoreFront() {
   const { subdomain } = useParams<{ subdomain: string }>();
   const [, navigate] = useLocation();
-  const { totalItems, setCategories } = useCart();
+  const { totalItems, setCategories, initForSeller } = useCart();
 
   const [seller, setSeller] = useState<Seller | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -24,6 +24,17 @@ export default function StoreFront() {
     return cat ? Number(cat) : null;
   });
 
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const [showLeftFade, setShowLeftFade] = useState(false);
+  const [showRightFade, setShowRightFade] = useState(false);
+
+  const checkTabsScroll = useCallback(() => {
+    const el = tabsRef.current;
+    if (!el) return;
+    setShowLeftFade(el.scrollLeft > 2);
+    setShowRightFade(el.scrollLeft < el.scrollWidth - el.clientWidth - 2);
+  }, []);
+
   const handleCategoryChange = (id: number | null) => {
     setSelectedCategoryId(id);
     const url = new URL(window.location.href);
@@ -37,6 +48,7 @@ export default function StoreFront() {
 
   useEffect(() => {
     if (!subdomain) return;
+    initForSeller(subdomain);
     setLoading(true);
     setError(null);
     Promise.all([
@@ -52,7 +64,24 @@ export default function StoreFront() {
       })
       .catch((err) => setError(err.message ?? "Failed to load store"))
       .finally(() => setLoading(false));
-  }, [subdomain, setCategories]);
+  }, [subdomain, setCategories, initForSeller]);
+
+  useEffect(() => {
+    const el = tabsRef.current;
+    if (!el) return;
+    checkTabsScroll();
+    el.addEventListener("scroll", checkTabsScroll, { passive: true });
+    const ro = new ResizeObserver(checkTabsScroll);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", checkTabsScroll);
+      ro.disconnect();
+    };
+  }, [checkTabsScroll]);
+
+  useEffect(() => {
+    setTimeout(checkTabsScroll, 50);
+  }, [categories, checkTabsScroll]);
 
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
   const isSearching = search.trim().length > 0;
@@ -103,7 +132,10 @@ export default function StoreFront() {
       {/* ── Sticky header ── */}
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur border-b border-border/50">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0">
+          <a
+            href={`${BASE}/${subdomain}`}
+            className="flex items-center gap-2 min-w-0 hover:opacity-80 transition-opacity"
+          >
             {seller.bannerImageUrl ? (
               <img
                 src={imgSrc(seller.bannerImageUrl)}
@@ -118,7 +150,7 @@ export default function StoreFront() {
             <span className="font-semibold text-base truncate text-foreground">
               {seller.storeName ?? subdomain}
             </span>
-          </div>
+          </a>
           <button
             onClick={() => setCartOpen(true)}
             className="relative p-2 rounded-lg hover:bg-muted transition-colors"
@@ -181,35 +213,46 @@ export default function StoreFront() {
 
         {/* ── Category tabs ── */}
         {showTabs && !isSearching && (
-          <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {visibleCategories.map((cat) => (
+          <div className="relative -mx-4">
+            {showLeftFade && (
+              <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-10 z-10 bg-gradient-to-r from-background to-transparent" />
+            )}
+            {showRightFade && (
+              <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-10 z-10 bg-gradient-to-l from-background to-transparent" />
+            )}
+            <div
+              ref={tabsRef}
+              className="flex gap-2 overflow-x-auto pb-1 px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+              {visibleCategories.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => handleCategoryChange(cat.id)}
+                  className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                    selectedCategoryId === cat.id
+                      ? "bg-primary text-white border-primary"
+                      : "bg-card border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                  }`}
+                >
+                  {cat.name}
+                  {cat.dozenDiscountPercent != null && cat.dozenDiscountPercent > 0 && cat.bulkDiscountMinQty != null && (
+                    <span className="ml-1.5 text-xs opacity-80">
+                      {cat.dozenDiscountPercent}% off {cat.bulkDiscountMinQty}+
+                    </span>
+                  )}
+                </button>
+              ))}
               <button
-                key={cat.id}
-                onClick={() => handleCategoryChange(cat.id)}
+                onClick={() => handleCategoryChange(null)}
                 className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
-                  selectedCategoryId === cat.id
+                  selectedCategoryId === null
                     ? "bg-primary text-white border-primary"
                     : "bg-card border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
                 }`}
               >
-                {cat.name}
-                {cat.dozenDiscountPercent != null && cat.dozenDiscountPercent > 0 && cat.bulkDiscountMinQty != null && (
-                  <span className="ml-1.5 text-xs opacity-80">
-                    {cat.dozenDiscountPercent}% off {cat.bulkDiscountMinQty}+
-                  </span>
-                )}
+                All Items
               </button>
-            ))}
-            <button
-              onClick={() => handleCategoryChange(null)}
-              className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
-                selectedCategoryId === null
-                  ? "bg-primary text-white border-primary"
-                  : "bg-card border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-              }`}
-            >
-              All Items
-            </button>
+            </div>
           </div>
         )}
 

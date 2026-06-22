@@ -30,6 +30,8 @@ export interface Product {
   status: string;
   categoryId: number | null;
   sortOrder: number;
+  stockCount: number | null;
+  showWhenOutOfStock: boolean;
   images: ProductImage[];
   variants: ProductVariant[];
 }

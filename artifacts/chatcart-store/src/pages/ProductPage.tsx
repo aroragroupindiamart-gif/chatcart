@@ -22,7 +22,7 @@ export default function ProductPage() {
     productId: string;
   }>();
   const [, navigate] = useLocation();
-  const { addToCart, totalItems } = useCart();
+  const { addToCart, totalItems, initForSeller } = useCart();
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
   const [seller, setSeller] = useState<Seller | null>(null);
@@ -38,6 +38,7 @@ export default function ProductPage() {
 
   useEffect(() => {
     if (!subdomain || !productId) return;
+    initForSeller(subdomain);
     setLoading(true);
     setError(null);
     Promise.all([
@@ -55,7 +56,7 @@ export default function ProductPage() {
       })
       .catch((err) => setError(err.message ?? "Failed to load product"))
       .finally(() => setLoading(false));
-  }, [subdomain, productId]);
+  }, [subdomain, productId, initForSeller]);
 
   const handleAddToCart = () => {
     if (!product) return;
@@ -108,14 +109,26 @@ export default function ProductPage() {
       {/* ── Sticky header ── */}
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur border-b border-border/50">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
-          <button
-            onClick={() => navigate(`/${subdomain}`)}
-            className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          <a
+            href={`${BASE}/${subdomain}`}
+            className="flex items-center gap-2 min-w-0 hover:opacity-80 transition-opacity"
           >
-            <ArrowLeft className="w-4 h-4" />
-            <span className="hidden sm:inline">{seller.storeName ?? subdomain}</span>
-            <span className="sm:hidden">Back</span>
-          </button>
+            <ArrowLeft className="w-4 h-4 shrink-0 text-muted-foreground" />
+            {seller.bannerImageUrl ? (
+              <img
+                src={imgSrc(seller.bannerImageUrl)}
+                alt={seller.storeName ?? ""}
+                className="w-6 h-6 rounded-full object-cover shrink-0 border border-border/40"
+              />
+            ) : (
+              <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center shrink-0">
+                <Store className="w-3 h-3 text-white" />
+              </div>
+            )}
+            <span className="text-sm font-medium truncate text-foreground">
+              {seller.storeName ?? subdomain}
+            </span>
+          </a>
           <button
             onClick={() => setCartOpen(true)}
             className="relative p-2 rounded-lg hover:bg-muted transition-colors"
