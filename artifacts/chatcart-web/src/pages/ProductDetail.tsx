@@ -518,6 +518,7 @@ function ProductDetailContent() {
         });
         queryClient.invalidateQueries({ queryKey: getGetProductQueryKey(productId) });
         toast({ title: "Product updated successfully" });
+        setLocation("/products");
       }
     } catch (err: any) {
       toast({ title: "Error", description: err.message || "Failed to save product", variant: "destructive" });

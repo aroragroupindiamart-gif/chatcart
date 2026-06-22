@@ -18,7 +18,22 @@ export default function StoreFront() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [cartOpen, setCartOpen] = useState(false);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const cat = params.get("category");
+    return cat ? Number(cat) : null;
+  });
+
+  const handleCategoryChange = (id: number | null) => {
+    setSelectedCategoryId(id);
+    const url = new URL(window.location.href);
+    if (id !== null) {
+      url.searchParams.set("category", String(id));
+    } else {
+      url.searchParams.delete("category");
+    }
+    window.history.replaceState(null, "", url.toString());
+  };
 
   useEffect(() => {
     if (!subdomain) return;
