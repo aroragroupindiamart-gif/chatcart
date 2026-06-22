@@ -314,12 +314,13 @@ router.get("/public/orders/:orderId", async (req, res) => {
       return;
     }
 
-    // Get seller WhatsApp number for the handoff link
+    // Get seller info for the confirmation screen
     const [seller] = await db
       .select({
         storeName: sellersTable.storeName,
         subdomain: sellersTable.subdomain,
         whatsappNumber: sellersTable.whatsappNumber,
+        bannerImageUrl: sellersTable.bannerImageUrl,
       })
       .from(sellersTable)
       .where(eq(sellersTable.id, order.sellerId))
@@ -339,6 +340,7 @@ router.get("/public/orders/:orderId", async (req, res) => {
       sellerWhatsappNumber: seller?.whatsappNumber ?? null,
       sellerStoreName: seller?.storeName ?? null,
       sellerSubdomain: seller?.subdomain ?? null,
+      sellerBannerImageUrl: seller?.bannerImageUrl ?? null,
       items: items.map((item) => ({
         id: item.id,
         productNameSnapshot: item.productNameSnapshot,

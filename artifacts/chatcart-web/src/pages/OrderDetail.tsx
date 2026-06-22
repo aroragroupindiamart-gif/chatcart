@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Layout } from "@/components/Layout";
 import {
@@ -7,7 +8,7 @@ import {
   type OrderStatus,
 } from "@workspace/api-client-react";
 import { useParams, Link } from "wouter";
-import { ArrowLeft, Phone, Calendar } from "lucide-react";
+import { ArrowLeft, Phone, Calendar, X, Package } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -19,11 +20,68 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
+function imgSrc(url: string): string {
+  return url.replace(/^\/objects\//, "/api/public/img/");
+}
+
 const STATUS_STYLES: Record<string, string> = {
   pending: "bg-amber-100 text-amber-800",
   confirmed: "bg-blue-100 text-blue-800",
   fulfilled: "bg-green-100 text-green-800",
 };
+
+function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 text-white bg-black/50 rounded-full p-2 hover:bg-black/70 transition-colors"
+        aria-label="Close"
+      >
+        <X className="w-5 h-5" />
+      </button>
+      <img
+        src={src}
+        alt={alt}
+        className="max-w-full max-h-full object-contain rounded-lg"
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>
+  );
+}
+
+function ProductImage({ url, name }: { url: string; name: string }) {
+  const [error, setError] = useState(false);
+  const [lightbox, setLightbox] = useState(false);
+  const src = imgSrc(url);
+
+  if (error) {
+    return (
+      <div className="w-14 h-14 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center shrink-0">
+        <Package className="w-6 h-6 text-slate-300" />
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <img
+        src={src}
+        alt={name}
+        className="w-14 h-14 rounded-lg object-cover shrink-0 border border-slate-200 cursor-pointer hover:opacity-90 active:opacity-75 transition-opacity"
+        onError={() => setError(true)}
+        onClick={() => setLightbox(true)}
+        title="Tap to view full size"
+      />
+      {lightbox && (
+        <ImageLightbox src={src} alt={name} onClose={() => setLightbox(false)} />
+      )}
+    </>
+  );
+}
 
 export default function OrderDetail() {
   return (
@@ -125,9 +183,15 @@ function OrderDetailContent() {
                 {order.items.map((item, idx) => (
                   <div
                     key={idx}
-                    className="py-4 first:pt-0 last:pb-0 flex justify-between items-center"
+                    className="py-4 first:pt-0 last:pb-0 flex gap-3 items-start"
                   >
-                    <div>
+                    {item.productImageSnapshot && (
+                      <ProductImage
+                        url={item.productImageSnapshot}
+                        name={item.productNameSnapshot}
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
                       <p className="font-medium text-slate-900">
                         {item.productNameSnapshot}
                       </p>
@@ -136,7 +200,7 @@ function OrderDetailContent() {
                         {item.variantSnapshot && ` · ${item.variantSnapshot}`}
                       </p>
                     </div>
-                    <div className="font-bold text-slate-900">
+                    <div className="font-bold text-slate-900 shrink-0">
                       ₹{(item.quantity * item.priceSnapshot).toFixed(2)}
                     </div>
                   </div>

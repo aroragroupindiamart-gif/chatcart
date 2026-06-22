@@ -121,6 +121,7 @@ router.get("/orders/:orderId", requireAuth, requireActiveSubscription, async (re
         productNameSnapshot: item.productNameSnapshot,
         priceSnapshot: parseFloat(item.priceSnapshot as unknown as string),
         variantSnapshot: item.variantSnapshot,
+        productImageSnapshot: item.productImageSnapshot ?? null,
         quantity: item.quantity,
       })),
     });

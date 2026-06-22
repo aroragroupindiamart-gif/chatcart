@@ -52,6 +52,7 @@ export interface Order {
   sellerWhatsappNumber: string | null;
   sellerStoreName: string | null;
   sellerSubdomain: string | null;
+  sellerBannerImageUrl: string | null;
   items: OrderItem[];
 }
 

@@ -103,9 +103,17 @@ export default function OrderConfirmation() {
     <div className="min-h-screen bg-background">
       <header className="bg-card border-b border-border shadow-sm">
         <div className="max-w-lg mx-auto px-4 h-14 flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center shrink-0">
-            <Store className="w-4 h-4 text-white" />
-          </div>
+          {order.sellerBannerImageUrl ? (
+            <img
+              src={imgSrc(order.sellerBannerImageUrl)}
+              alt={order.sellerStoreName ?? "Store"}
+              className="w-7 h-7 rounded-full object-cover shrink-0 border border-border/40"
+            />
+          ) : (
+            <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center shrink-0">
+              <Store className="w-4 h-4 text-white" />
+            </div>
+          )}
           <span className="font-semibold truncate">
             {order.sellerStoreName ?? "Store"}
           </span>
