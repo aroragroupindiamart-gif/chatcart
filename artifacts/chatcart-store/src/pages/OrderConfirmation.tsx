@@ -1,8 +1,46 @@
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
-import { CheckCircle, MessageCircle, Store, Loader2 } from "lucide-react";
+import { CheckCircle, MessageCircle, Store, Loader2, X } from "lucide-react";
 import { api, formatPrice, imgSrc, type Order } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+
+function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 text-white bg-black/50 rounded-full p-2 hover:bg-black/70 transition-colors"
+        aria-label="Close"
+      >
+        <X className="w-5 h-5" />
+      </button>
+      <img
+        src={src}
+        alt={alt}
+        className="max-w-full max-h-full object-contain rounded-lg"
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>
+  );
+}
+
+function TappableImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
+  const [lightbox, setLightbox] = useState(false);
+  return (
+    <>
+      <img
+        src={src}
+        alt={alt}
+        className={`${className ?? ""} cursor-pointer active:opacity-75 transition-opacity`}
+        onClick={() => setLightbox(true)}
+      />
+      {lightbox && <ImageLightbox src={src} alt={alt} onClose={() => setLightbox(false)} />}
+    </>
+  );
+}
 
 function normalizePhone(phone: string | null): string | null {
   if (!phone) return null;
@@ -143,7 +181,7 @@ export default function OrderConfirmation() {
                 className="px-4 py-3 flex gap-3 items-start"
               >
                 {item.productImageSnapshot && (
-                  <img
+                  <TappableImage
                     src={imgSrc(item.productImageSnapshot)}
                     alt={item.productNameSnapshot}
                     className="w-12 h-12 rounded-lg object-cover shrink-0 border border-border/40"

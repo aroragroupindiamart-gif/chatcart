@@ -18,6 +18,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const logout = useLogout();
 
   const handleLogout = () => {
+    if (!window.confirm("Log out of your store dashboard?")) return;
     logout.mutate(undefined, {
       onSuccess: () => {
         removeToken();
