@@ -72,11 +72,7 @@ async function validateCart(
     }
 
     let adjustedQty = item.quantity;
-    if (fresh.stockCount !== null && fresh.stockCount < item.quantity) {
-      if (fresh.stockCount === 0) {
-        issues.push({ productName: item.product.name, reason: "out_of_stock" });
-        continue;
-      }
+    if (fresh.stockCount !== null && fresh.stockCount > 0 && fresh.stockCount < item.quantity) {
       issues.push({
         productName: item.product.name,
         reason: "qty_reduced",
