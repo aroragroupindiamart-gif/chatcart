@@ -67,7 +67,7 @@ export default function StoreFront() {
     ? products.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()))
     : selectedCategoryId === null
     ? products
-    : products.filter((p) => p.categoryId === selectedCategoryId);
+    : products.filter((p) => p.categoryId !== null && Number(p.categoryId) === Number(selectedCategoryId));
 
   const goToProduct = (id: number) => navigate(`/${subdomain}/p/${id}`);
 
@@ -182,20 +182,10 @@ export default function StoreFront() {
         {/* ── Category tabs ── */}
         {showTabs && !isSearching && (
           <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <button
-              onClick={() => setSelectedCategoryId(null)}
-              className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
-                selectedCategoryId === null
-                  ? "bg-primary text-white border-primary"
-                  : "bg-card border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-              }`}
-            >
-              All Items
-            </button>
             {visibleCategories.map((cat) => (
               <button
                 key={cat.id}
-                onClick={() => setSelectedCategoryId(cat.id)}
+                onClick={() => handleCategoryChange(cat.id)}
                 className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
                   selectedCategoryId === cat.id
                     ? "bg-primary text-white border-primary"
@@ -210,6 +200,16 @@ export default function StoreFront() {
                 )}
               </button>
             ))}
+            <button
+              onClick={() => handleCategoryChange(null)}
+              className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                selectedCategoryId === null
+                  ? "bg-primary text-white border-primary"
+                  : "bg-card border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+              }`}
+            >
+              All Items
+            </button>
           </div>
         )}
 

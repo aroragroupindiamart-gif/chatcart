@@ -1,9 +1,24 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { CheckCircle2, MessageSquare, Search, ArrowRight, Share2, X } from "lucide-react";
+import { CheckCircle2, MessageSquare, Search, ArrowRight, Share2, X, Zap, Clock, Flame } from "lucide-react";
 import { motion } from "framer-motion";
+
+const LAUNCH_PRICING_DEADLINE = new Date("2026-07-07T23:59:59+05:30");
+
+const LTD_WA_LINK =
+  "https://wa.me/919319724678?text=Hi%2C%20I%27d%20like%20to%20claim%20the%20Chatcart%20Lifetime%20Deal%20at%20%E2%82%B99%2C999";
+
+function calcTimeLeft() {
+  const diff = LAUNCH_PRICING_DEADLINE.getTime() - Date.now();
+  if (diff <= 0) return null;
+  return {
+    d: Math.floor(diff / 86400000),
+    h: Math.floor((diff % 86400000) / 3600000),
+    m: Math.floor((diff % 3600000) / 60000),
+  };
+}
 
 const comparisonRows = [
   {
@@ -51,9 +66,29 @@ const comparisonRows = [
     whatsapp: "Not available",
     chatcart: "Yes (Pro plan)",
   },
+  {
+    feature: "Product approval time",
+    whatsapp: "15–30 min review delay before going live",
+    chatcart: "Instant — live the moment you publish",
+  },
 ];
 
 export default function Home() {
+  const [ltdStatus, setLtdStatus] = useState<{ remaining: number; capReached: boolean } | null>(null);
+  const [timeLeft, setTimeLeft] = useState(calcTimeLeft);
+
+  useEffect(() => {
+    fetch("/api/public/ltd-status")
+      .then((r) => r.json())
+      .then((d) => setLtdStatus(d))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const id = setInterval(() => setTimeLeft(calcTimeLeft()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
   useEffect(() => {
     const scrollIfHash = () => {
       if (window.location.hash === "#pricing") {
@@ -177,37 +212,33 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="max-w-4xl mx-auto overflow-x-auto">
+          <div className="max-w-4xl mx-auto overflow-x-auto rounded-xl border border-border shadow-sm">
             <table className="w-full border-collapse">
               <thead>
-                <tr>
-                  <th className="text-left py-4 px-4 text-sm font-semibold text-foreground w-1/2"></th>
-                  <th className="py-4 px-4 text-sm font-semibold text-muted-foreground text-center w-1/4">
-                    <div className="flex flex-col items-center gap-1">
-                      <span className="text-base">WhatsApp Catalog</span>
-                    </div>
+                <tr className="border-b border-border">
+                  <th className="text-left py-4 px-5 text-sm font-semibold text-foreground w-1/2 bg-muted/20"></th>
+                  <th className="py-4 px-4 text-sm font-semibold text-muted-foreground text-center w-1/4 bg-muted/20">
+                    <span className="text-base">WhatsApp Catalog</span>
                   </th>
-                  <th className="py-4 px-4 text-sm font-semibold text-center w-1/4">
-                    <div className="flex flex-col items-center gap-1 text-primary">
-                      <span className="text-base font-bold">Chatcart</span>
-                    </div>
+                  <th className="py-4 px-4 text-sm font-semibold text-center w-1/4 bg-primary/8 border-l-2 border-primary/30">
+                    <span className="text-base font-bold text-primary">Chatcart ✓</span>
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {comparisonRows.map((row, i) => (
-                  <tr key={i} className={i % 2 === 0 ? "bg-muted/30" : "bg-background"}>
-                    <td className="py-3.5 px-4 text-sm text-foreground font-medium">{row.feature}</td>
-                    <td className="py-3.5 px-4 text-center">
+                  <tr key={i} className={`border-b border-border/60 last:border-0 ${i % 2 === 0 ? "bg-muted/10" : "bg-background"}`}>
+                    <td className="py-4 px-5 text-sm text-foreground font-medium leading-snug">{row.feature}</td>
+                    <td className="py-4 px-4 text-center align-middle">
                       <div className="flex items-center justify-center gap-1.5">
                         <X className="w-4 h-4 text-red-400 shrink-0" />
-                        <span className="text-xs text-muted-foreground">{row.whatsapp}</span>
+                        <span className="text-xs text-muted-foreground leading-snug">{row.whatsapp}</span>
                       </div>
                     </td>
-                    <td className="py-3.5 px-4 text-center">
+                    <td className="py-4 px-4 text-center align-middle bg-primary/5 border-l-2 border-primary/20">
                       <div className="flex items-center justify-center gap-1.5">
                         <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
-                        <span className="text-xs text-foreground font-medium">{row.chatcart}</span>
+                        <span className="text-xs text-foreground font-medium leading-snug">{row.chatcart}</span>
                       </div>
                     </td>
                   </tr>
@@ -266,13 +297,31 @@ export default function Home() {
       {/* Pricing Section */}
       <section id="pricing" className="py-24 bg-background scroll-m-20">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-3xl mx-auto mb-16">
+          <div className="text-center max-w-3xl mx-auto mb-8">
             <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground mb-4">
               Simple, honest pricing.
             </h2>
             <p className="text-lg text-muted-foreground">
               No hidden fees. No transaction cuts. Just a flat monthly rate.
             </p>
+          </div>
+
+          {/* Urgency banner */}
+          <div className="max-w-2xl mx-auto mb-10">
+            <div className="flex items-center justify-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-5 py-3.5">
+              <Flame className="w-5 h-5 text-amber-500 shrink-0" />
+              <div className="text-center">
+                <span className="text-sm font-semibold text-amber-800">Launch pricing ends July 7</span>
+                {timeLeft ? (
+                  <span className="ml-2 text-sm text-amber-700">
+                    — {timeLeft.d}d {timeLeft.h}h {timeLeft.m}m left
+                  </span>
+                ) : (
+                  <span className="ml-2 text-sm text-amber-700">— prices going up soon</span>
+                )}
+              </div>
+              <Clock className="w-4 h-4 text-amber-500 shrink-0" />
+            </div>
           </div>
 
           <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto items-center">
@@ -284,6 +333,7 @@ export default function Home() {
               </CardHeader>
               <CardContent>
                 <div className="mb-6">
+                  <span className="text-base text-muted-foreground line-through mr-1.5">₹199</span>
                   <span className="text-4xl font-bold text-foreground">₹99</span>
                   <span className="text-muted-foreground">/mo</span>
                 </div>
@@ -307,7 +357,7 @@ export default function Home() {
               </CardFooter>
             </Card>
 
-            {/* Growth Tier — standard card, no badge */}
+            {/* Growth Tier */}
             <Card className="bg-background border-border shadow-sm relative">
               <CardHeader>
                 <CardTitle className="text-2xl">Growth</CardTitle>
@@ -315,6 +365,7 @@ export default function Home() {
               </CardHeader>
               <CardContent>
                 <div className="mb-6">
+                  <span className="text-base text-muted-foreground line-through mr-1.5">₹399</span>
                   <span className="text-4xl font-bold text-foreground">₹199</span>
                   <span className="text-muted-foreground">/mo</span>
                 </div>
@@ -349,6 +400,7 @@ export default function Home() {
               </CardHeader>
               <CardContent>
                 <div className="mb-6">
+                  <span className="text-base text-muted-foreground line-through mr-1.5">₹599</span>
                   <span className="text-4xl font-bold text-foreground">₹299</span>
                   <span className="text-muted-foreground">/mo</span>
                 </div>
@@ -377,6 +429,93 @@ export default function Home() {
                 <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-12 text-lg" asChild><a href="/app/">Get Started</a></Button>
               </CardFooter>
             </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* LTD Section */}
+      <section className="py-20 bg-gradient-to-br from-primary/5 via-background to-primary/10 border-y border-primary/20">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-3xl mx-auto">
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center gap-2 bg-primary/10 text-primary text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-wider mb-4">
+                <Zap className="w-3.5 h-3.5" />
+                Limited Lifetime Deal
+              </div>
+              <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground mb-3">
+                Pay once. Use forever.
+              </h2>
+              <p className="text-lg text-muted-foreground">
+                Get full Pro-tier access — unlimited products, custom branding, bulk import, data export, priority support — for a single one-time payment. No renewals. No surprises.
+              </p>
+            </div>
+
+            <div className="bg-card border-2 border-primary/30 rounded-2xl shadow-lg overflow-hidden">
+              <div className="bg-primary/8 px-8 py-6 border-b border-primary/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">One-time payment</p>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-5xl font-extrabold text-foreground">₹9,999</span>
+                    <span className="text-muted-foreground line-through text-lg">₹19,999</span>
+                  </div>
+                </div>
+                <div className="text-center sm:text-right">
+                  {ltdStatus ? (
+                    ltdStatus.capReached ? (
+                      <div className="bg-muted rounded-xl px-5 py-3">
+                        <p className="text-sm font-bold text-muted-foreground">Sold Out</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">All 100 lifetime spots claimed</p>
+                      </div>
+                    ) : (
+                      <div className="bg-primary/10 rounded-xl px-5 py-3">
+                        <p className="text-2xl font-extrabold text-primary">{ltdStatus.remaining} left</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">of 100 lifetime spots</p>
+                      </div>
+                    )
+                  ) : (
+                    <div className="bg-primary/10 rounded-xl px-5 py-3 animate-pulse">
+                      <p className="text-2xl font-extrabold text-primary">— left</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">of 100 lifetime spots</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="px-8 py-6">
+                <ul className="grid sm:grid-cols-2 gap-3 mb-8">
+                  {[
+                    "Unlimited products",
+                    "Custom store branding",
+                    "Bulk CSV import",
+                    "Monthly data export",
+                    "Size, color & custom variants",
+                    "Priority WhatsApp support",
+                  ].map((feat) => (
+                    <li key={feat} className="flex items-center gap-2.5 text-sm text-foreground">
+                      <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
+                      {feat}
+                    </li>
+                  ))}
+                </ul>
+
+                {ltdStatus?.capReached ? (
+                  <div className="w-full text-center py-3 rounded-xl bg-muted text-muted-foreground font-semibold text-sm">
+                    Lifetime deal is sold out
+                  </div>
+                ) : (
+                  <Button
+                    size="lg"
+                    className="w-full h-14 text-lg font-bold bg-primary text-primary-foreground hover:bg-primary/90 shadow-md"
+                    asChild
+                  >
+                    <a href={LTD_WA_LINK} target="_blank" rel="noopener noreferrer">
+                      <MessageSquare className="w-5 h-5 mr-2" />
+                      Claim your lifetime deal on WhatsApp
+                    </a>
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </section>

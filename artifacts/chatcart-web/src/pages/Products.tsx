@@ -126,11 +126,7 @@ function ProductsContent() {
                 <div className="flex items-center gap-4 min-w-0">
                   <div className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
                     {product.images?.[0] ? (
-                      <img
-                        src={product.images[0].url}
-                        alt={product.name}
-                        className="w-full h-full object-cover"
-                      />
+                      <ProductThumb url={product.images[0].url} name={product.name} />
                     ) : (
                       <Package className="w-5 h-5 text-slate-300" />
                     )}
@@ -211,5 +207,18 @@ function ProductsContent() {
         )}
       </div>
     </div>
+  );
+}
+
+function ProductThumb({ url, name }: { url: string; name: string }) {
+  const [error, setError] = useState(false);
+  if (error) return <Package className="w-5 h-5 text-slate-300" />;
+  return (
+    <img
+      src={url}
+      alt={name}
+      className="w-full h-full object-cover"
+      onError={() => setError(true)}
+    />
   );
 }
