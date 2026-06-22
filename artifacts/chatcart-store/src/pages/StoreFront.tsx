@@ -5,6 +5,7 @@ import { useCart } from "@/contexts/CartContext";
 import { api, imgSrc, formatPrice, type Seller, type Product, type Category } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import CartSheet from "@/components/CartSheet";
+import { usePageMeta, absImgUrl } from "@/lib/usePageMeta";
 
 export default function StoreFront() {
   const { subdomain } = useParams<{ subdomain: string }>();
@@ -84,6 +85,21 @@ export default function StoreFront() {
   }, [categories, checkTabsScroll]);
 
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+  usePageMeta(
+    seller
+      ? {
+          title: seller.storeName ?? "Chatcart Storefront",
+          description:
+            seller.tagline ?? "Browse our catalog and order on WhatsApp.",
+          ogImage:
+            absImgUrl(seller.bannerImageUrl, imgSrc) ??
+            `${window.location.origin}${BASE}/opengraph.jpg`,
+          ogUrl: `${window.location.origin}${BASE}/${subdomain}`,
+        }
+      : null
+  );
+
   const isSearching = search.trim().length > 0;
 
   const usedCategoryIds = new Set(

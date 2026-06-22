@@ -3,6 +3,7 @@ import { useParams, useLocation } from "wouter";
 import { CheckCircle, MessageCircle, Store, Loader2, X } from "lucide-react";
 import { api, formatPrice, imgSrc, type Order } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { usePageMeta, absImgUrl } from "@/lib/usePageMeta";
 
 function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
   return (
@@ -107,6 +108,23 @@ export default function OrderConfirmation() {
       .catch((err) => setError(err.message ?? "Failed to load order"))
       .finally(() => setLoading(false));
   }, [orderId]);
+
+  const firstItemImg = order?.items[0]?.productImageSnapshot ?? null;
+  const sellerImg = order?.sellerBannerImageUrl ?? null;
+  const ogImgPath = firstItemImg || sellerImg;
+
+  usePageMeta(
+    order
+      ? {
+          title: `Order ${order.id} — ${order.sellerStoreName ?? "Store"}`,
+          description: "View your order details and photos.",
+          ogImage:
+            absImgUrl(ogImgPath, imgSrc) ??
+            `${window.location.origin}${BASE}/opengraph.jpg`,
+          ogUrl: `${window.location.origin}${BASE}/orders/${order.id}`,
+        }
+      : null
+  );
 
   if (loading) {
     return (
