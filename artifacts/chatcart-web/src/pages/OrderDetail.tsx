@@ -139,17 +139,19 @@ function OrderDetailContent() {
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <div className="flex items-center gap-4">
-        <Link
-          href="/orders"
-          className="p-2 rounded-md hover:bg-slate-100 text-slate-500 transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-          Order {order.id}
-        </h1>
-        <div className="ml-auto flex items-center gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <Link
+            href="/orders"
+            className="p-2 rounded-md hover:bg-slate-100 text-slate-500 transition-colors shrink-0"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 truncate">
+            Order {order.id}
+          </h1>
+        </div>
+        <div className="flex items-center gap-3 sm:ml-auto shrink-0">
           <span
             className={`px-3 py-1 rounded-full text-sm font-medium capitalize ${STATUS_STYLES[order.status] ?? "bg-slate-100 text-slate-700"}`}
           >
@@ -160,7 +162,7 @@ function OrderDetailContent() {
             onValueChange={handleStatusChange}
             disabled={updateStatus.isPending}
           >
-            <SelectTrigger className="w-40 h-8 text-sm">
+            <SelectTrigger className="w-36 h-8 text-sm">
               <SelectValue placeholder="Update status" />
             </SelectTrigger>
             <SelectContent>

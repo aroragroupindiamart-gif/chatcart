@@ -102,12 +102,12 @@ function DashboardContent() {
             {stats?.recentOrders && stats.recentOrders.length > 0 ? (
               <div className="space-y-4">
                 {stats.recentOrders.map(order => (
-                  <div key={order.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-100">
-                    <div>
-                      <p className="font-medium text-slate-900">{order.id}</p>
+                  <div key={order.id} className="flex items-center justify-between gap-2 p-4 bg-slate-50 rounded-lg border border-slate-100">
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-900 truncate max-w-[160px] sm:max-w-xs">{order.id}</p>
                       <p className="text-sm text-slate-500">₹{order.totalAmount} • {order.itemCount} items</p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 shrink-0">
                       <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium capitalize
                         ${order.status === 'pending' ? 'bg-amber-100 text-amber-800' : 
                           order.status === 'confirmed' ? 'bg-blue-100 text-blue-800' : 
@@ -115,7 +115,7 @@ function DashboardContent() {
                       >
                         {order.status}
                       </span>
-                      <Link href={`/orders/${order.id}`} className="text-sm font-medium text-primary hover:underline">
+                      <Link href={`/orders/${order.id}`} className="text-sm font-medium text-primary hover:underline shrink-0">
                         View
                       </Link>
                     </div>
