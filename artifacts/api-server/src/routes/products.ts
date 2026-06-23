@@ -5,7 +5,7 @@ import {
   productImagesTable,
   productVariantsTable,
 } from "@workspace/db/schema";
-import { eq, and, ne, asc, desc, ilike, inArray, count } from "drizzle-orm";
+import { eq, and, ne, asc, desc, ilike, inArray, count, or } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
 import { getSellerPlan, getPlanLimits, getPlanDisplayName, requireActiveSubscription } from "../lib/planLimits.js";
 
@@ -64,7 +64,12 @@ router.get("/products", requireAuth, requireActiveSubscription, async (req, res)
       conditions.push(eq(productsTable.status, status as "active" | "out_of_stock" | "hidden"));
     }
     if (search?.trim()) {
-      conditions.push(ilike(productsTable.name, `%${search.trim()}%`));
+      conditions.push(
+        or(
+          ilike(productsTable.name, `%${search.trim()}%`),
+          ilike(productsTable.sku, `%${search.trim()}%`)
+        )!
+      );
     }
 
     const products = await db
@@ -102,6 +107,7 @@ router.post("/products", requireAuth, requireActiveSubscription, async (req, res
   try {
     const body = req.body as {
       name: string;
+      sku?: string;
       description?: string;
       price: number;
       categoryId?: number;
@@ -135,6 +141,7 @@ router.post("/products", requireAuth, requireActiveSubscription, async (req, res
       .values({
         sellerId: req.seller!.sellerId,
         name: body.name.trim(),
+        sku: body.sku?.trim() || null,
         description: body.description,
         price: body.price != null ? String(body.price) : undefined,
         categoryId: body.categoryId ?? null,
@@ -222,6 +229,7 @@ router.patch("/products/:productId", requireAuth, requireActiveSubscription, asy
     const productId = parseInt(String(req.params.productId));
     const body = req.body as {
       name?: string;
+      sku?: string;
       description?: string;
       price?: number;
       categoryId?: number | null;
@@ -250,6 +258,7 @@ router.patch("/products/:productId", requireAuth, requireActiveSubscription, asy
       updatedAt: new Date(),
     };
     if (body.name !== undefined) updates.name = body.name.trim();
+    if (body.sku !== undefined) updates.sku = body.sku.trim() || null;
     if (body.description !== undefined) updates.description = body.description;
     if (body.price !== undefined) updates.price = String(body.price);
     if (body.categoryId !== undefined) updates.categoryId = body.categoryId;

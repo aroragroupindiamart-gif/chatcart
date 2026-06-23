@@ -29,6 +29,7 @@ export const productsTable = pgTable("products", {
     onDelete: "set null",
   }),
   name: text("name").notNull(),
+  sku: text("sku"),
   description: text("description"),
   price: numeric("price", { precision: 12, scale: 2 }),
   status: productStatusEnum("status").default("active").notNull(),

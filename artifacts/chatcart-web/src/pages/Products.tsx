@@ -135,6 +135,11 @@ function ProductsContent() {
                     <h3 className="font-medium text-slate-900 truncate">
                       {product.name}
                     </h3>
+                    {product.sku && (
+                      <p className="text-xs text-slate-400 truncate mt-0.5">
+                        SKU: {product.sku}
+                      </p>
+                    )}
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                       <span className="font-bold text-slate-900 text-sm">
                         ₹{product.price}

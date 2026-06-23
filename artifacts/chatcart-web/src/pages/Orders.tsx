@@ -30,11 +30,11 @@ function OrdersContent() {
         ) : data?.orders && data.orders.length > 0 ? (
           <div className="divide-y divide-slate-100">
             {data.orders.map((order) => (
-              <div key={order.id} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
-                <div>
-                  <div className="flex items-center gap-3 mb-1">
-                    <h3 className="font-bold text-slate-900">{order.id}</h3>
-                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium capitalize
+              <div key={order.id} className="p-4 flex items-start justify-between gap-2 hover:bg-slate-50 transition-colors">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                    <h3 className="font-bold text-slate-900 truncate max-w-[160px] sm:max-w-xs">{order.id}</h3>
+                    <span className={`shrink-0 px-2 py-0.5 rounded-full text-xs font-medium capitalize
                       ${order.status === 'pending' ? 'bg-amber-100 text-amber-800' : 
                         order.status === 'confirmed' ? 'bg-blue-100 text-blue-800' : 
                         'bg-green-100 text-green-800'}`}
@@ -42,18 +42,19 @@ function OrdersContent() {
                       {order.status}
                     </span>
                   </div>
-                  <p className="text-sm text-slate-500">
+                  <p className="text-xs text-slate-500 truncate">
                     {new Date(order.createdAt).toLocaleDateString()} • {order.customerContact || "Unknown"}
                   </p>
                 </div>
-                
-                <div className="flex items-center gap-6">
+
+                <div className="flex items-center gap-3 shrink-0">
                   <div className="text-right">
-                    <p className="font-bold text-slate-900">₹{order.totalAmount}</p>
+                    <p className="font-bold text-slate-900 text-sm">₹{order.totalAmount}</p>
                     <p className="text-xs text-slate-500">{order.itemCount} items</p>
                   </div>
-                  <Link href={`/orders/${order.id}`} className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2">
-                    View Details
+                  <Link href={`/orders/${order.id}`} className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-9 px-3 py-2">
+                    <span className="sm:hidden">View</span>
+                    <span className="hidden sm:inline">View Details</span>
                   </Link>
                 </div>
               </div>

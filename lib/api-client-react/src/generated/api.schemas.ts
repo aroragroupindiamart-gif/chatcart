@@ -127,6 +127,7 @@ export interface ProductVariant {
 export interface Product {
   id: number;
   name: string;
+  sku?: string;
   description?: string;
   /** Price in INR */
   price: number;
@@ -144,6 +145,7 @@ export interface Product {
 
 export interface CreateProductRequest {
   name: string;
+  sku?: string;
   description?: string;
   price: number;
   categoryId?: number;
@@ -152,6 +154,7 @@ export interface CreateProductRequest {
 
 export interface UpdateProductRequest {
   name?: string;
+  sku?: string;
   description?: string;
   price?: number;
   categoryId?: number;

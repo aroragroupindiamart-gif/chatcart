@@ -13,6 +13,7 @@ import {
   useDeleteProductImage,
   useReorderProductImages,
   RequestUploadUrlBodyContentType,
+  listProducts,
 } from "@workspace/api-client-react";
 import { useLocation, useParams } from "wouter";
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -268,6 +269,7 @@ function ProductDetailContent() {
   orderedImagesRef.current = orderedImages;
 
   const [name, setName] = useState("");
+  const [sku, setSku] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [stockCount, setStockCount] = useState("");
@@ -278,6 +280,7 @@ function ProductDetailContent() {
   useEffect(() => {
     if (product && !isNew) {
       setName(product.name);
+      setSku(product.sku || "");
       setDescription(product.description || "");
       setPrice(product.price != null ? product.price.toString() : "");
       setStockCount(product.stockCount.toString());
@@ -463,12 +466,32 @@ function ProductDetailContent() {
     const resolvedCategoryId =
       categoryId && categoryId !== "unassigned" ? Number(categoryId) : null;
     const resolvedPrice = price.trim() !== "" ? Number(price) : undefined;
+    const resolvedSku = sku.trim() || undefined;
+
+    // Soft SKU uniqueness check
+    if (resolvedSku) {
+      try {
+        const existing = await listProducts({ search: resolvedSku });
+        const duplicate = existing?.find(
+          (p) => p.sku?.toLowerCase() === resolvedSku.toLowerCase() && p.id !== productId
+        );
+        if (duplicate) {
+          const proceed = window.confirm(
+            `This SKU is already used by "${duplicate.name}" — save anyway?`
+          );
+          if (!proceed) return;
+        }
+      } catch {
+        // Non-blocking — proceed if the check fails
+      }
+    }
 
     try {
       if (isNew) {
         const newProduct = await createProduct.mutateAsync({
           data: {
             name,
+            sku: resolvedSku,
             description: description || undefined,
             price: resolvedPrice ?? 0,
             stockCount: Number(stockCount) || 0,
@@ -508,6 +531,7 @@ function ProductDetailContent() {
           productId,
           data: {
             name,
+            sku: resolvedSku ?? "",
             description,
             price: resolvedPrice,
             stockCount: Number(stockCount) || 0,
@@ -967,6 +991,23 @@ function ProductDetailContent() {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          {/* SKU — internal only */}
+          <div className="space-y-2">
+            <Label>
+              SKU{" "}
+              <span className="text-slate-400 font-normal">(optional — internal, never shown to customers)</span>
+            </Label>
+            <Input
+              value={sku}
+              onChange={(e) => setSku(e.target.value)}
+              placeholder="e.g. RING-014"
+              className="font-mono"
+            />
+            <p className="text-xs text-slate-400">
+              Your internal reference code for this item. Only visible to you in the dashboard.
+            </p>
           </div>
 
           {/* Status (edit only) */}
