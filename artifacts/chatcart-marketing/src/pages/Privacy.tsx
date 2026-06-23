@@ -2,13 +2,6 @@ export default function Privacy() {
   return (
     <div className="min-h-screen bg-background py-24">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-3xl">
-        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 p-4 rounded-lg mb-12 flex gap-3 items-start">
-          <span className="text-xl leading-none">⚠️</span>
-          <p className="text-sm font-medium">
-            This document has been AI-generated and has not been reviewed by a lawyer. It should not be treated as legally vetted. Please consult a qualified legal professional before relying on these terms.
-          </p>
-        </div>
-
         <h1 className="text-4xl font-extrabold tracking-tight text-foreground mb-4">Privacy Policy</h1>
         <p className="text-sm text-muted-foreground mb-8">Last updated: June 2026</p>
 
