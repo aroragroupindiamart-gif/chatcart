@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { CheckCircle, MessageCircle, Store, Loader2, X } from "lucide-react";
 import { api, formatPrice, imgSrc, type Order } from "@/lib/api";
@@ -89,6 +89,7 @@ export default function OrderConfirmation() {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const autoTriggered = useRef(false);
 
   useEffect(() => {
     const meta = document.createElement("meta");
@@ -108,6 +109,21 @@ export default function OrderConfirmation() {
       .catch((err) => setError(err.message ?? "Failed to load order"))
       .finally(() => setLoading(false));
   }, [orderId]);
+
+  useEffect(() => {
+    if (!order || autoTriggered.current) return;
+    const phone = normalizePhone(order.sellerWhatsappNumber);
+    if (!phone) return;
+    autoTriggered.current = true;
+    const orderUrl = `${window.location.origin}${BASE}/orders/${order.id}`;
+    const waText = buildWhatsAppText(order, orderUrl);
+    const url = `https://wa.me/${phone}?text=${encodeURIComponent(waText)}`;
+    try {
+      window.location.href = url;
+    } catch {
+      // silently ignored — manual button remains the fallback
+    }
+  }, [order, BASE]);
 
   const firstItemImg = order?.items[0]?.productImageSnapshot ?? null;
   const sellerImg = order?.sellerBannerImageUrl ?? null;
