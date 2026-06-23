@@ -124,6 +124,7 @@ export default function CheckoutPage({ seller, onBack }: CheckoutPageProps) {
         items: orderItems,
       });
       clearCart();
+      sessionStorage.setItem(`chatcart_fresh_order_${order.id}`, "1");
       navigate(`/orders/${order.id}`);
     } catch (err) {
       setError(

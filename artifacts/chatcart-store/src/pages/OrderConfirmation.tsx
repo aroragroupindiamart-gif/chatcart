@@ -112,6 +112,10 @@ export default function OrderConfirmation() {
 
   useEffect(() => {
     if (!order || autoTriggered.current) return;
+    const flagKey = `chatcart_fresh_order_${order.id}`;
+    const isFresh = sessionStorage.getItem(flagKey) === "1";
+    if (!isFresh) return;
+    sessionStorage.removeItem(flagKey);
     const phone = normalizePhone(order.sellerWhatsappNumber);
     if (!phone) return;
     autoTriggered.current = true;
