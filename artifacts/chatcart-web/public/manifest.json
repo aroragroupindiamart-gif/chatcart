@@ -1,0 +1,25 @@
+{
+  "name": "Chatcart Seller",
+  "short_name": "Chatcart",
+  "description": "Manage your Chatcart store — products, orders, and settings.",
+  "start_url": "/app/",
+  "scope": "/app/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#1A9E4A",
+  "background_color": "#f8fafc",
+  "icons": [
+    {
+      "src": "/app/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/app/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

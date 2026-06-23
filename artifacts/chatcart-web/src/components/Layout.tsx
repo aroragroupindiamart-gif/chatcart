@@ -2,6 +2,7 @@ import { Link, useLocation } from "wouter";
 import { useLogout, useGetMe } from "@workspace/api-client-react";
 import { removeToken } from "@/lib/auth";
 import { LtdBanner } from "@/components/LtdBanner";
+import { InstallPrompt } from "@/components/InstallPrompt";
 import {
   LayoutDashboard,
   Package,
@@ -136,6 +137,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           );
         })}
       </nav>
+
+      {/* PWA install prompt (Android & iOS) */}
+      <InstallPrompt />
     </div>
   );
 }
