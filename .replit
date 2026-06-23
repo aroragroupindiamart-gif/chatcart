@@ -49,3 +49,8 @@ externalPort = 3002
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+MSG91_SENDER_ID = "AROGRP"

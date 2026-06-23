@@ -155,7 +155,7 @@ router.post("/auth/send-otp", async (req, res) => {
     await recordSendOtp(normalizedPhone);
     await clearVerifyState(normalizedPhone);
 
-    console.log(`[OTP] Phone: ${normalizedPhone} — Code: ${code}`);
+    console.log(`[OTP] Sent to ${normalizedPhone}`);
 
     res.json({ success: true, message: "OTP sent", remainingSends: remaining - 1 });
   } catch (err) {
