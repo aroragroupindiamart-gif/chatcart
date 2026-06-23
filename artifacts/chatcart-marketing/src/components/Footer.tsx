@@ -45,7 +45,12 @@ export function Footer() {
         
         <div className="mt-12 pt-8 border-t border-border flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} Chatcart. All rights reserved.
+            © {new Date().getFullYear()} Chatcart — operated by{" "}
+            <span className="font-medium text-foreground">ARORA GROUP</span>.
+            All rights reserved.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Chatcart is a product of ARORA GROUP.
           </p>
         </div>
       </div>

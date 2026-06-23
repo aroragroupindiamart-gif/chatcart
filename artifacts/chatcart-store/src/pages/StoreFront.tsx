@@ -293,6 +293,22 @@ export default function StoreFront() {
         )}
       </main>
 
+      <footer className="max-w-3xl mx-auto px-4 py-6 mt-4 border-t border-border/40 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-muted-foreground">
+          Powered by{" "}
+          <a href="https://chatcart.in" target="_blank" rel="noopener noreferrer" className="hover:underline font-medium text-foreground/70">
+            Chatcart
+          </a>
+          {" "}· ARORA GROUP
+        </p>
+        <div className="flex gap-4 text-xs text-muted-foreground">
+          <a href="https://chatcart.in/about" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">About</a>
+          <a href="https://chatcart.in/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Privacy</a>
+          <a href="https://chatcart.in/terms" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Terms</a>
+          <a href="https://chatcart.in/disclaimer" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Disclaimer</a>
+        </div>
+      </footer>
+
       <CartSheet open={cartOpen} onClose={() => setCartOpen(false)} seller={seller} />
     </div>
   );

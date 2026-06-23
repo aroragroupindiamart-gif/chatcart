@@ -13,51 +13,67 @@ export default function About() {
             <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-foreground mb-8">
               Why we built Chatcart
             </h1>
-            
+
             <div className="prose prose-lg prose-slate dark:prose-invert max-w-none text-foreground/90 space-y-6">
               <p className="text-xl font-medium leading-relaxed">
                 I ran a wholesale jewelry business. Every day, my livelihood depended on WhatsApp. It was where my customers were, where they wanted to see new designs, and where they placed their bulk orders.
               </p>
-              
+
               <p>
                 Naturally, I used the built-in WhatsApp Business catalog. At first, it seemed like the perfect solution. But as my inventory grew, it turned into a daily nightmare.
               </p>
-              
+
               <p>
                 <strong>The bugs were maddening.</strong>
               </p>
-              
+
               <p>
-                The worst one: products would randomly vanish. I’d upload a hot new necklace set, share the link, and a customer would message me: <em>"Bhaiya, the link is empty."</em> I’d check the catalog, and the product was just gone. No warning. No error message. Just deleted by some hidden automated system. This usually happened right before a big festive season when I needed it the most. I lost real money to this.
+                The worst one: products would randomly vanish. I'd upload a hot new necklace set, share the link, and a customer would message me: <em>"Bhaiya, the link is empty."</em> I'd check the catalog, and the product was just gone. No warning. No error message. Just deleted by some hidden automated system. This usually happened right before a big festive season when I needed it the most. I lost real money to this.
               </p>
-              
+
               <p>
                 Then there was the lack of search. When a retailer asked for "polki bangles under ₹500", I couldn't just send them a link. There was no search bar in the catalog. They had to scroll past hundreds of rings and earrings to find what they wanted. Mostly, they just gave up, and I had to manually send 20 photos in a chat. It defeated the whole purpose of having a catalog.
               </p>
-              
+
               <p>
                 And sorting? Forget about it. WhatsApp ordered things however it pleased. I couldn't put my highest-margin items at the top. I couldn't group things logically. It was a mess.
               </p>
-              
+
               <p>
                 I looked for alternatives. But every "ecommerce builder" out there wanted me to force my customers to download an app, create an account, or navigate a clunky web checkout. My buyers didn't want that. They wanted to see photos and text me their order. That was it.
               </p>
-              
+
               <p>
                 So I stopped waiting for WhatsApp to fix their bugs, and I built Chatcart.
               </p>
-              
+
               <p>
-                It’s not trying to be the next Amazon. It’s exactly what the WhatsApp catalog should have been: a fast, reliable place to display your products, with rock-solid search, custom sorting, and a checkout that just drops a perfectly formatted message right into your WhatsApp chat.
+                It's not trying to be the next Amazon. It's exactly what the WhatsApp catalog should have been: a fast, reliable place to display your products, with rock-solid search, custom sorting, and a checkout that just drops a perfectly formatted message right into your WhatsApp chat.
               </p>
-              
+
               <p>
                 No vanishing products. No frustrated buyers. Just clean, frictionless ordering.
               </p>
-              
+
               <p className="font-semibold text-lg mt-8">
-                If you sell on WhatsApp, give it a try. It’s the tool I wish I had five years ago.
+                If you sell on WhatsApp, give it a try. It's the tool I wish I had five years ago.
               </p>
+
+              <div className="mt-12 pt-8 border-t border-border">
+                <h2 className="text-2xl font-bold text-foreground mb-4">About the Company</h2>
+                <p>
+                  Chatcart is a product of <strong>ARORA GROUP</strong> — a wholesale and retail trading business based in India. ARORA GROUP operates across multiple product categories and developed Chatcart to solve the real ordering challenges it faced in its own wholesale operations.
+                </p>
+                <p className="mt-4">
+                  The platform is built and maintained by ARORA GROUP and made available to other merchants who face the same WhatsApp ordering challenges.
+                </p>
+                <div className="mt-6 bg-muted rounded-lg px-6 py-4 border border-border text-sm text-muted-foreground">
+                  <strong className="text-foreground">ARORA GROUP</strong><br />
+                  Operating entity for Chatcart<br />
+                  Website: <a href="https://chatcart.in" className="text-primary hover:underline">chatcart.in</a><br />
+                  Contact: <a href="mailto:hello@chatcart.in" className="text-primary hover:underline">hello@chatcart.in</a>
+                </div>
+              </div>
             </div>
           </motion.div>
         </div>

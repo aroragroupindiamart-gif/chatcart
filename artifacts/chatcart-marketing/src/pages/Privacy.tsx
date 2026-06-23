@@ -9,7 +9,15 @@ export default function Privacy() {
           </p>
         </div>
 
-        <h1 className="text-4xl font-extrabold tracking-tight text-foreground mb-8">Privacy Policy</h1>
+        <h1 className="text-4xl font-extrabold tracking-tight text-foreground mb-4">Privacy Policy</h1>
+        <p className="text-sm text-muted-foreground mb-8">Last updated: June 2026</p>
+
+        <div className="bg-muted border border-border rounded-lg px-6 py-4 mb-8">
+          <p className="text-sm text-foreground">
+            <strong>Operated by:</strong> ARORA GROUP<br />
+            Chatcart is a product of ARORA GROUP. References to "Chatcart", "we", "us", or "our" in this policy refer to ARORA GROUP operating the Chatcart platform.
+          </p>
+        </div>
         
         <div className="prose prose-slate dark:prose-invert max-w-none text-muted-foreground space-y-6">
           <section>

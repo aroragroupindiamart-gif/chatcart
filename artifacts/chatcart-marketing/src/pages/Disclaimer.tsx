@@ -2,11 +2,19 @@ export default function Disclaimer() {
   return (
     <div className="min-h-screen bg-background py-24">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-3xl">
-        <h1 className="text-4xl font-extrabold tracking-tight text-foreground mb-8">Disclaimer</h1>
+        <h1 className="text-4xl font-extrabold tracking-tight text-foreground mb-4">Disclaimer</h1>
+        <p className="text-sm text-muted-foreground mb-8">Last updated: June 2026</p>
+
+        <div className="bg-muted border border-border rounded-lg px-6 py-4 mb-8">
+          <p className="text-sm text-foreground">
+            <strong>Operated by:</strong> ARORA GROUP<br />
+            Chatcart is a product of ARORA GROUP. All references to "Chatcart" in this document refer to the Chatcart platform operated by ARORA GROUP.
+          </p>
+        </div>
         
         <div className="prose prose-slate dark:prose-invert max-w-none text-muted-foreground space-y-6">
           <p className="text-lg leading-relaxed font-medium text-foreground">
-            Chatcart provides a software platform that enables sellers to create product catalogs and facilitates communication of orders via WhatsApp. 
+            Chatcart provides a software platform that enables sellers to create product catalogs and facilitates communication of orders via WhatsApp.
           </p>
 
           <div className="bg-muted p-6 rounded-lg border border-border mt-8">

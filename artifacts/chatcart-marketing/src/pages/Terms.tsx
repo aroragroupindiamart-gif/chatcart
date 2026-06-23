@@ -9,7 +9,15 @@ export default function Terms() {
           </p>
         </div>
 
-        <h1 className="text-4xl font-extrabold tracking-tight text-foreground mb-8">Terms & Conditions</h1>
+        <h1 className="text-4xl font-extrabold tracking-tight text-foreground mb-4">Terms & Conditions</h1>
+        <p className="text-sm text-muted-foreground mb-8">Last updated: June 2026</p>
+
+        <div className="bg-muted border border-border rounded-lg px-6 py-4 mb-8">
+          <p className="text-sm text-foreground">
+            <strong>Operated by:</strong> ARORA GROUP<br />
+            Chatcart is a product of ARORA GROUP. By using Chatcart, you are entering into an agreement with ARORA GROUP as the operating entity of this platform.
+          </p>
+        </div>
         
         <div className="prose prose-slate dark:prose-invert max-w-none text-muted-foreground space-y-6">
           <section>
