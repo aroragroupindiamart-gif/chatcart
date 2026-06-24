@@ -4,7 +4,6 @@ const MSG91_SENDER_ID = process.env.MSG91_SENDER_ID;
 
 const isDev = process.env.NODE_ENV !== "production";
 
-console.log(`[SMS-INIT] AUTH_KEY=${MSG91_AUTH_KEY ? "set(" + MSG91_AUTH_KEY.length + "chars)" : "MISSING"} TEMPLATE_ID=${MSG91_TEMPLATE_ID ? "set(" + MSG91_TEMPLATE_ID.length + "chars)" : "MISSING"} SENDER_ID=${MSG91_SENDER_ID ? "set(" + MSG91_SENDER_ID.length + "chars)" : "MISSING"} isDev=${isDev}`);
 
 export async function sendOtp(phone: string, otp: string): Promise<void> {
   const configured = MSG91_AUTH_KEY && MSG91_TEMPLATE_ID && MSG91_SENDER_ID;
@@ -22,19 +21,16 @@ export async function sendOtp(phone: string, otp: string): Promise<void> {
   const url = `https://api.msg91.com/api/v5/otp?template_id=${encodeURIComponent(MSG91_TEMPLATE_ID!)}&mobile=${encodeURIComponent(mobile)}&authkey=${encodeURIComponent(MSG91_AUTH_KEY!)}&sender=${encodeURIComponent(MSG91_SENDER_ID!)}&otp=${encodeURIComponent(otp)}`;
 
   const response = await fetch(url, { method: "POST" });
-  const rawBody = await response.text().catch(() => "(unreadable)");
-
-  console.log(`[MSG91] status=${response.status} body=${rawBody}`);
 
   if (!response.ok) {
-    throw new Error(`MSG91 API error ${response.status}: ${rawBody}`);
+    const body = await response.text().catch(() => "(no body)");
+    throw new Error(`MSG91 API error ${response.status}: ${body}`);
   }
 
-  let data: any = null;
-  try { data = JSON.parse(rawBody); } catch {}
+  const data = await response.json().catch(() => null);
 
   if (data && data.type === "error") {
-    throw new Error(`MSG91 error: ${data.message ?? rawBody}`);
+    throw new Error(`MSG91 error: ${data.message ?? JSON.stringify(data)}`);
   }
 
   console.log(`[OTP] Sent to ${phone} via MSG91`);
