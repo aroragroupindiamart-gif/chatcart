@@ -4,6 +4,8 @@ const MSG91_SENDER_ID = process.env.MSG91_SENDER_ID;
 
 const isDev = process.env.NODE_ENV !== "production";
 
+console.log(`[SMS-INIT] AUTH_KEY=${MSG91_AUTH_KEY ? "set(" + MSG91_AUTH_KEY.length + "chars)" : "MISSING"} TEMPLATE_ID=${MSG91_TEMPLATE_ID ? "set(" + MSG91_TEMPLATE_ID.length + "chars)" : "MISSING"} SENDER_ID=${MSG91_SENDER_ID ? "set(" + MSG91_SENDER_ID.length + "chars)" : "MISSING"} isDev=${isDev}`);
+
 export async function sendOtp(phone: string, otp: string): Promise<void> {
   const configured = MSG91_AUTH_KEY && MSG91_TEMPLATE_ID && MSG91_SENDER_ID;
 
