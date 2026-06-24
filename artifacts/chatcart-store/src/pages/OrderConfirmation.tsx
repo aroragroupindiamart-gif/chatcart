@@ -129,18 +129,12 @@ export default function OrderConfirmation() {
     }
   }, [order, BASE]);
 
-  const firstItemImg = order?.items[0]?.productImageSnapshot ?? null;
-  const sellerImg = order?.sellerBannerImageUrl ?? null;
-  const ogImgPath = firstItemImg || sellerImg;
-
   usePageMeta(
     order
       ? {
-          title: `Order ${order.id} — ${order.sellerStoreName ?? "Store"}`,
-          description: "View your order details and photos.",
-          ogImage:
-            absImgUrl(ogImgPath, imgSrc) ??
-            `${window.location.origin}${BASE}/opengraph.jpg`,
+          title: "Chatcart Order Confirmation",
+          description: "Tap to view your order details and photos.",
+          ogImage: "https://chatcart.in/store/opengraph.jpg",
           ogUrl: `${window.location.origin}${BASE}/orders/${order.id}`,
         }
       : null
