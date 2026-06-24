@@ -20,16 +20,19 @@ export async function sendOtp(phone: string, otp: string): Promise<void> {
   const url = `https://api.msg91.com/api/v5/otp?template_id=${encodeURIComponent(MSG91_TEMPLATE_ID!)}&mobile=${encodeURIComponent(mobile)}&authkey=${encodeURIComponent(MSG91_AUTH_KEY!)}&sender=${encodeURIComponent(MSG91_SENDER_ID!)}&otp=${encodeURIComponent(otp)}`;
 
   const response = await fetch(url, { method: "POST" });
+  const rawBody = await response.text().catch(() => "(unreadable)");
+
+  console.log(`[MSG91] status=${response.status} body=${rawBody}`);
 
   if (!response.ok) {
-    const body = await response.text().catch(() => "(no body)");
-    throw new Error(`MSG91 API error ${response.status}: ${body}`);
+    throw new Error(`MSG91 API error ${response.status}: ${rawBody}`);
   }
 
-  const data = await response.json().catch(() => null);
+  let data: any = null;
+  try { data = JSON.parse(rawBody); } catch {}
 
   if (data && data.type === "error") {
-    throw new Error(`MSG91 error: ${data.message ?? JSON.stringify(data)}`);
+    throw new Error(`MSG91 error: ${data.message ?? rawBody}`);
   }
 
   console.log(`[OTP] Sent to ${phone} via MSG91`);
