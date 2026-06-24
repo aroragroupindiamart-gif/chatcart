@@ -152,6 +152,7 @@ router.post("/auth/send-otp", async (req, res) => {
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     await db.insert(otpCodesTable).values({ phone: normalizedPhone, code, expiresAt });
+    await sendOtp(normalizedPhone, code);
     await recordSendOtp(normalizedPhone);
     await clearVerifyState(normalizedPhone);
 
