@@ -87,6 +87,7 @@ router.get("/public/sellers/:subdomain", async (req, res) => {
         whatsappNumber: sellersTable.whatsappNumber,
         bannerImageUrl: sellersTable.bannerImageUrl,
         tagline: sellersTable.tagline,
+        plan: sellersTable.subscriptionPlan,
       })
       .from(sellersTable)
       .where(eq(sellersTable.subdomain, subdomain))

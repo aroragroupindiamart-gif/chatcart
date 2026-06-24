@@ -346,6 +346,15 @@ function SettingsContent() {
                 </a>
               )}
             </div>
+            <div className="rounded-lg bg-slate-50 p-4">
+              <p className="text-xs text-slate-500 mb-1">Storefront branding</p>
+              <p className={`text-sm font-bold ${planColor(planName)}`}>
+                {isPro ? "Hidden (white-label)" : "\"Powered by Chatcart\""}
+              </p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {isPro ? "Your storefront has no Chatcart branding" : "Removed on Pro plan"}
+              </p>
+            </div>
           </div>
         </CardContent>
         {!isPro && (

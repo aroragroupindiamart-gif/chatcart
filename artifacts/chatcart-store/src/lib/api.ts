@@ -5,6 +5,7 @@ export interface Seller {
   whatsappNumber: string | null;
   bannerImageUrl: string | null;
   tagline: string | null;
+  plan: string | null;
 }
 
 export interface ProductImage {

@@ -415,6 +415,9 @@ export default function Home() {
                     <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Custom store branding (logo + tagline)
                   </li>
                   <li className="flex items-center gap-3 text-sm font-medium text-foreground">
+                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Remove "Powered by Chatcart" branding
+                  </li>
+                  <li className="flex items-center gap-3 text-sm font-medium text-foreground">
                     <CheckCircle2 className="w-4 h-4 text-primary shrink-0" /> Bulk CSV import
                   </li>
                   <li className="flex items-center gap-3 text-sm font-medium text-foreground">
