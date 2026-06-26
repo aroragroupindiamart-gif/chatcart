@@ -251,12 +251,20 @@ router.post("/admin/wa/leads", requireAdminAuth, async (req, res) => {
     const [seq] = await db.select({ id: waSequencesTable.id }).from(waSequencesTable).where(eq(waSequencesTable.id, sequenceId)).limit(1);
     if (!seq) { res.status(404).json({ error: "Sequence not found" }); return; }
 
+    // Verify all sellerIds actually correspond to pending sellers (server-side enforcement)
+    const validPendingSellers = await db
+      .select({ id: sellersTable.id })
+      .from(sellersTable)
+      .where(and(inArray(sellersTable.id, sellerIds), eq(sellersTable.subscriptionPlan, "pending" as any)));
+    const validIds = validPendingSellers.map((s) => s.id);
+    if (validIds.length === 0) { res.status(400).json({ error: "No pending sellers found in the provided IDs" }); return; }
+
     const existing = await db
       .select({ sellerId: waCampaignLeadsTable.sellerId })
       .from(waCampaignLeadsTable)
-      .where(and(eq(waCampaignLeadsTable.sequenceId, sequenceId), inArray(waCampaignLeadsTable.sellerId, sellerIds)));
+      .where(and(eq(waCampaignLeadsTable.sequenceId, sequenceId), inArray(waCampaignLeadsTable.sellerId, validIds)));
     const existingIds = new Set(existing.map((e) => e.sellerId));
-    const newSellerIds = sellerIds.filter((id) => !existingIds.has(id));
+    const newSellerIds = validIds.filter((id) => !existingIds.has(id));
 
     if (newSellerIds.length === 0) { res.status(400).json({ error: "All selected sellers are already in this sequence" }); return; }
 
