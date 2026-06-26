@@ -15,6 +15,12 @@ import { AlertTriangle, Store, Package, ShoppingCart, Calendar, Phone, Globe, Cr
 import { useToast } from '@/hooks/use-toast';
 import { EnrollInSequenceModal } from '@/components/EnrollInSequenceModal';
 
+function formatOffset(hourOffset: number): string {
+  if (hourOffset === 0) return 'Now';
+  if (hourOffset <= 48) return `${hourOffset}h`;
+  return `Day ${Math.round(hourOffset / 24)}`;
+}
+
 function WALeadStatusBadge({ status }: { status: string }) {
   if (status === 'active') return <Badge className="bg-green-100 text-green-800 border border-green-200 hover:bg-green-100 gap-1 text-xs"><CheckCircle2 className="w-3 h-3" />Active</Badge>;
   if (status === 'paused_no_reply') return <Badge className="bg-amber-100 text-amber-800 border border-amber-200 hover:bg-amber-100 gap-1 text-xs"><PauseCircle className="w-3 h-3" />Paused (no reply)</Badge>;
@@ -340,7 +346,7 @@ export default function SellerDetail() {
                         <div className="min-w-0">
                           <div className="font-medium text-sm truncate">{lead.sequenceName}</div>
                           <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-3">
-                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{lead.currentHourOffset < 0 ? 'Not started' : `${lead.currentHourOffset}h`}</span>
+                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{lead.currentHourOffset < 0 ? 'Not started' : formatOffset(lead.currentHourOffset)}</span>
                             {lead.lastSentAt && <span>Last sent {new Date(lead.lastSentAt).toLocaleDateString()}</span>}
                             <span>Enrolled {new Date(lead.createdAt).toLocaleDateString()}</span>
                           </div>

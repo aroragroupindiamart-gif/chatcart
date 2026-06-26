@@ -151,6 +151,12 @@ function fmtRelative(d: string | null) {
   return fmtDate(d);
 }
 
+function formatOffset(hourOffset: number): string {
+  if (hourOffset === 0) return 'Now';
+  if (hourOffset <= 48) return `${hourOffset}h`;
+  return `Day ${Math.round(hourOffset / 24)}`;
+}
+
 function StatusBadge({ status }: { status: CampaignLead['status'] }) {
   const map = {
     active: { label: 'Active', color: 'bg-green-100 text-green-800' },
@@ -437,7 +443,7 @@ function SequencesTab() {
               <div className="space-y-2">
                 {seq.steps.map((step) => (
                   <div key={step.id ?? step.hourOffset} className="flex gap-3 text-sm">
-                    <span className="shrink-0 w-14 text-muted-foreground font-medium pt-0.5">{step.hourOffset === 0 ? 'Now' : `${step.hourOffset}h`}</span>
+                    <span className="shrink-0 w-14 text-muted-foreground font-medium pt-0.5">{formatOffset(step.hourOffset)}</span>
                     <div className="flex-1 min-w-0">
                       <span className="text-foreground/80 whitespace-pre-wrap leading-relaxed">{step.message}</span>
                       {step.mediaType && (
@@ -471,6 +477,7 @@ interface StepDraft {
   _uploading?: boolean;
   _uploadError?: string;
   _sizeWarning?: string;
+  _unit?: 'hours' | 'days';
 }
 
 function MediaTypeIcon({ type }: { type: string }) {
@@ -483,7 +490,7 @@ function CreateSequenceForm({ onSuccess }: { onSuccess: () => void }) {
   const { toast } = useToast();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [steps, setSteps] = useState<StepDraft[]>([{ hourOffset: 0, message: '' }]);
+  const [steps, setSteps] = useState<StepDraft[]>([{ hourOffset: 0, message: '', _unit: 'hours' }]);
   const fileInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const createMut = useMutation({
@@ -498,7 +505,8 @@ function CreateSequenceForm({ onSuccess }: { onSuccess: () => void }) {
 
   const addStep = () => {
     const lastOffset = steps[steps.length - 1]?.hourOffset ?? 0;
-    setSteps((s) => [...s, { hourOffset: lastOffset + 6, message: '' }]);
+    const nextOffset = lastOffset + 6;
+    setSteps((s) => [...s, { hourOffset: nextOffset, message: '', _unit: nextOffset > 48 ? 'days' : 'hours' }]);
   };
 
   const removeStep = (idx: number) =>
@@ -626,17 +634,41 @@ function CreateSequenceForm({ onSuccess }: { onSuccess: () => void }) {
                   <ArrowDown className="w-3 h-3" />
                 </button>
               </div>
-              <div className="flex items-center gap-1.5 flex-1">
-                <Label className="text-sm font-semibold shrink-0">Hours after enrolment</Label>
+              <div className="flex items-center gap-1.5 flex-1 flex-wrap">
+                <Label className="text-sm font-semibold shrink-0">Send after</Label>
                 <Input
                   type="number"
                   min={0}
-                  max={720}
-                  className="w-24 h-8 text-sm"
-                  value={step.hourOffset}
-                  onChange={(e) => updateStep(idx, { hourOffset: Math.max(0, parseInt(e.target.value) || 0) })}
+                  className="w-20 h-8 text-sm"
+                  value={step._unit === 'days' ? Math.round(step.hourOffset / 24) || 1 : step.hourOffset}
+                  onChange={(e) => {
+                    const val = Math.max(0, parseInt(e.target.value) || 0);
+                    updateStep(idx, { hourOffset: step._unit === 'days' ? val * 24 : val });
+                  }}
                 />
-                <span className="text-xs text-muted-foreground shrink-0">{step.hourOffset === 0 ? 'immediate' : step.hourOffset === 1 ? '1 hr' : `${step.hourOffset} hrs`}</span>
+                <select
+                  className="h-8 text-sm border rounded-md px-2 bg-background"
+                  value={step._unit ?? 'hours'}
+                  onChange={(e) => {
+                    const unit = e.target.value as 'hours' | 'days';
+                    if (unit === 'days') {
+                      const days = Math.max(1, Math.round(step.hourOffset / 24));
+                      updateStep(idx, { _unit: 'days', hourOffset: days * 24 });
+                    } else {
+                      const hours = Math.min(48, step.hourOffset);
+                      updateStep(idx, { _unit: 'hours', hourOffset: hours });
+                    }
+                  }}
+                >
+                  <option value="hours">Hours</option>
+                  <option value="days">Days</option>
+                </select>
+                {step._unit === 'days' && (
+                  <span className="text-xs text-muted-foreground shrink-0">= {step.hourOffset}h total</span>
+                )}
+                {step._unit !== 'days' && step.hourOffset === 0 && (
+                  <span className="text-xs text-muted-foreground shrink-0">immediate</span>
+                )}
                 {offsetErrors[idx] && (
                   <span className="text-xs text-destructive">{offsetErrors[idx]}</span>
                 )}
@@ -784,7 +816,7 @@ function LeadsTab() {
               <tr className="border-b text-left text-muted-foreground">
                 <th className="pb-2 pr-4 font-medium">Contact</th>
                 <th className="pb-2 pr-4 font-medium">Sequence</th>
-                <th className="pb-2 pr-4 font-medium">Day</th>
+                <th className="pb-2 pr-4 font-medium">Step</th>
                 <th className="pb-2 pr-4 font-medium">Status</th>
                 <th className="pb-2 pr-4 font-medium">Replied</th>
                 <th className="pb-2 pr-4 font-medium">Next Send</th>
@@ -805,7 +837,7 @@ function LeadsTab() {
                   </td>
                   <td className="py-3 pr-4 text-muted-foreground">{lead.sequenceName}</td>
                   <td className="py-3 pr-4">
-                    <span className="font-mono font-semibold">{lead.currentHourOffset < 0 ? '–' : `${lead.currentHourOffset}h`}</span>
+                    <span className="font-mono font-semibold">{lead.currentHourOffset < 0 ? '–' : formatOffset(lead.currentHourOffset)}</span>
                   </td>
                   <td className="py-3 pr-4"><StatusBadge status={lead.status} /></td>
                   <td className="py-3 pr-4">
