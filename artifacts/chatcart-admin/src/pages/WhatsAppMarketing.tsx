@@ -500,8 +500,15 @@ function CreateSequenceForm({ onSuccess }: { onSuccess: () => void }) {
 
   const addStep = () => {
     const lastOffset = steps[steps.length - 1]?.hourOffset ?? 0;
-    setSteps((s) => [...s, { hourOffset: lastOffset + 6, message: '', _unit: 'hours' }]);
+    const nextOffset = lastOffset + 6;
+    // Enforce invariant: any step >48h must be in Days mode
+    const nextUnit: 'hours' | 'days' = nextOffset > 48 ? 'days' : 'hours';
+    setSteps((s) => [...s, { hourOffset: nextOffset, message: '', _unit: nextUnit }]);
   };
+
+  // Enforces invariant: hourOffset > 48 always displays in Days, ≤ 48 uses stored preference
+  const effectiveUnit = (step: StepDraft): 'hours' | 'days' =>
+    step.hourOffset > 48 ? 'days' : step._unit;
 
   const removeStep = (idx: number) =>
     setSteps((s) => s.filter((_, i) => i !== idx));
@@ -628,50 +635,55 @@ function CreateSequenceForm({ onSuccess }: { onSuccess: () => void }) {
                   <ArrowDown className="w-3 h-3" />
                 </button>
               </div>
-              <div className="flex items-center gap-1.5 flex-1 flex-wrap">
-                <Label className="text-sm font-semibold shrink-0">Send after</Label>
-                <Input
-                  type="number"
-                  min={step._unit === 'days' ? 1 : 0}
-                  max={step._unit === 'days' ? undefined : 48}
-                  className="w-20 h-8 text-sm"
-                  value={step._unit === 'days' ? Math.floor(step.hourOffset / 24) || 1 : step.hourOffset}
-                  onChange={(e) => {
-                    const raw = parseInt(e.target.value) || 0;
-                    if (step._unit === 'days') {
-                      updateStep(idx, { hourOffset: Math.max(1, raw) * 24 });
-                    } else {
-                      updateStep(idx, { hourOffset: Math.min(48, Math.max(0, raw)) });
-                    }
-                  }}
-                />
-                <select
-                  className="h-8 text-sm border rounded-md px-2 bg-background"
-                  value={step._unit}
-                  onChange={(e) => {
-                    const newUnit = e.target.value as 'hours' | 'days';
-                    if (newUnit === 'days') {
-                      const days = Math.max(1, Math.floor(step.hourOffset / 24));
-                      updateStep(idx, { _unit: 'days', hourOffset: days * 24 });
-                    } else {
-                      const hours = Math.min(48, step.hourOffset);
-                      updateStep(idx, { _unit: 'hours', hourOffset: hours });
-                    }
-                  }}
-                >
-                  <option value="hours">Hours</option>
-                  <option value="days">Days</option>
-                </select>
-                {step._unit === 'days' && (
-                  <span className="text-xs text-muted-foreground shrink-0">= {step.hourOffset}h total</span>
-                )}
-                {step._unit === 'hours' && step.hourOffset === 0 && (
-                  <span className="text-xs text-muted-foreground shrink-0">immediate</span>
-                )}
-                {offsetErrors[idx] && (
-                  <span className="text-xs text-destructive">{offsetErrors[idx]}</span>
-                )}
-              </div>
+              {(() => {
+                const unit = effectiveUnit(step);
+                return (
+                  <div className="flex items-center gap-1.5 flex-1 flex-wrap">
+                    <Label className="text-sm font-semibold shrink-0">Send after</Label>
+                    <Input
+                      type="number"
+                      min={unit === 'days' ? 1 : 0}
+                      max={unit === 'days' ? undefined : 48}
+                      className="w-20 h-8 text-sm"
+                      value={unit === 'days' ? Math.floor(step.hourOffset / 24) || 1 : step.hourOffset}
+                      onChange={(e) => {
+                        const raw = parseInt(e.target.value) || 0;
+                        if (unit === 'days') {
+                          updateStep(idx, { hourOffset: Math.max(1, raw) * 24 });
+                        } else {
+                          updateStep(idx, { hourOffset: Math.min(48, Math.max(0, raw)) });
+                        }
+                      }}
+                    />
+                    <select
+                      className="h-8 text-sm border rounded-md px-2 bg-background"
+                      value={unit}
+                      onChange={(e) => {
+                        const newUnit = e.target.value as 'hours' | 'days';
+                        if (newUnit === 'days') {
+                          const days = Math.max(1, Math.floor(step.hourOffset / 24));
+                          updateStep(idx, { _unit: 'days', hourOffset: days * 24 });
+                        } else {
+                          const hours = Math.min(48, step.hourOffset);
+                          updateStep(idx, { _unit: 'hours', hourOffset: hours });
+                        }
+                      }}
+                    >
+                      <option value="hours">Hours</option>
+                      <option value="days">Days</option>
+                    </select>
+                    {unit === 'days' && (
+                      <span className="text-xs text-muted-foreground shrink-0">= {step.hourOffset}h total</span>
+                    )}
+                    {unit === 'hours' && step.hourOffset === 0 && (
+                      <span className="text-xs text-muted-foreground shrink-0">immediate</span>
+                    )}
+                    {offsetErrors[idx] && (
+                      <span className="text-xs text-destructive">{offsetErrors[idx]}</span>
+                    )}
+                  </div>
+                );
+              })()}
               {steps.length > 1 && (
                 <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive shrink-0" onClick={() => removeStep(idx)}>
                   <Trash2 className="w-3.5 h-3.5" />
