@@ -277,6 +277,10 @@ router.get("/admin/wa/pending-sellers", requireAdminAuth, async (req, res) => {
 
 router.get("/admin/wa/leads", requireAdminAuth, async (req, res) => {
   try {
+    const sellerIdParam = req.query.sellerId as string | undefined;
+    const filterSellerId = sellerIdParam ? parseInt(sellerIdParam) : undefined;
+    const where = filterSellerId ? eq(waCampaignLeadsTable.sellerId, filterSellerId) : undefined;
+
     const leads = await db
       .select({
         id: waCampaignLeadsTable.id,
@@ -299,6 +303,7 @@ router.get("/admin/wa/leads", requireAdminAuth, async (req, res) => {
       .leftJoin(sellersTable, eq(waCampaignLeadsTable.sellerId, sellersTable.id))
       .leftJoin(waInboundLeadsTable, eq(waCampaignLeadsTable.inboundLeadId, waInboundLeadsTable.id))
       .innerJoin(waSequencesTable, eq(waCampaignLeadsTable.sequenceId, waSequencesTable.id))
+      .where(where)
       .orderBy(desc(waCampaignLeadsTable.createdAt));
     res.json(leads);
   } catch (e) {

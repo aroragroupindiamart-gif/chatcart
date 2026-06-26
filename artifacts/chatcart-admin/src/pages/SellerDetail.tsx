@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useRoute } from 'wouter';
 import { Layout } from '@/components/Layout';
-import { useSeller, useSellerProducts, useSellerOrders, useUpdateSubscription, useSuspendSeller, useReactivateSeller } from '@/hooks/useAdminApi';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useSeller, useSellerProducts, useSellerOrders, useUpdateSubscription, useSuspendSeller, useReactivateSeller, useWALeadsBySeller } from '@/hooks/useAdminApi';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,8 +11,16 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { AlertTriangle, Store, Package, ShoppingCart, Calendar, Phone, Globe, CreditCard } from 'lucide-react';
+import { AlertTriangle, Store, Package, ShoppingCart, Calendar, Phone, Globe, CreditCard, MessageCircle, CheckCircle2, PauseCircle, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { EnrollInSequenceModal } from '@/components/EnrollInSequenceModal';
+
+function WALeadStatusBadge({ status }: { status: string }) {
+  if (status === 'active') return <Badge className="bg-green-100 text-green-800 border border-green-200 hover:bg-green-100 gap-1 text-xs"><CheckCircle2 className="w-3 h-3" />Active</Badge>;
+  if (status === 'paused_no_reply') return <Badge className="bg-amber-100 text-amber-800 border border-amber-200 hover:bg-amber-100 gap-1 text-xs"><PauseCircle className="w-3 h-3" />Paused (no reply)</Badge>;
+  if (status === 'completed') return <Badge className="bg-blue-100 text-blue-800 border border-blue-200 hover:bg-blue-100 text-xs">Completed</Badge>;
+  return <Badge variant="secondary" className="text-xs capitalize">{status}</Badge>;
+}
 
 export default function SellerDetail() {
   const [, params] = useRoute('/sellers/:id');
@@ -22,6 +30,7 @@ export default function SellerDetail() {
   const { data: seller, isLoading: sellerLoading } = useSeller(id);
   const { data: products, isLoading: productsLoading } = useSellerProducts(id);
   const { data: orders, isLoading: ordersLoading } = useSellerOrders(id);
+  const { data: waLeads, isLoading: waLeadsLoading } = useWALeadsBySeller(id);
 
   const updateSub = useUpdateSubscription();
   const suspendSeller = useSuspendSeller();
@@ -29,8 +38,8 @@ export default function SellerDetail() {
 
   const [suspendReason, setSuspendReason] = useState('');
   const [suspendDialogOpen, setSuspendDialogOpen] = useState(false);
+  const [enrollModalOpen, setEnrollModalOpen] = useState(false);
 
-  // Sub edit state
   const [editPlan, setEditPlan] = useState('');
   const [editStatus, setEditStatus] = useState('');
   const [editEndDate, setEditEndDate] = useState('');
@@ -100,6 +109,8 @@ export default function SellerDetail() {
     return <Layout><div className="p-8 text-center text-muted-foreground">Seller not found.</div></Layout>;
   }
 
+  const sellerId = parseInt(id);
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -119,8 +130,17 @@ export default function SellerDetail() {
               <Phone className="w-3.5 h-3.5" /> {seller.phone}
             </p>
           </div>
-          
+
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="gap-1.5 border-green-300 text-green-700 hover:bg-green-50"
+              onClick={() => setEnrollModalOpen(true)}
+            >
+              <MessageCircle className="w-4 h-4" />
+              Enroll in WA Sequence
+            </Button>
+
             {seller.isSuspended ? (
               <Button variant="outline" className="border-primary text-primary hover:bg-primary/10" onClick={handleReactivate} disabled={reactivateSeller.isPending}>
                 Reactivate Seller
@@ -172,10 +192,10 @@ export default function SellerDetail() {
             <TabsTrigger value="products">Products ({seller.productCount || 0})</TabsTrigger>
             <TabsTrigger value="orders">Orders ({seller.orderCount || 0})</TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="overview" className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              
+
               {/* Store Info */}
               <Card className="md:col-span-2">
                 <CardHeader>
@@ -274,8 +294,8 @@ export default function SellerDetail() {
                       <div>
                         <div className="text-sm text-muted-foreground mb-1">Period</div>
                         <div className="text-sm">
-                          {seller.subscriptionStartDate ? new Date(seller.subscriptionStartDate).toLocaleDateString() : 'N/A'} 
-                          {' → '} 
+                          {seller.subscriptionStartDate ? new Date(seller.subscriptionStartDate).toLocaleDateString() : 'N/A'}
+                          {' → '}
                           {seller.subscriptionEndDate ? new Date(seller.subscriptionEndDate).toLocaleDateString() : 'N/A'}
                         </div>
                       </div>
@@ -284,6 +304,54 @@ export default function SellerDetail() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* WA Sequences Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <MessageCircle className="w-4 h-4 text-green-600" />
+                  WhatsApp Sequences
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {waLeadsLoading ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                ) : !waLeads || waLeads.length === 0 ? (
+                  <div className="text-sm text-muted-foreground py-4 flex flex-col items-center gap-2">
+                    <MessageCircle className="w-7 h-7 opacity-20" />
+                    <p>Not enrolled in any WA sequence yet.</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 mt-1"
+                      onClick={() => setEnrollModalOpen(true)}
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      Enroll now
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="divide-y">
+                    {waLeads.map(lead => (
+                      <div key={lead.id} className="py-3 flex items-center justify-between gap-4">
+                        <div className="min-w-0">
+                          <div className="font-medium text-sm truncate">{lead.sequenceName}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-3">
+                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" />Day {lead.currentDay}</span>
+                            {lead.lastSentAt && <span>Last sent {new Date(lead.lastSentAt).toLocaleDateString()}</span>}
+                            <span>Enrolled {new Date(lead.createdAt).toLocaleDateString()}</span>
+                          </div>
+                        </div>
+                        <WALeadStatusBadge status={lead.status} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="products">
@@ -362,6 +430,13 @@ export default function SellerDetail() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <EnrollInSequenceModal
+        open={enrollModalOpen}
+        onClose={() => setEnrollModalOpen(false)}
+        sellerIds={[sellerId]}
+        sellerLabel={`Enrolling: ${seller.storeName || seller.phone}`}
+      />
     </Layout>
   );
 }

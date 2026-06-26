@@ -5,9 +5,11 @@ import { useSellers } from '@/hooks/useAdminApi';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Search, Phone, Store, Clock } from 'lucide-react';
+import { Search, Phone, Store, Clock, MessageCircle, X } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { EnrollInSequenceModal } from '@/components/EnrollInSequenceModal';
 
 function PlanBadge({ plan }: { plan: string }) {
   if (plan === 'pending') {
@@ -37,9 +39,48 @@ export default function Sellers() {
 
   const pendingCount = sellers?.filter(s => s.subscriptionPlan === 'pending').length ?? 0;
 
+  // Bulk select state
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [enrollModalOpen, setEnrollModalOpen] = useState(false);
+  const [enrollTarget, setEnrollTarget] = useState<number[]>([]);
+
+  const allIds = sellers?.map(s => s.id) ?? [];
+  const allSelected = allIds.length > 0 && allIds.every(id => selected.has(id));
+  const someSelected = selected.size > 0;
+
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(allIds));
+    }
+  };
+
+  const toggleOne = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const openEnrollSingle = (sellerId: string) => {
+    setEnrollTarget([parseInt(sellerId)]);
+    setEnrollModalOpen(true);
+  };
+
+  const openEnrollBulk = () => {
+    setEnrollTarget([...selected].map(id => parseInt(id)));
+    setEnrollModalOpen(true);
+  };
+
+  const enrollLabel = enrollTarget.length === 1
+    ? (sellers?.find(s => s.id === String(enrollTarget[0]))?.storeName ?? 'this seller')
+    : `${enrollTarget.length} selected sellers`;
+
   return (
     <Layout>
-      <div className="space-y-6">
+      <div className="space-y-6 pb-24">
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Sellers</h1>
@@ -104,27 +145,39 @@ export default function Sellers() {
               <table className="w-full text-sm text-left">
                 <thead className="text-xs text-muted-foreground bg-muted/50 border-b">
                   <tr>
+                    <th className="px-4 py-3 w-10">
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={toggleAll}
+                        className="rounded border-gray-300 accent-primary w-4 h-4 cursor-pointer"
+                        title="Select all"
+                      />
+                    </th>
                     <th className="px-4 py-3 font-medium">Store</th>
                     <th className="px-4 py-3 font-medium">Contact</th>
                     <th className="px-4 py-3 font-medium">Plan</th>
                     <th className="px-4 py-3 font-medium">Status</th>
                     <th className="px-4 py-3 font-medium">Joined</th>
+                    <th className="px-4 py-3 font-medium w-10"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {isLoading ? (
                     [...Array(5)].map((_, i) => (
                       <tr key={i}>
+                        <td className="px-4 py-3"><Skeleton className="h-4 w-4" /></td>
                         <td className="px-4 py-3"><Skeleton className="h-4 w-32" /></td>
                         <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
                         <td className="px-4 py-3"><Skeleton className="h-4 w-16" /></td>
                         <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
                         <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
+                        <td className="px-4 py-3"></td>
                       </tr>
                     ))
                   ) : sellers?.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                      <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">
                         <Store className="w-8 h-8 mx-auto mb-3 opacity-20" />
                         No sellers found matching your filters.
                       </td>
@@ -133,8 +186,16 @@ export default function Sellers() {
                     sellers?.map((seller) => (
                       <tr
                         key={seller.id}
-                        className={`hover:bg-muted/30 transition-colors group ${seller.subscriptionPlan === 'pending' ? 'bg-amber-50/40' : ''}`}
+                        className={`hover:bg-muted/30 transition-colors group ${selected.has(seller.id) ? 'bg-primary/5' : seller.subscriptionPlan === 'pending' ? 'bg-amber-50/40' : ''}`}
                       >
+                        <td className="px-4 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selected.has(seller.id)}
+                            onChange={() => toggleOne(seller.id)}
+                            className="rounded border-gray-300 accent-primary w-4 h-4 cursor-pointer"
+                          />
+                        </td>
                         <td className="px-4 py-3">
                           <Link href={`/sellers/${seller.id}`} className="font-medium text-foreground hover:underline">
                             {seller.storeName || 'Unnamed Store'}
@@ -167,6 +228,15 @@ export default function Sellers() {
                         <td className="px-4 py-3 text-muted-foreground">
                           {new Date(seller.createdAt).toLocaleDateString()}
                         </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => openEnrollSingle(seller.id)}
+                            title="Enroll in WA Sequence"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded hover:bg-green-100 hover:text-green-700 text-muted-foreground"
+                          >
+                            <MessageCircle className="w-4 h-4" />
+                          </button>
+                        </td>
                       </tr>
                     ))
                   )}
@@ -176,6 +246,33 @@ export default function Sellers() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Floating bulk action bar */}
+      {someSelected && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-background border shadow-lg rounded-full px-5 py-3">
+          <span className="text-sm font-medium text-foreground">
+            {selected.size} seller{selected.size !== 1 ? 's' : ''} selected
+          </span>
+          <Button size="sm" className="gap-1.5 rounded-full" onClick={openEnrollBulk}>
+            <MessageCircle className="w-3.5 h-3.5" />
+            Enroll in WA Sequence
+          </Button>
+          <button
+            onClick={() => setSelected(new Set())}
+            className="p-1 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted"
+            title="Clear selection"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      <EnrollInSequenceModal
+        open={enrollModalOpen}
+        onClose={() => { setEnrollModalOpen(false); setSelected(new Set()); }}
+        sellerIds={enrollTarget}
+        sellerLabel={enrollTarget.length === 1 ? `Enrolling: ${enrollLabel}` : `Enrolling ${enrollLabel}`}
+      />
     </Layout>
   );
 }

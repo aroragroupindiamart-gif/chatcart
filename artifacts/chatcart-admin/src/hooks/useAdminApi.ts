@@ -182,3 +182,59 @@ export const useContactSubmissions = () => {
     queryFn: () => adminFetch<ContactSubmission[]>('/api/admin/contact-submissions'),
   });
 };
+
+// ── WhatsApp Marketing ────────────────────────────────────────────────────────
+
+export interface WASequence {
+  id: number;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  stepCount: number;
+  leadCount: number;
+  createdAt: string;
+}
+
+export interface WALead {
+  id: number;
+  sequenceId: number;
+  sequenceName: string;
+  sellerId: number | null;
+  storeName: string | null;
+  phone: string | null;
+  currentDay: number;
+  status: string;
+  nextSendAt: string | null;
+  lastSentAt: string | null;
+  repliedAt: string | null;
+  createdAt: string;
+}
+
+export const useWASequences = () => {
+  return useQuery<WASequence[]>({
+    queryKey: ['admin', 'wa', 'sequences'],
+    queryFn: () => adminFetch<WASequence[]>('/api/admin/wa/sequences'),
+  });
+};
+
+export const useWALeadsBySeller = (sellerId: string | number) => {
+  return useQuery<WALead[]>({
+    queryKey: ['admin', 'wa', 'leads', 'seller', sellerId],
+    queryFn: () => adminFetch<WALead[]>(`/api/admin/wa/leads?sellerId=${sellerId}`),
+    enabled: !!sellerId,
+  });
+};
+
+export const useEnrollInSequence = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sequenceId, sellerIds }: { sequenceId: number; sellerIds: number[] }) =>
+      adminFetch<{ ok: boolean; added: number; skipped: number }>('/api/admin/wa/leads', {
+        method: 'POST',
+        body: JSON.stringify({ sequenceId, sellerIds }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'wa', 'leads'] });
+    },
+  });
+};
