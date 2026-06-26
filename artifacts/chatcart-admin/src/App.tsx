@@ -14,6 +14,7 @@ import SellerDetail from "@/pages/SellerDetail";
 import Orders from "@/pages/Orders";
 import AuditLog from "@/pages/AuditLog";
 import ContactSubmissions from "@/pages/ContactSubmissions";
+import WhatsAppMarketing from "@/pages/WhatsAppMarketing";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -51,6 +52,10 @@ function Router() {
 
       <Route path="/contact-submissions">
         <ProtectedRoute><ContactSubmissions /></ProtectedRoute>
+      </Route>
+
+      <Route path="/wa-marketing">
+        <ProtectedRoute><WhatsAppMarketing /></ProtectedRoute>
       </Route>
 
       <Route path="/">

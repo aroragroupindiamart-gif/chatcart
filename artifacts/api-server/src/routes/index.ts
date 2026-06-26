@@ -12,6 +12,7 @@ import contactRouter from "./contact";
 import adminRouter from "./admin";
 import exportRouter from "./export";
 import importCsvRouter from "./importCsv";
+import waMarketingRouter from "./waMarketing";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(contactRouter);
 router.use(adminRouter);
 router.use(exportRouter);
 router.use(importCsvRouter);
+router.use(waMarketingRouter);
 
 export default router;

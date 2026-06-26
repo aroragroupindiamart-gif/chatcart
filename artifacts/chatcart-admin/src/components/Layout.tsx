@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'wouter';
 import { useAdminAuth } from '@/lib/adminAuth';
-import { LayoutDashboard, Users, ShoppingCart, Activity, Mail, LogOut, Menu } from 'lucide-react';
+import { LayoutDashboard, Users, ShoppingCart, Activity, Mail, LogOut, Menu, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 
@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: '/orders', label: 'Orders', icon: ShoppingCart },
   { href: '/audit-log', label: 'Audit Log', icon: Activity },
   { href: '/contact-submissions', label: 'Contact', icon: Mail },
+  { href: '/wa-marketing', label: 'WA Marketing', icon: MessageCircle },
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {

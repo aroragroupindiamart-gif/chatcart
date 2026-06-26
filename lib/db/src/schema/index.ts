@@ -10,3 +10,4 @@ export * from "./orderItems";
 export * from "./contactSubmissions";
 export * from "./adminUsers";
 export * from "./adminAuditLog";
+export * from "./waMarketing";

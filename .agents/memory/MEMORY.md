@@ -1,4 +1,5 @@
 - [Chatcart project overview](chatcart-overview.md) — WhatsApp-first seller catalogue; seeded seller is subdomain `sharma-general`, phone +919876543210.
-- [Chatcart admin auth](chatcart-admin-auth.md) — Admin uses email+password with separate JWT secret suffix; seeded as admin@chatcart.in.
+- [Chatcart admin auth](chatcart-admin-auth.md) — Admin uses email+password with separate JWT secret suffix; seeded as admin@chatcart.in / chatcart-admin-2026.
 - [Pending activation gate](pending-activation.md) — New sellers default to `pending` plan; all seller API routes return 403 PENDING_ACTIVATION; dashboard shows holding screen.
 - [MSG91 OTP setup](msg91-otp-setup.md) — Three secrets required; MSG91_SENDER_ID must be env var (not secret); sendOtp() must be explicitly called in auth.ts.
+- [WA Marketing module](wa-marketing.md) — Baileys-based WhatsApp campaign tool in admin panel; @hapi/boom must be a direct dep of api-server; SSE stream uses ?token= query param; session at artifacts/api-server/wa-session/.
