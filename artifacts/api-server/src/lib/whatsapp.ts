@@ -243,6 +243,47 @@ export async function sendWAMessage(phone: string, message: string): Promise<voi
   await sock.sendMessage(jid, { text: message });
 }
 
+export async function sendWAMediaMessage(
+  phone: string,
+  objectPath: string,
+  mediaType: string,
+  caption: string,
+  filename: string | null,
+): Promise<void> {
+  if (!sock || state.status !== "connected") {
+    throw new Error("WhatsApp not connected");
+  }
+  const jid = `${phone}@s.whatsapp.net`;
+
+  // Download media from object storage into a Buffer (avoids need for public URL)
+  const { ObjectStorageService } = await import("./objectStorage.js");
+  const storageService = new ObjectStorageService();
+  const file = await storageService.getObjectEntityFile(objectPath);
+  const [fileBuffer] = await (file as any).download() as [Buffer];
+  const [meta] = await (file as any).getMetadata();
+  const mimetype: string = (meta.contentType as string) || "application/octet-stream";
+
+  // Simulate composing presence — extended delay accommodates realistic media typing time
+  try {
+    await sock.sendPresenceUpdate("composing", jid);
+    await new Promise((r) => setTimeout(r, 3000 + Math.random() * 5000));
+    await sock.sendPresenceUpdate("paused", jid);
+  } catch {}
+
+  if (mediaType === "image") {
+    await sock.sendMessage(jid, { image: fileBuffer, caption, mimetype });
+  } else if (mediaType === "video") {
+    await sock.sendMessage(jid, { video: fileBuffer, caption, mimetype });
+  } else {
+    await sock.sendMessage(jid, {
+      document: fileBuffer,
+      mimetype,
+      fileName: filename ?? "attachment",
+      caption,
+    });
+  }
+}
+
 async function handleIncomingReply(fromPhone: string): Promise<void> {
   const { waCampaignLeadsTable, sellersTable } = await import("@workspace/db/schema");
   const { eq: eqDrizzle } = await import("drizzle-orm");

@@ -7,8 +7,8 @@ import {
   sellersTable,
   waInboundLeadsTable,
 } from "@workspace/db/schema";
-import { eq, and, lte, count, gte, isNull, or } from "drizzle-orm";
-import { sendWAMessage, getWAState } from "./whatsapp.js";
+import { eq, and, lte, count, gte, gt, asc } from "drizzle-orm";
+import { sendWAMessage, sendWAMediaMessage, getWAState } from "./whatsapp.js";
 
 function interpolate(template: string, vars: Record<string, string>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`);
@@ -96,17 +96,17 @@ export async function processScheduledMessages(): Promise<void> {
       continue;
     }
 
-    const nextDayOffset = lead.currentDay + 1;
-
+    // Find the next step after the lead's current position — supports non-consecutive dayOffsets
     const [step] = await db
       .select()
       .from(waSequenceStepsTable)
       .where(
         and(
           eq(waSequenceStepsTable.sequenceId, lead.sequenceId),
-          eq(waSequenceStepsTable.dayOffset, nextDayOffset),
+          gt(waSequenceStepsTable.dayOffset, lead.currentDay),
         ),
       )
+      .orderBy(asc(waSequenceStepsTable.dayOffset))
       .limit(1);
 
     if (!step) {
@@ -124,14 +124,20 @@ export async function processScheduledMessages(): Promise<void> {
       firstName,
     });
 
+    // Human-like delay before send (longer budget accommodates media upload time)
     await randomDelayMs(3000, 8000);
 
     let sendStatus: "sent" | "failed" = "sent";
     let errorMessage: string | undefined;
 
     try {
-      await sendWAMessage(cleanPhone, message);
-      console.log(`[WA-CAMPAIGN] Sent Day ${nextDayOffset} to ${cleanPhone}`);
+      if (step.mediaUrl && step.mediaType) {
+        await sendWAMediaMessage(cleanPhone, step.mediaUrl, step.mediaType, message, step.mediaFilename ?? null);
+        console.log(`[WA-CAMPAIGN] Sent Day ${step.dayOffset} (${step.mediaType}) to ${cleanPhone}`);
+      } else {
+        await sendWAMessage(cleanPhone, message);
+        console.log(`[WA-CAMPAIGN] Sent Day ${step.dayOffset} to ${cleanPhone}`);
+      }
     } catch (e: any) {
       sendStatus = "failed";
       errorMessage = e?.message ?? "Unknown error";
@@ -153,7 +159,7 @@ export async function processScheduledMessages(): Promise<void> {
       await db
         .update(waCampaignLeadsTable)
         .set({
-          currentDay: nextDayOffset,
+          currentDay: step.dayOffset,
           lastSentAt: new Date(),
           nextSendAt,
         })

@@ -16,7 +16,8 @@ import {
   Wifi, WifiOff, Loader2, QrCode, MessageCircle, Users, Activity,
   Plus, Trash2, Play, Pause, RefreshCw, CheckCircle2, XCircle,
   AlertTriangle, Clock, MessageSquare, TrendingUp, PhoneIncoming,
-  ChevronDown, ChevronRight, Flame, Link2
+  ChevronDown, ChevronRight, Flame, Link2,
+  ArrowUp, ArrowDown, Upload, FileImage, FileVideo, FileText, X
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -52,6 +53,9 @@ interface SequenceStep {
   id?: number;
   dayOffset: number;
   message: string;
+  mediaUrl?: string | null;
+  mediaType?: 'image' | 'video' | 'document' | null;
+  mediaFilename?: string | null;
 }
 
 interface CampaignLead {
@@ -434,7 +438,19 @@ function SequencesTab() {
                 {seq.steps.map((step) => (
                   <div key={step.id ?? step.dayOffset} className="flex gap-3 text-sm">
                     <span className="shrink-0 w-14 text-muted-foreground font-medium pt-0.5">Day {step.dayOffset}</span>
-                    <span className="text-foreground/80 whitespace-pre-wrap leading-relaxed">{step.message}</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-foreground/80 whitespace-pre-wrap leading-relaxed">{step.message}</span>
+                      {step.mediaType && (
+                        <div className="mt-1">
+                          <Badge variant="outline" className="text-xs gap-1">
+                            {step.mediaType === 'image' && <FileImage className="w-3 h-3" />}
+                            {step.mediaType === 'video' && <FileVideo className="w-3 h-3" />}
+                            {step.mediaType === 'document' && <FileText className="w-3 h-3" />}
+                            {step.mediaFilename ?? step.mediaType}
+                          </Badge>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -446,11 +462,29 @@ function SequencesTab() {
   );
 }
 
+interface StepDraft {
+  dayOffset: number;
+  message: string;
+  mediaUrl?: string;
+  mediaType?: 'image' | 'video' | 'document';
+  mediaFilename?: string;
+  _uploading?: boolean;
+  _uploadError?: string;
+  _sizeWarning?: string;
+}
+
+function MediaTypeIcon({ type }: { type: string }) {
+  if (type === 'image') return <FileImage className="w-3.5 h-3.5" />;
+  if (type === 'video') return <FileVideo className="w-3.5 h-3.5" />;
+  return <FileText className="w-3.5 h-3.5" />;
+}
+
 function CreateSequenceForm({ onSuccess }: { onSuccess: () => void }) {
   const { toast } = useToast();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [steps, setSteps] = useState<SequenceStep[]>([{ dayOffset: 1, message: '' }]);
+  const [steps, setSteps] = useState<StepDraft[]>([{ dayOffset: 1, message: '' }]);
+  const fileInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const createMut = useMutation({
     mutationFn: (data: { name: string; description?: string; steps: SequenceStep[] }) =>
@@ -459,15 +493,98 @@ function CreateSequenceForm({ onSuccess }: { onSuccess: () => void }) {
     onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
   });
 
+  const updateStep = (idx: number, patch: Partial<StepDraft>) =>
+    setSteps((s) => s.map((st, i) => i === idx ? { ...st, ...patch } : st));
+
   const addStep = () => {
-    const nextDay = (steps[steps.length - 1]?.dayOffset ?? 0) + 1;
-    setSteps((s) => [...s, { dayOffset: nextDay, message: '' }]);
+    const lastOffset = steps[steps.length - 1]?.dayOffset ?? 0;
+    setSteps((s) => [...s, { dayOffset: lastOffset + 1, message: '' }]);
   };
+
+  const removeStep = (idx: number) =>
+    setSteps((s) => s.filter((_, i) => i !== idx));
+
+  const moveStep = (idx: number, dir: -1 | 1) => {
+    const next = idx + dir;
+    if (next < 0 || next >= steps.length) return;
+    setSteps((s) => {
+      const arr = [...s];
+      // Swap dayOffsets, keep everything else in position
+      const tmpOffset = arr[idx].dayOffset;
+      arr[idx] = { ...arr[idx], dayOffset: arr[next].dayOffset };
+      arr[next] = { ...arr[next], dayOffset: tmpOffset };
+      // Re-sort by dayOffset to keep display order consistent
+      return [...arr].sort((a, b) => a.dayOffset - b.dayOffset);
+    });
+  };
+
+  const handleFileSelect = async (idx: number, file: File) => {
+    const token = localStorage.getItem('chatcart_admin_token') ?? '';
+
+    // Clear previous media state
+    updateStep(idx, { _uploading: true, _uploadError: undefined, _sizeWarning: undefined, mediaUrl: undefined, mediaType: undefined, mediaFilename: undefined });
+
+    try {
+      // Request presigned URL + get server-determined mediaType and any size warning
+      const res = await fetch('/api/admin/wa/media/request-upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? 'Upload failed');
+      }
+      const { uploadURL, objectPath, mediaType, sizeWarning } = await res.json();
+
+      // PUT file directly to GCS presigned URL
+      const putRes = await fetch(uploadURL, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      });
+      if (!putRes.ok) throw new Error('Failed to upload to storage');
+
+      updateStep(idx, {
+        _uploading: false,
+        _sizeWarning: sizeWarning ?? undefined,
+        mediaUrl: objectPath,
+        mediaType,
+        mediaFilename: file.name,
+      });
+    } catch (e: any) {
+      updateStep(idx, { _uploading: false, _uploadError: e.message ?? 'Upload failed', mediaUrl: undefined, mediaType: undefined, mediaFilename: undefined });
+    }
+  };
+
+  const clearMedia = (idx: number) => {
+    updateStep(idx, { mediaUrl: undefined, mediaType: undefined, mediaFilename: undefined, _sizeWarning: undefined, _uploadError: undefined });
+    if (fileInputRefs.current[idx]) fileInputRefs.current[idx]!.value = '';
+  };
+
+  // Validate ascending, no duplicates
+  const offsetErrors = steps.map((s, i) => {
+    if (i === 0) return null;
+    return s.dayOffset <= steps[i - 1].dayOffset ? `Day offset must be greater than the previous step (Day ${steps[i - 1].dayOffset})` : null;
+  });
+  const hasOffsetError = offsetErrors.some(Boolean);
 
   const submit = () => {
     if (!name.trim()) { toast({ title: 'Sequence name is required', variant: 'destructive' }); return; }
-    if (steps.some((s) => !s.message.trim())) { toast({ title: 'All message steps must have content', variant: 'destructive' }); return; }
-    createMut.mutate({ name: name.trim(), description: description.trim() || undefined, steps });
+    if (steps.some((s) => !s.message.trim())) { toast({ title: 'All steps need message text', variant: 'destructive' }); return; }
+    if (hasOffsetError) { toast({ title: 'Fix day offset order before saving', variant: 'destructive' }); return; }
+    if (steps.some((s) => s._uploading)) { toast({ title: 'Wait for uploads to finish', variant: 'destructive' }); return; }
+    createMut.mutate({
+      name: name.trim(),
+      description: description.trim() || undefined,
+      steps: steps.map((s) => ({
+        dayOffset: s.dayOffset,
+        message: s.message,
+        mediaUrl: s.mediaUrl ?? null,
+        mediaType: s.mediaType ?? null,
+        mediaFilename: s.mediaFilename ?? null,
+      })),
+    });
   };
 
   return (
@@ -480,35 +597,128 @@ function CreateSequenceForm({ onSuccess }: { onSuccess: () => void }) {
         <Label>Description (optional)</Label>
         <Input placeholder="Internal note about this sequence" value={description} onChange={(e) => setDescription(e.target.value)} />
       </div>
+
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <Label>Message Steps</Label>
           <span className="text-xs text-muted-foreground">Variables: {'{{name}}'}, {'{{storeName}}'}</span>
         </div>
+
         {steps.map((step, idx) => (
-          <div key={idx} className="border rounded-lg p-4 space-y-3 bg-muted/30">
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-semibold text-primary">Day {step.dayOffset}</Label>
+          <div key={idx} className={`border rounded-lg p-4 space-y-3 ${offsetErrors[idx] ? 'border-destructive bg-destructive/5' : 'bg-muted/30'}`}>
+            {/* Step header: day offset + reorder + remove */}
+            <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-0.5">
+                <button
+                  type="button"
+                  disabled={idx === 0}
+                  onClick={() => moveStep(idx, -1)}
+                  className="p-0.5 rounded text-muted-foreground hover:text-foreground disabled:opacity-25"
+                >
+                  <ArrowUp className="w-3 h-3" />
+                </button>
+                <button
+                  type="button"
+                  disabled={idx === steps.length - 1}
+                  onClick={() => moveStep(idx, 1)}
+                  className="p-0.5 rounded text-muted-foreground hover:text-foreground disabled:opacity-25"
+                >
+                  <ArrowDown className="w-3 h-3" />
+                </button>
+              </div>
+              <div className="flex items-center gap-1.5 flex-1">
+                <Label className="text-sm font-semibold shrink-0">Day</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={365}
+                  className="w-20 h-8 text-sm"
+                  value={step.dayOffset}
+                  onChange={(e) => updateStep(idx, { dayOffset: Math.max(1, parseInt(e.target.value) || 1) })}
+                />
+                {offsetErrors[idx] && (
+                  <span className="text-xs text-destructive">{offsetErrors[idx]}</span>
+                )}
+              </div>
               {steps.length > 1 && (
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setSteps((s) => s.filter((_, i) => i !== idx))}>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive shrink-0" onClick={() => removeStep(idx)}>
                   <Trash2 className="w-3.5 h-3.5" />
                 </Button>
               )}
             </div>
-            <Textarea
-              rows={4}
-              placeholder={`Hi {{name}}, day ${step.dayOffset} message…`}
-              value={step.message}
-              onChange={(e) => setSteps((s) => s.map((st, i) => i === idx ? { ...st, message: e.target.value } : st))}
-              className="font-mono text-sm"
-            />
+
+            {/* Message textarea — becomes caption when media is attached */}
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">
+                {step.mediaUrl ? 'Caption (sent with the media)' : 'Message text'}
+              </Label>
+              <Textarea
+                rows={3}
+                placeholder={step.mediaUrl ? `Caption for Day ${step.dayOffset} — use {{name}}, {{storeName}}…` : `Hi {{name}}, day ${step.dayOffset} message…`}
+                value={step.message}
+                onChange={(e) => updateStep(idx, { message: e.target.value })}
+                className="font-mono text-sm"
+              />
+            </div>
+
+            {/* Media attachment */}
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">
+                Media attachment (optional) — images up to 5 MB · videos up to 100 MB · PDFs/docs up to 100 MB
+              </Label>
+
+              {step.mediaUrl ? (
+                <div className="flex items-center gap-2 p-2 bg-background border rounded-md text-sm">
+                  <MediaTypeIcon type={step.mediaType ?? 'document'} />
+                  <span className="flex-1 truncate text-foreground font-medium">{step.mediaFilename}</span>
+                  <Badge variant="outline" className="text-xs shrink-0">{step.mediaType}</Badge>
+                  <button type="button" onClick={() => clearMedia(idx)} className="text-muted-foreground hover:text-destructive">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <div>
+                  <input
+                    ref={(el) => { fileInputRefs.current[idx] = el; }}
+                    type="file"
+                    accept="image/*,video/*,.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(idx, f); }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
+                    disabled={step._uploading}
+                    onClick={() => fileInputRefs.current[idx]?.click()}
+                  >
+                    {step._uploading
+                      ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Uploading…</>
+                      : <><Upload className="w-3.5 h-3.5 mr-1.5" />Attach media</>}
+                  </Button>
+                </div>
+              )}
+
+              {step._sizeWarning && (
+                <div className="flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  {step._sizeWarning}
+                </div>
+              )}
+              {step._uploadError && (
+                <p className="text-xs text-destructive">{step._uploadError}</p>
+              )}
+            </div>
           </div>
         ))}
+
         <Button variant="outline" onClick={addStep} className="w-full">
-          <Plus className="w-4 h-4 mr-2" />Add Day {(steps[steps.length - 1]?.dayOffset ?? 0) + 1}
+          <Plus className="w-4 h-4 mr-2" />Add Step
         </Button>
       </div>
-      <Button onClick={submit} disabled={createMut.isPending} className="w-full">
+
+      <Button onClick={submit} disabled={createMut.isPending || hasOffsetError} className="w-full">
         {createMut.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
         Create Sequence
       </Button>

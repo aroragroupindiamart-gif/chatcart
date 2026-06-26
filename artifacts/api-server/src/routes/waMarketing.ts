@@ -21,6 +21,7 @@ import {
   removeSSEClient,
   getOrCreateSession,
 } from "../lib/whatsapp.js";
+import { ObjectStorageService } from "../lib/objectStorage.js";
 
 const router = Router();
 
@@ -143,15 +144,30 @@ router.get("/admin/wa/sequences", requireAdminAuth, async (req, res) => {
 });
 
 router.post("/admin/wa/sequences", requireAdminAuth, async (req, res) => {
+  const stepSchema = z.object({
+    dayOffset: z.number().int().min(1),
+    message: z.string().min(1),
+    mediaUrl: z.string().nullable().optional(),
+    mediaType: z.enum(["image", "video", "document"]).nullable().optional(),
+    mediaFilename: z.string().nullable().optional(),
+  });
   const schema = z.object({
     name: z.string().min(1),
     description: z.string().optional(),
-    steps: z.array(z.object({ dayOffset: z.number().int().min(1), message: z.string().min(1) })).min(1),
+    steps: z.array(stepSchema).min(1),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid data" });
     return;
+  }
+  // Validate ascending day-offsets with no duplicates
+  const offsets = parsed.data.steps.map((s) => s.dayOffset);
+  for (let i = 1; i < offsets.length; i++) {
+    if (offsets[i] <= offsets[i - 1]) {
+      res.status(400).json({ error: `Day offsets must be strictly ascending. Day ${offsets[i]} comes after Day ${offsets[i - 1]}.` });
+      return;
+    }
   }
   try {
     const [sequence] = await db
@@ -159,7 +175,14 @@ router.post("/admin/wa/sequences", requireAdminAuth, async (req, res) => {
       .values({ name: parsed.data.name, description: parsed.data.description ?? null })
       .returning();
     await db.insert(waSequenceStepsTable).values(
-      parsed.data.steps.map((s) => ({ sequenceId: sequence.id, dayOffset: s.dayOffset, message: s.message })),
+      parsed.data.steps.map((s) => ({
+        sequenceId: sequence.id,
+        dayOffset: s.dayOffset,
+        message: s.message,
+        mediaUrl: s.mediaUrl ?? null,
+        mediaType: s.mediaType ?? null,
+        mediaFilename: s.mediaFilename ?? null,
+      })),
     );
     const steps = await db
       .select()
@@ -169,6 +192,53 @@ router.post("/admin/wa/sequences", requireAdminAuth, async (req, res) => {
     res.json({ ...sequence, steps });
   } catch (e) {
     res.status(500).json({ error: "Failed to create sequence" });
+  }
+});
+
+// ── Media Upload ───────────────────────────────────────────────────────────────
+
+router.post("/admin/wa/media/request-upload-url", requireAdminAuth, async (req, res) => {
+  const schema = z.object({
+    name: z.string().min(1),
+    size: z.number().int().positive(),
+    contentType: z.string().min(1),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid request" }); return; }
+
+  const { name, size, contentType } = parsed.data;
+  const isImage = contentType.startsWith("image/");
+  const isVideo = contentType.startsWith("video/");
+
+  const MAX_IMAGE = 5 * 1024 * 1024;
+  const MAX_VIDEO_OR_DOC = 100 * 1024 * 1024;
+
+  if (isImage && size > MAX_IMAGE) {
+    res.status(400).json({ error: `Image too large — maximum 5 MB.` }); return;
+  }
+  if (!isImage && size > MAX_VIDEO_OR_DOC) {
+    res.status(400).json({ error: `File too large — maximum 100 MB.` }); return;
+  }
+
+  try {
+    const storageService = new ObjectStorageService();
+    const uploadURL = await storageService.getObjectEntityUploadURL();
+    const objectPath = storageService.normalizeObjectEntityPath(uploadURL);
+
+    // Determine effective media type (large videos are sent as documents)
+    const VIDEO_INLINE_LIMIT = 16 * 1024 * 1024;
+    let mediaType: "image" | "video" | "document";
+    if (isImage) mediaType = "image";
+    else if (isVideo && size <= VIDEO_INLINE_LIMIT) mediaType = "video";
+    else mediaType = "document";
+
+    const sizeWarning = isVideo && size > VIDEO_INLINE_LIMIT && size <= MAX_VIDEO_OR_DOC
+      ? `Video is larger than 16 MB — it will be sent as a downloadable document rather than an inline video.`
+      : null;
+
+    res.json({ uploadURL, objectPath, mediaType, sizeWarning, filename: name });
+  } catch (e: any) {
+    res.status(500).json({ error: "Failed to generate upload URL" });
   }
 });
 

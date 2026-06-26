@@ -1,6 +1,6 @@
 ---
 name: WA Marketing module
-description: Baileys-based WhatsApp drip-campaign tool in the Chatcart super-admin panel — connection quirks, auth, session, scheduler, and inbound lead capture.
+description: Baileys-based WhatsApp drip-campaign tool in the Chatcart super-admin panel — connection quirks, auth, session, scheduler, inbound lead capture, flexible sequences, and media attachments.
 ---
 
 ## Key decisions
@@ -17,18 +17,38 @@ The `/api/admin/wa/stream` endpoint verifies the admin JWT from the `token` quer
 
 **Session directory:** `artifacts/api-server/wa-session/` — useMultiFileAuthState persists here. If the directory exists on startup, initWA() auto-reconnects without needing to scan QR again.
 
-**Campaign scheduler:** runs every 60 seconds in-process (startCampaignScheduler). Warmup: 10 msgs/day for first 14 days after connectedAt. Reply-gating: if currentDay >= 1 and lead has not replied, status → paused_no_reply. Incoming messages auto-resume paused leads.
+**Campaign scheduler — step selection uses gt(dayOffset, currentDay) not eq(dayOffset, currentDay+1).**  
+The scheduler finds the next step with `gt(waSequenceStepsTable.dayOffset, lead.currentDay)` ordered ASC — NOT `eq(dayOffset, currentDay+1)`. The +1 pattern breaks for non-consecutive day-offsets (e.g. Day 1, Day 4, Day 9). After a step sends, `currentDay` is set to `step.dayOffset` (the actual offset), not a counter.
+
+**Why:** The sequence builder allows any dayOffset — gaps between days are intentional. Hardcoding +1 causes the scheduler to look for dayOffset=2 when none exists and incorrectly mark the lead as completed.
+
+**Warmup, rate-limiting, reply-gating:** All work generically on "next due step" — not hardcoded to 8 steps or consecutive offsets. Reply-gate: if currentDay >= 1 and repliedAt IS NULL → paused_no_reply. Resume happens when incoming message updates repliedAt.
 
 **waCampaignLeadsTable has nullable sellerId.**  
-The column was originally NOT NULL but is now nullable to support inbound leads who are not sellers. When sellerId is null, the scheduler uses inboundLeadId + phone columns directly. Both leftJoin paths must be handled in queries.
+Nullable to support inbound leads who are not sellers. Scheduler leftJoins both sellersTable and waInboundLeadsTable.
 
-**Inbound lead deduplication:** `wa_inbound_leads.phone` is UNIQUE. On repeated messages from the same number, the existing row is updated (messageCount +1, lastMessage, lastMessageAt). Each message is appended to `wa_inbound_messages`. The `handleInboundLead()` function in whatsapp.ts handles this upsert.
+**Inbound lead deduplication:** `wa_inbound_leads.phone` is UNIQUE. Upsert on conflict, messageCount++.
 
-**Inbound lead phone format:** Stored without the leading + (e.g. `919876543210` not `+919876543210`). The seller matching check normalises to `+phone` for comparison with `sellers.phone` which stores with `+`.
+**Inbound lead phone format:** Stored without leading + (`919876543210`). Seller matching normalises to `+phone`.
+
+**Media attachments per step (wa_sequence_steps):**  
+Three nullable columns: `mediaUrl` (objectPath like `/objects/uploads/uuid`), `mediaType` (`image|video|document`), `mediaFilename`.
+
+**Media type determination (server-side at upload time):**
+- image/* ≤ 5MB → `image` (inline)
+- video/* ≤ 16MB → `video` (inline)
+- video/* 16-100MB → `document` + sizeWarning returned to client
+- other / PDF ≤ 100MB → `document`
+- >100MB rejected
+
+**Media send in whatsapp.ts (`sendWAMediaMessage`):** Downloads file from GCS via `ObjectStorageService.getObjectEntityFile(objectPath)` then `file.download()` — returns Buffer, no need for public URL. Passes Buffer directly to Baileys `sock.sendMessage`.
+
+**POST /api/admin/wa/leads enforces pending plan server-side.**  
+After an audit finding, the endpoint validates all sellerIds correspond to `subscriptionPlan='pending'` sellers. UI-only restriction was insufficient.
 
 **Files:**
-- `artifacts/api-server/src/lib/whatsapp.ts` — Baileys singleton + handleInboundLead()
-- `artifacts/api-server/src/lib/waCampaign.ts` — scheduler engine (handles both seller and inbound leads)
-- `artifacts/api-server/src/routes/waMarketing.ts` — admin REST endpoints incl. /inbound-leads routes
-- `artifacts/chatcart-admin/src/pages/WhatsAppMarketing.tsx` — 5-tab UI (Connection, Sequences, Leads, Inbound, Health)
-- `lib/db/src/schema/waMarketing.ts` — DB tables (wa_inbound_leads, wa_inbound_messages added; wa_campaign_leads.seller_id now nullable)
+- `artifacts/api-server/src/lib/whatsapp.ts` — Baileys singleton + sendWAMessage + sendWAMediaMessage + handleInboundLead
+- `artifacts/api-server/src/lib/waCampaign.ts` — scheduler (gt/asc step selection, media send dispatch)
+- `artifacts/api-server/src/routes/waMarketing.ts` — all WA admin endpoints + /media/request-upload-url
+- `artifacts/chatcart-admin/src/pages/WhatsAppMarketing.tsx` — 5-tab UI, flexible sequence builder with media upload
+- `lib/db/src/schema/waMarketing.ts` — DB tables (mediaUrl/mediaType/mediaFilename on wa_sequence_steps)

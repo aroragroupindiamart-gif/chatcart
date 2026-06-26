@@ -28,6 +28,9 @@ export const waSequenceStepsTable = pgTable("wa_sequence_steps", {
   sequenceId: integer("sequence_id").notNull().references(() => waSequencesTable.id, { onDelete: "cascade" }),
   dayOffset: integer("day_offset").notNull(),
   message: text("message").notNull(),
+  mediaUrl: text("media_url"),
+  mediaType: text("media_type"),
+  mediaFilename: text("media_filename"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
