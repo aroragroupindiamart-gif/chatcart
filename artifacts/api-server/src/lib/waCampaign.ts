@@ -53,17 +53,20 @@ export async function processScheduledMessages(): Promise<void> {
 
   const remaining = dailyLimit - todayCount;
   const now = new Date();
-  const farFuture = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+  // Short lease: 2 minutes. If this process crashes after claiming but before
+  // updating next_send_at, the lead auto-recovers when the lease expires and
+  // is picked up again by the next scheduler tick. No manual cleanup needed.
+  const leaseExpiry = new Date(Date.now() + 2 * 60 * 1000);
 
   // ── Atomic claim via FOR UPDATE SKIP LOCKED ──────────────────────────────────
-  // The UPDATE + subquery is a single atomic statement. The inner SELECT uses
+  // Single atomic statement — no transaction needed. The inner SELECT uses
   // FOR UPDATE SKIP LOCKED so two concurrent scheduler instances can never claim
-  // the same row: the second will see the row already locked and skip it.
-  // After this statement commits, claimed rows have next_send_at = far-future,
-  // so any later SELECT won't re-pick them up.
+  // the same row: the second sees the row already locked and skips it.
+  // Claimed rows get next_send_at = leaseExpiry (2 min from now) — short enough
+  // that any crash auto-heals without leaving leads stuck for days/years.
   const claimedResult = await db.execute(sql`
     UPDATE wa_campaign_leads
-    SET next_send_at = ${farFuture}
+    SET next_send_at = ${leaseExpiry}
     WHERE id IN (
       SELECT id FROM wa_campaign_leads
       WHERE status = 'active' AND next_send_at <= ${now}
@@ -216,13 +219,18 @@ export async function processScheduledMessages(): Promise<void> {
           .where(eq(waCampaignLeadsTable.id, lead.id));
       }
     } catch (e: any) {
-      // Unexpected exception — reset nextSendAt so the lead is not stranded
+      // Unexpected exception — reset nextSendAt so the lead is not stranded.
+      // The short lease (2 min) already provides a safety net, but an explicit
+      // reset is clearer and gives a tighter retry window.
       console.error(`[WA-CAMPAIGN] Unexpected error processing lead ${lead.id}:`, e?.message);
-      await db
-        .update(waCampaignLeadsTable)
-        .set({ nextSendAt: new Date(Date.now() + 5 * 60 * 1000) })
-        .where(eq(waCampaignLeadsTable.id, lead.id))
-        .catch(() => {});
+      try {
+        await db
+          .update(waCampaignLeadsTable)
+          .set({ nextSendAt: new Date(Date.now() + 5 * 60 * 1000) })
+          .where(eq(waCampaignLeadsTable.id, lead.id));
+      } catch (resetErr: any) {
+        console.error(`[WA-CAMPAIGN] Failed to reset nextSendAt for lead ${lead.id} — lease will expire in 2 min:`, resetErr?.message);
+      }
     }
   }
 }
