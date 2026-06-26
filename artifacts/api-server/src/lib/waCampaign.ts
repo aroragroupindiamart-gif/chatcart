@@ -74,7 +74,7 @@ export async function processScheduledMessages(): Promise<void> {
     RETURNING id
   `);
 
-  const claimedIds = (claimedResult as any[]).map((r: any) => Number(r.id));
+  const claimedIds = (claimedResult.rows as Array<{ id: string | number }>).map((r) => Number(r.id));
   if (claimedIds.length === 0) return;
 
   // Fetch full lead data for all claimed rows in one query
