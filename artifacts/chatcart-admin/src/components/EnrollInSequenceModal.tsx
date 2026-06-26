@@ -42,7 +42,7 @@ export function EnrollInSequenceModal({ open, onClose, sellerIds, sellerLabel }:
     }
   };
 
-  const activeSequences = sequences?.filter(s => s.isActive) ?? [];
+  const activeSequences = sequences ?? [];
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) handleClose(); }}>
@@ -89,7 +89,7 @@ export function EnrollInSequenceModal({ open, onClose, sellerIds, sellerLabel }:
                       )}
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      <Badge variant="outline" className="text-xs">{seq.stepCount} steps</Badge>
+                      <Badge variant="outline" className="text-xs">{seq.steps?.length ?? seq.leadCount ?? 0} steps</Badge>
                       {selectedSeqId === seq.id && (
                         <CheckCircle2 className="w-4 h-4 text-primary" />
                       )}

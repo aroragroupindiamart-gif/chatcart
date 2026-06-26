@@ -189,10 +189,10 @@ export interface WASequence {
   id: number;
   name: string;
   description: string | null;
-  isActive: boolean;
-  stepCount: number;
+  steps: Array<{ id: number; dayOffset: number; message: string }>;
   leadCount: number;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface WALead {
