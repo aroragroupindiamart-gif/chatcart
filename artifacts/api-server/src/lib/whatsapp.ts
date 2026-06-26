@@ -1,13 +1,14 @@
-import path from "path";
-import { fileURLToPath } from "url";
 import type { ServerResponse } from "http";
 import { db } from "@workspace/db";
 import { waSessionsTable, waInboundLeadsTable, waInboundMessagesTable, sellersTable } from "@workspace/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
+import {
+  uploadAllSessionFiles,
+  downloadSessionFromStorage,
+  deleteSessionFromStorage,
+} from "./waAuthState.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const SESSION_DIR = path.resolve(__dirname, "../../wa-session");
+const SESSION_LOCAL_DIR = "/tmp/wa-session";
 
 export type WAStatus = "disconnected" | "connecting" | "connected";
 
@@ -112,10 +113,18 @@ export async function connectWA(): Promise<void> {
       DisconnectReason,
     } = await import("@whiskeysockets/baileys");
     const QRCode = await import("qrcode");
-    const { mkdir } = await import("fs/promises");
+    const { mkdir, rm } = await import("fs/promises");
 
-    await mkdir(SESSION_DIR, { recursive: true });
-    const { state: authState, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
+    await mkdir(SESSION_LOCAL_DIR, { recursive: true });
+    const { state: authState, saveCreds } = await useMultiFileAuthState(SESSION_LOCAL_DIR);
+
+    // Wrap saveCreds: save locally first, then mirror to object storage (non-blocking)
+    const saveCredsAndBackup = async () => {
+      await saveCreds();
+      uploadAllSessionFiles(SESSION_LOCAL_DIR).catch((e) =>
+        console.error("[WA] Storage backup error:", e),
+      );
+    };
 
     sock = makeWASocket({
       auth: authState,
@@ -125,7 +134,7 @@ export async function connectWA(): Promise<void> {
       markOnlineOnConnect: false,
     });
 
-    sock.ev.on("creds.update", saveCreds);
+    sock.ev.on("creds.update", saveCredsAndBackup);
 
     sock.ev.on("connection.update", async (update: any) => {
       const { connection, lastDisconnect, qr } = update;
@@ -167,9 +176,12 @@ export async function connectWA(): Promise<void> {
 
         if (loggedOut) {
           isLoggedOut = true;
-          const { rm } = await import("fs/promises");
-          await rm(SESSION_DIR, { recursive: true, force: true }).catch(() => {});
+          // Delete local session files
+          await rm(SESSION_LOCAL_DIR, { recursive: true, force: true }).catch(() => {});
+          // Delete from object storage so next boot doesn't try to restore a dead session
+          deleteSessionFromStorage().catch(() => {});
         } else if (!isLoggedOut) {
+          // Transient disconnect (408, network blip, etc.) — reconnect after 8s
           reconnectTimer = setTimeout(() => connectWA(), 8000);
         }
       }
@@ -225,7 +237,8 @@ export async function disconnectWA(): Promise<void> {
   await updateSessionInDB({ status: "disconnected", phone: null, connectedAt: null });
 
   const { rm } = await import("fs/promises");
-  await rm(SESSION_DIR, { recursive: true, force: true }).catch(() => {});
+  await rm(SESSION_LOCAL_DIR, { recursive: true, force: true }).catch(() => {});
+  await deleteSessionFromStorage();
 }
 
 export async function sendWAMessage(phone: string, message: string): Promise<void> {
@@ -259,7 +272,7 @@ export async function sendWAMediaMessage(
   const { ObjectStorageService } = await import("./objectStorage.js");
   const storageService = new ObjectStorageService();
   const file = await storageService.getObjectEntityFile(objectPath);
-  const [fileBuffer] = await (file as any).download() as [Buffer];
+  const [fileBuffer] = (await (file as any).download()) as [Buffer];
   const [meta] = await (file as any).getMetadata();
   const mimetype: string = (meta.contentType as string) || "application/octet-stream";
 
@@ -377,12 +390,22 @@ async function handleInboundLead(fromPhone: string, displayName: string, message
 }
 
 export async function initWA(): Promise<void> {
+  // 1. Check local working dir first (survives process restarts within same container)
   try {
     const { access } = await import("fs/promises");
-    await access(SESSION_DIR);
-    console.log("[WA] Existing session found, reconnecting…");
+    await access(`${SESSION_LOCAL_DIR}/creds.json`);
+    console.log("[WA] Local session found, reconnecting…");
     connectWA();
-  } catch {
-    console.log("[WA] No existing session");
+    return;
+  } catch {}
+
+  // 2. Restore from object storage (survives container replacements)
+  const restored = await downloadSessionFromStorage();
+  if (restored) {
+    console.log("[WA] Session restored from object storage, reconnecting…");
+    connectWA();
+    return;
   }
+
+  console.log("[WA] No existing session — scan QR to connect");
 }
