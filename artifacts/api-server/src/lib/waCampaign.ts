@@ -87,26 +87,27 @@ export async function processScheduledMessages(): Promise<void> {
     const cleanPhone = rawPhone.replace(/^\+/, "");
     const displayName = sellerStoreName ?? inboundDisplayName ?? "there";
 
-    if (lead.currentDay >= 1 && !lead.repliedAt) {
+    // Reply-gate: if at least one step has been sent, require a reply before continuing
+    if (lead.currentHourOffset >= 0 && !lead.repliedAt) {
       await db
         .update(waCampaignLeadsTable)
         .set({ status: "paused_no_reply" })
         .where(eq(waCampaignLeadsTable.id, lead.id));
-      console.log(`[WA-CAMPAIGN] Lead ${lead.id} paused (no reply after Day ${lead.currentDay})`);
+      console.log(`[WA-CAMPAIGN] Lead ${lead.id} paused (no reply after ${lead.currentHourOffset}h step)`);
       continue;
     }
 
-    // Find the next step after the lead's current position — supports non-consecutive dayOffsets
+    // Find the next step — supports non-consecutive hourOffsets
     const [step] = await db
       .select()
       .from(waSequenceStepsTable)
       .where(
         and(
           eq(waSequenceStepsTable.sequenceId, lead.sequenceId),
-          gt(waSequenceStepsTable.dayOffset, lead.currentDay),
+          gt(waSequenceStepsTable.hourOffset, lead.currentHourOffset),
         ),
       )
-      .orderBy(asc(waSequenceStepsTable.dayOffset))
+      .orderBy(asc(waSequenceStepsTable.hourOffset))
       .limit(1);
 
     if (!step) {
@@ -133,10 +134,10 @@ export async function processScheduledMessages(): Promise<void> {
     try {
       if (step.mediaUrl && step.mediaType) {
         await sendWAMediaMessage(cleanPhone, step.mediaUrl, step.mediaType, message, step.mediaFilename ?? null);
-        console.log(`[WA-CAMPAIGN] Sent Day ${step.dayOffset} (${step.mediaType}) to ${cleanPhone}`);
+        console.log(`[WA-CAMPAIGN] Sent ${step.hourOffset}h step (${step.mediaType}) to ${cleanPhone}`);
       } else {
         await sendWAMessage(cleanPhone, message);
-        console.log(`[WA-CAMPAIGN] Sent Day ${step.dayOffset} to ${cleanPhone}`);
+        console.log(`[WA-CAMPAIGN] Sent ${step.hourOffset}h step to ${cleanPhone}`);
       }
     } catch (e: any) {
       sendStatus = "failed";
@@ -153,13 +154,34 @@ export async function processScheduledMessages(): Promise<void> {
     });
 
     if (sendStatus === "sent") {
-      const jitterMs = Math.random() * 2 * 60 * 60 * 1000;
-      const nextSendAt = new Date(Date.now() + 23 * 60 * 60 * 1000 + jitterMs);
+      // Look ahead to find the next step so we can compute its anchor time
+      const [nextStep] = await db
+        .select({ hourOffset: waSequenceStepsTable.hourOffset })
+        .from(waSequenceStepsTable)
+        .where(
+          and(
+            eq(waSequenceStepsTable.sequenceId, lead.sequenceId),
+            gt(waSequenceStepsTable.hourOffset, step.hourOffset),
+          ),
+        )
+        .orderBy(asc(waSequenceStepsTable.hourOffset))
+        .limit(1);
+
+      // Anchor nextSendAt to enrolledAt (createdAt) + nextStep.hourOffset.
+      // This prevents scheduler delays from compounding across steps.
+      let nextSendAt: Date;
+      if (nextStep) {
+        const enrolledAt = new Date(lead.createdAt).getTime();
+        nextSendAt = new Date(enrolledAt + nextStep.hourOffset * 60 * 60 * 1000);
+      } else {
+        // No next step — set far future; status will be completed on next poll
+        nextSendAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+      }
 
       await db
         .update(waCampaignLeadsTable)
         .set({
-          currentDay: step.dayOffset,
+          currentHourOffset: step.hourOffset,
           lastSentAt: new Date(),
           nextSendAt,
         })

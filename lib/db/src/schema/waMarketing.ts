@@ -26,7 +26,7 @@ export const waSequencesTable = pgTable("wa_sequences", {
 export const waSequenceStepsTable = pgTable("wa_sequence_steps", {
   id: serial("id").primaryKey(),
   sequenceId: integer("sequence_id").notNull().references(() => waSequencesTable.id, { onDelete: "cascade" }),
-  dayOffset: integer("day_offset").notNull(),
+  hourOffset: integer("hour_offset").notNull(),
   message: text("message").notNull(),
   mediaUrl: text("media_url"),
   mediaType: text("media_type"),
@@ -61,7 +61,7 @@ export const waCampaignLeadsTable = pgTable("wa_campaign_leads", {
   sellerId: integer("seller_id").references(() => sellersTable.id),
   inboundLeadId: integer("inbound_lead_id").references(() => waInboundLeadsTable.id),
   phone: text("phone"),
-  currentDay: integer("current_day").notNull().default(0),
+  currentHourOffset: integer("current_hour_offset").notNull().default(-1),
   nextSendAt: timestamp("next_send_at"),
   lastSentAt: timestamp("last_sent_at"),
   repliedAt: timestamp("replied_at"),

@@ -340,7 +340,7 @@ export default function SellerDetail() {
                         <div className="min-w-0">
                           <div className="font-medium text-sm truncate">{lead.sequenceName}</div>
                           <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-3">
-                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" />Day {lead.currentDay}</span>
+                            <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{lead.currentHourOffset < 0 ? 'Not started' : `${lead.currentHourOffset}h`}</span>
                             {lead.lastSentAt && <span>Last sent {new Date(lead.lastSentAt).toLocaleDateString()}</span>}
                             <span>Enrolled {new Date(lead.createdAt).toLocaleDateString()}</span>
                           </div>

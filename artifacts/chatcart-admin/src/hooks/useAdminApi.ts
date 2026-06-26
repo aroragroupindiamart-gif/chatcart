@@ -189,7 +189,7 @@ export interface WASequence {
   id: number;
   name: string;
   description: string | null;
-  steps: Array<{ id: number; dayOffset: number; message: string }>;
+  steps: Array<{ id: number; hourOffset: number; message: string }>;
   leadCount: number;
   createdAt: string;
   updatedAt: string;
@@ -202,7 +202,7 @@ export interface WALead {
   sellerId: number | null;
   storeName: string | null;
   phone: string | null;
-  currentDay: number;
+  currentHourOffset: number;
   status: string;
   nextSendAt: string | null;
   lastSentAt: string | null;

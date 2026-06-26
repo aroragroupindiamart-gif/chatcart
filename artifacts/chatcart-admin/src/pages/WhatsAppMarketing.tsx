@@ -51,7 +51,7 @@ interface Sequence {
 
 interface SequenceStep {
   id?: number;
-  dayOffset: number;
+  hourOffset: number;
   message: string;
   mediaUrl?: string | null;
   mediaType?: 'image' | 'video' | 'document' | null;
@@ -68,7 +68,7 @@ interface CampaignLead {
   inboundDisplayName: string | null;
   inboundPhone: string | null;
   phone: string | null;
-  currentDay: number;
+  currentHourOffset: number;
   nextSendAt: string | null;
   lastSentAt: string | null;
   repliedAt: string | null;
@@ -413,7 +413,7 @@ function SequencesTab() {
                   {seq.description && <CardDescription>{seq.description}</CardDescription>}
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline">{seq.steps.length} day{seq.steps.length !== 1 ? 's' : ''}</Badge>
+                  <Badge variant="outline">{seq.steps.length} step{seq.steps.length !== 1 ? 's' : ''}</Badge>
                   <Badge variant="secondary">{seq.leadCount} lead{seq.leadCount !== 1 ? 's' : ''}</Badge>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
@@ -436,8 +436,8 @@ function SequencesTab() {
             <CardContent>
               <div className="space-y-2">
                 {seq.steps.map((step) => (
-                  <div key={step.id ?? step.dayOffset} className="flex gap-3 text-sm">
-                    <span className="shrink-0 w-14 text-muted-foreground font-medium pt-0.5">Day {step.dayOffset}</span>
+                  <div key={step.id ?? step.hourOffset} className="flex gap-3 text-sm">
+                    <span className="shrink-0 w-14 text-muted-foreground font-medium pt-0.5">{step.hourOffset === 0 ? 'Now' : `${step.hourOffset}h`}</span>
                     <div className="flex-1 min-w-0">
                       <span className="text-foreground/80 whitespace-pre-wrap leading-relaxed">{step.message}</span>
                       {step.mediaType && (
@@ -463,7 +463,7 @@ function SequencesTab() {
 }
 
 interface StepDraft {
-  dayOffset: number;
+  hourOffset: number;
   message: string;
   mediaUrl?: string;
   mediaType?: 'image' | 'video' | 'document';
@@ -483,7 +483,7 @@ function CreateSequenceForm({ onSuccess }: { onSuccess: () => void }) {
   const { toast } = useToast();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [steps, setSteps] = useState<StepDraft[]>([{ dayOffset: 1, message: '' }]);
+  const [steps, setSteps] = useState<StepDraft[]>([{ hourOffset: 0, message: '' }]);
   const fileInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const createMut = useMutation({
@@ -497,8 +497,8 @@ function CreateSequenceForm({ onSuccess }: { onSuccess: () => void }) {
     setSteps((s) => s.map((st, i) => i === idx ? { ...st, ...patch } : st));
 
   const addStep = () => {
-    const lastOffset = steps[steps.length - 1]?.dayOffset ?? 0;
-    setSteps((s) => [...s, { dayOffset: lastOffset + 1, message: '' }]);
+    const lastOffset = steps[steps.length - 1]?.hourOffset ?? 0;
+    setSteps((s) => [...s, { hourOffset: lastOffset + 6, message: '' }]);
   };
 
   const removeStep = (idx: number) =>
@@ -509,12 +509,12 @@ function CreateSequenceForm({ onSuccess }: { onSuccess: () => void }) {
     if (next < 0 || next >= steps.length) return;
     setSteps((s) => {
       const arr = [...s];
-      // Swap dayOffsets, keep everything else in position
-      const tmpOffset = arr[idx].dayOffset;
-      arr[idx] = { ...arr[idx], dayOffset: arr[next].dayOffset };
-      arr[next] = { ...arr[next], dayOffset: tmpOffset };
-      // Re-sort by dayOffset to keep display order consistent
-      return [...arr].sort((a, b) => a.dayOffset - b.dayOffset);
+      // Swap hourOffsets, keep everything else in position
+      const tmpOffset = arr[idx].hourOffset;
+      arr[idx] = { ...arr[idx], hourOffset: arr[next].hourOffset };
+      arr[next] = { ...arr[next], hourOffset: tmpOffset };
+      // Re-sort by hourOffset to keep display order consistent
+      return [...arr].sort((a, b) => a.hourOffset - b.hourOffset);
     });
   };
 
@@ -565,20 +565,20 @@ function CreateSequenceForm({ onSuccess }: { onSuccess: () => void }) {
   // Validate ascending, no duplicates
   const offsetErrors = steps.map((s, i) => {
     if (i === 0) return null;
-    return s.dayOffset <= steps[i - 1].dayOffset ? `Day offset must be greater than the previous step (Day ${steps[i - 1].dayOffset})` : null;
+    return s.hourOffset <= steps[i - 1].hourOffset ? `Hour offset must be greater than the previous step (${steps[i - 1].hourOffset}h)` : null;
   });
   const hasOffsetError = offsetErrors.some(Boolean);
 
   const submit = () => {
     if (!name.trim()) { toast({ title: 'Sequence name is required', variant: 'destructive' }); return; }
     if (steps.some((s) => !s.message.trim())) { toast({ title: 'All steps need message text', variant: 'destructive' }); return; }
-    if (hasOffsetError) { toast({ title: 'Fix day offset order before saving', variant: 'destructive' }); return; }
+    if (hasOffsetError) { toast({ title: 'Fix hour offset order before saving', variant: 'destructive' }); return; }
     if (steps.some((s) => s._uploading)) { toast({ title: 'Wait for uploads to finish', variant: 'destructive' }); return; }
     createMut.mutate({
       name: name.trim(),
       description: description.trim() || undefined,
       steps: steps.map((s) => ({
-        dayOffset: s.dayOffset,
+        hourOffset: s.hourOffset,
         message: s.message,
         mediaUrl: s.mediaUrl ?? null,
         mediaType: s.mediaType ?? null,
@@ -627,15 +627,16 @@ function CreateSequenceForm({ onSuccess }: { onSuccess: () => void }) {
                 </button>
               </div>
               <div className="flex items-center gap-1.5 flex-1">
-                <Label className="text-sm font-semibold shrink-0">Day</Label>
+                <Label className="text-sm font-semibold shrink-0">Hours after enrolment</Label>
                 <Input
                   type="number"
-                  min={1}
-                  max={365}
-                  className="w-20 h-8 text-sm"
-                  value={step.dayOffset}
-                  onChange={(e) => updateStep(idx, { dayOffset: Math.max(1, parseInt(e.target.value) || 1) })}
+                  min={0}
+                  max={720}
+                  className="w-24 h-8 text-sm"
+                  value={step.hourOffset}
+                  onChange={(e) => updateStep(idx, { hourOffset: Math.max(0, parseInt(e.target.value) || 0) })}
                 />
+                <span className="text-xs text-muted-foreground shrink-0">{step.hourOffset === 0 ? 'immediate' : step.hourOffset === 1 ? '1 hr' : `${step.hourOffset} hrs`}</span>
                 {offsetErrors[idx] && (
                   <span className="text-xs text-destructive">{offsetErrors[idx]}</span>
                 )}
@@ -654,7 +655,7 @@ function CreateSequenceForm({ onSuccess }: { onSuccess: () => void }) {
               </Label>
               <Textarea
                 rows={3}
-                placeholder={step.mediaUrl ? `Caption for Day ${step.dayOffset} — use {{name}}, {{storeName}}…` : `Hi {{name}}, day ${step.dayOffset} message…`}
+                placeholder={step.mediaUrl ? `Caption for ${step.hourOffset}h step — use {{name}}, {{storeName}}…` : `Hi {{name}}, message sent at +${step.hourOffset}h…`}
                 value={step.message}
                 onChange={(e) => updateStep(idx, { message: e.target.value })}
                 className="font-mono text-sm"
@@ -804,7 +805,7 @@ function LeadsTab() {
                   </td>
                   <td className="py-3 pr-4 text-muted-foreground">{lead.sequenceName}</td>
                   <td className="py-3 pr-4">
-                    <span className="font-mono font-semibold">{lead.currentDay === 0 ? '–' : `Day ${lead.currentDay}`}</span>
+                    <span className="font-mono font-semibold">{lead.currentHourOffset < 0 ? '–' : `${lead.currentHourOffset}h`}</span>
                   </td>
                   <td className="py-3 pr-4"><StatusBadge status={lead.status} /></td>
                   <td className="py-3 pr-4">

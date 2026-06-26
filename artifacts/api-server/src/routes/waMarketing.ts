@@ -129,7 +129,7 @@ router.get("/admin/wa/sequences", requireAdminAuth, async (req, res) => {
           .select()
           .from(waSequenceStepsTable)
           .where(eq(waSequenceStepsTable.sequenceId, seq.id))
-          .orderBy(waSequenceStepsTable.dayOffset);
+          .orderBy(waSequenceStepsTable.hourOffset);
         const [leadCount] = await db
           .select({ c: count() })
           .from(waCampaignLeadsTable)
@@ -145,7 +145,7 @@ router.get("/admin/wa/sequences", requireAdminAuth, async (req, res) => {
 
 router.post("/admin/wa/sequences", requireAdminAuth, async (req, res) => {
   const stepSchema = z.object({
-    dayOffset: z.number().int().min(1),
+    hourOffset: z.number().int().min(0),
     message: z.string().min(1),
     mediaUrl: z.string().nullable().optional(),
     mediaType: z.enum(["image", "video", "document"]).nullable().optional(),
@@ -161,11 +161,11 @@ router.post("/admin/wa/sequences", requireAdminAuth, async (req, res) => {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid data" });
     return;
   }
-  // Validate ascending day-offsets with no duplicates
-  const offsets = parsed.data.steps.map((s) => s.dayOffset);
+  // Validate ascending hour-offsets with no duplicates
+  const offsets = parsed.data.steps.map((s) => s.hourOffset);
   for (let i = 1; i < offsets.length; i++) {
     if (offsets[i] <= offsets[i - 1]) {
-      res.status(400).json({ error: `Day offsets must be strictly ascending. Day ${offsets[i]} comes after Day ${offsets[i - 1]}.` });
+      res.status(400).json({ error: `Hour offsets must be strictly ascending. ${offsets[i]}h comes after ${offsets[i - 1]}h.` });
       return;
     }
   }
@@ -177,7 +177,7 @@ router.post("/admin/wa/sequences", requireAdminAuth, async (req, res) => {
     await db.insert(waSequenceStepsTable).values(
       parsed.data.steps.map((s) => ({
         sequenceId: sequence.id,
-        dayOffset: s.dayOffset,
+        hourOffset: s.hourOffset,
         message: s.message,
         mediaUrl: s.mediaUrl ?? null,
         mediaType: s.mediaType ?? null,
@@ -188,7 +188,7 @@ router.post("/admin/wa/sequences", requireAdminAuth, async (req, res) => {
       .select()
       .from(waSequenceStepsTable)
       .where(eq(waSequenceStepsTable.sequenceId, sequence.id))
-      .orderBy(waSequenceStepsTable.dayOffset);
+      .orderBy(waSequenceStepsTable.hourOffset);
     res.json({ ...sequence, steps });
   } catch (e) {
     res.status(500).json({ error: "Failed to create sequence" });
@@ -292,7 +292,7 @@ router.get("/admin/wa/leads", requireAdminAuth, async (req, res) => {
         inboundDisplayName: waInboundLeadsTable.displayName,
         inboundPhone: waInboundLeadsTable.phone,
         phone: sellersTable.phone,
-        currentDay: waCampaignLeadsTable.currentDay,
+        currentHourOffset: waCampaignLeadsTable.currentHourOffset,
         nextSendAt: waCampaignLeadsTable.nextSendAt,
         lastSentAt: waCampaignLeadsTable.lastSentAt,
         repliedAt: waCampaignLeadsTable.repliedAt,
@@ -344,7 +344,7 @@ router.post("/admin/wa/leads", requireAdminAuth, async (req, res) => {
     if (newSellerIds.length === 0) { res.status(400).json({ error: "All selected sellers are already in this sequence" }); return; }
 
     await db.insert(waCampaignLeadsTable).values(
-      newSellerIds.map((sellerId) => ({ sequenceId, sellerId, currentDay: 0, nextSendAt: new Date(), status: "active" })),
+      newSellerIds.map((sellerId) => ({ sequenceId, sellerId, currentHourOffset: -1, nextSendAt: new Date(), status: "active" })),
     );
     res.json({ ok: true, added: newSellerIds.length, skipped: sellerIds.length - newSellerIds.length });
   } catch (e) {
@@ -456,7 +456,7 @@ router.post("/admin/wa/inbound-leads/:id/enroll", requireAdminAuth, async (req, 
         sellerId: inboundLead.matchedSellerId ?? null,
         inboundLeadId: inboundLead.id,
         phone: inboundLead.matchedSellerId ? null : inboundLead.phone,
-        currentDay: 0,
+        currentHourOffset: -1,
         nextSendAt: new Date(),
         status: "active",
       })
