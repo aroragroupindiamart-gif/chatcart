@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { formatOffset } from '@/lib/waOffset';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminFetch } from '@/lib/adminFetch';
 import { Layout } from '@/components/Layout';
@@ -149,12 +150,6 @@ function fmtRelative(d: string | null) {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   return fmtDate(d);
-}
-
-function formatOffset(hourOffset: number): string {
-  if (hourOffset === 0) return 'Now';
-  if (hourOffset <= 48) return `${hourOffset}h`;
-  return `Day ${Math.round(hourOffset / 24)}`;
 }
 
 function StatusBadge({ status }: { status: CampaignLead['status'] }) {
@@ -638,12 +633,19 @@ function CreateSequenceForm({ onSuccess }: { onSuccess: () => void }) {
                 <Label className="text-sm font-semibold shrink-0">Send after</Label>
                 <Input
                   type="number"
-                  min={0}
+                  min={step._unit === 'days' ? 1 : 0}
+                  max={step._unit === 'days' ? undefined : 48}
                   className="w-20 h-8 text-sm"
                   value={step._unit === 'days' ? Math.round(step.hourOffset / 24) || 1 : step.hourOffset}
                   onChange={(e) => {
-                    const val = Math.max(0, parseInt(e.target.value) || 0);
-                    updateStep(idx, { hourOffset: step._unit === 'days' ? val * 24 : val });
+                    const raw = parseInt(e.target.value) || 0;
+                    if (step._unit === 'days') {
+                      const days = Math.max(1, raw);
+                      updateStep(idx, { hourOffset: days * 24 });
+                    } else {
+                      const hours = Math.min(48, Math.max(0, raw));
+                      updateStep(idx, { hourOffset: hours });
+                    }
                   }}
                 />
                 <select

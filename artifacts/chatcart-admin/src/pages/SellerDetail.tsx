@@ -14,12 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertTriangle, Store, Package, ShoppingCart, Calendar, Phone, Globe, CreditCard, MessageCircle, CheckCircle2, PauseCircle, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { EnrollInSequenceModal } from '@/components/EnrollInSequenceModal';
-
-function formatOffset(hourOffset: number): string {
-  if (hourOffset === 0) return 'Now';
-  if (hourOffset <= 48) return `${hourOffset}h`;
-  return `Day ${Math.round(hourOffset / 24)}`;
-}
+import { formatOffset } from '@/lib/waOffset';
 
 function WALeadStatusBadge({ status }: { status: string }) {
   if (status === 'active') return <Badge className="bg-green-100 text-green-800 border border-green-200 hover:bg-green-100 gap-1 text-xs"><CheckCircle2 className="w-3 h-3" />Active</Badge>;
