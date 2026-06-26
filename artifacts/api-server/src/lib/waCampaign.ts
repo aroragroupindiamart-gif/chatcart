@@ -7,7 +7,7 @@ import {
   sellersTable,
   waInboundLeadsTable,
 } from "@workspace/db/schema";
-import { eq, and, count, gte, gt, asc, inArray, sql } from "drizzle-orm";
+import { eq, and, count, gte, gt, asc, sql } from "drizzle-orm";
 import { sendWAMessage, sendWAMediaMessage, getWAState } from "./whatsapp.js";
 
 function interpolate(template: string, vars: Record<string, string>): string {
@@ -52,60 +52,67 @@ export async function processScheduledMessages(): Promise<void> {
   if (todayCount >= dailyLimit) return;
 
   const remaining = dailyLimit - todayCount;
+
+  // Capture cutoff once — leads that become due during this tick are handled next tick
   const now = new Date();
-  // Short lease: 2 minutes. If this process crashes after claiming but before
-  // updating next_send_at, the lead auto-recovers when the lease expires and
-  // is picked up again by the next scheduler tick. No manual cleanup needed.
-  const leaseExpiry = new Date(Date.now() + 2 * 60 * 1000);
 
-  // ── Atomic claim via FOR UPDATE SKIP LOCKED ──────────────────────────────────
-  // Single atomic statement — no transaction needed. The inner SELECT uses
-  // FOR UPDATE SKIP LOCKED so two concurrent scheduler instances can never claim
-  // the same row: the second sees the row already locked and skips it.
-  // Claimed rows get next_send_at = leaseExpiry (2 min from now) — short enough
-  // that any crash auto-heals without leaving leads stuck for days/years.
-  const claimedResult = await db.execute(sql`
-    UPDATE wa_campaign_leads
-    SET next_send_at = ${leaseExpiry}
-    WHERE id IN (
-      SELECT id FROM wa_campaign_leads
-      WHERE status = 'active' AND next_send_at <= ${now}
-      ORDER BY next_send_at ASC
-      LIMIT ${remaining}
-      FOR UPDATE SKIP LOCKED
-    )
-    RETURNING id
-  `);
+  // ── One-at-a-time claim loop ─────────────────────────────────────────────────
+  // Each iteration claims exactly ONE lead with a 5-minute lease using
+  // FOR UPDATE SKIP LOCKED. Two concurrent scheduler instances (dev + prod) can
+  // never claim the same row: the inner SELECT locks the row and the second
+  // instance skips it. Processing one lead takes <30s, well within the 5-min
+  // lease, so the lease cannot expire mid-processing.
+  // If the process crashes after claim but before updating next_send_at, the
+  // 5-min lease expires naturally and the lead re-enters the queue automatically.
+  for (let i = 0; i < remaining; i++) {
+    const leaseExpiry = new Date(Date.now() + 5 * 60 * 1000);
 
-  const claimedIds = (claimedResult.rows as Array<{ id: string | number }>).map((r) => Number(r.id));
-  if (claimedIds.length === 0) return;
+    const claimedResult = await db.execute(sql`
+      UPDATE wa_campaign_leads
+      SET next_send_at = ${leaseExpiry}
+      WHERE id IN (
+        SELECT id FROM wa_campaign_leads
+        WHERE status = 'active' AND next_send_at <= ${now}
+        ORDER BY next_send_at ASC
+        LIMIT 1
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING id
+    `);
 
-  // Fetch full lead data for all claimed rows in one query
-  const dueLeads = await db
-    .select({
-      lead: waCampaignLeadsTable,
-      sellerPhone: sellersTable.phone,
-      sellerStoreName: sellersTable.storeName,
-      inboundPhone: waInboundLeadsTable.phone,
-      inboundDisplayName: waInboundLeadsTable.displayName,
-    })
-    .from(waCampaignLeadsTable)
-    .leftJoin(sellersTable, eq(waCampaignLeadsTable.sellerId, sellersTable.id))
-    .leftJoin(waInboundLeadsTable, eq(waCampaignLeadsTable.inboundLeadId, waInboundLeadsTable.id))
-    .where(inArray(waCampaignLeadsTable.id, claimedIds));
-  // ─────────────────────────────────────────────────────────────────────────────
+    const claimedRows = claimedResult.rows as Array<{ id: string | number }>;
+    if (claimedRows.length === 0) break; // No more due leads this tick
 
-  for (const { lead, sellerPhone, sellerStoreName, inboundPhone, inboundDisplayName } of dueLeads) {
+    const leadId = Number(claimedRows[0].id);
+
+    // Fetch full data for the claimed lead
+    const [leadData] = await db
+      .select({
+        lead: waCampaignLeadsTable,
+        sellerPhone: sellersTable.phone,
+        sellerStoreName: sellersTable.storeName,
+        inboundPhone: waInboundLeadsTable.phone,
+        inboundDisplayName: waInboundLeadsTable.displayName,
+      })
+      .from(waCampaignLeadsTable)
+      .leftJoin(sellersTable, eq(waCampaignLeadsTable.sellerId, sellersTable.id))
+      .leftJoin(waInboundLeadsTable, eq(waCampaignLeadsTable.inboundLeadId, waInboundLeadsTable.id))
+      .where(eq(waCampaignLeadsTable.id, leadId));
+
+    if (!leadData) continue;
+
+    const { lead, sellerPhone, sellerStoreName, inboundPhone, inboundDisplayName } = leadData;
+
     try {
       // Resolve phone and display name — prefer seller FK, fall back to inbound lead
       const rawPhone = sellerPhone ?? inboundPhone ?? lead.phone ?? null;
       if (!rawPhone) {
-        // No phone — permanently skip so it's never re-claimed
+        // No phone — skip this tick; lead will be re-claimed when lease expires
+        console.warn(`[WA-CAMPAIGN] Lead ${lead.id} has no phone — skipping`);
         await db
           .update(waCampaignLeadsTable)
-          .set({ status: "completed" })
+          .set({ nextSendAt: new Date(Date.now() + 60 * 60 * 1000) }) // retry in 1h
           .where(eq(waCampaignLeadsTable.id, lead.id));
-        console.warn(`[WA-CAMPAIGN] Lead ${lead.id} has no phone — marked completed`);
         continue;
       }
       const cleanPhone = rawPhone.replace(/^\+/, "");
@@ -211,8 +218,7 @@ export async function processScheduledMessages(): Promise<void> {
           })
           .where(eq(waCampaignLeadsTable.id, lead.id));
       } else {
-        // Send failed — reset nextSendAt so this lead is retried on the next tick
-        // instead of being stuck with the far-future claim sentinel.
+        // Send failed — reset nextSendAt for retry on the next tick
         await db
           .update(waCampaignLeadsTable)
           .set({ nextSendAt: new Date(Date.now() + 5 * 60 * 1000) })
@@ -220,8 +226,8 @@ export async function processScheduledMessages(): Promise<void> {
       }
     } catch (e: any) {
       // Unexpected exception — reset nextSendAt so the lead is not stranded.
-      // The short lease (2 min) already provides a safety net, but an explicit
-      // reset is clearer and gives a tighter retry window.
+      // The 5-min lease already provides a safety net, but an explicit reset
+      // gives a tighter retry window and a clear log trail.
       console.error(`[WA-CAMPAIGN] Unexpected error processing lead ${lead.id}:`, e?.message);
       try {
         await db
@@ -229,7 +235,7 @@ export async function processScheduledMessages(): Promise<void> {
           .set({ nextSendAt: new Date(Date.now() + 5 * 60 * 1000) })
           .where(eq(waCampaignLeadsTable.id, lead.id));
       } catch (resetErr: any) {
-        console.error(`[WA-CAMPAIGN] Failed to reset nextSendAt for lead ${lead.id} — lease will expire in 2 min:`, resetErr?.message);
+        console.error(`[WA-CAMPAIGN] Failed to reset nextSendAt for lead ${lead.id} (5-min lease will auto-expire):`, resetErr?.message);
       }
     }
   }
