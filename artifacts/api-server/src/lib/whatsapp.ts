@@ -2,8 +2,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 import type { ServerResponse } from "http";
 import { db } from "@workspace/db";
-import { waSessionsTable } from "@workspace/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { waSessionsTable, waInboundLeadsTable, waInboundMessagesTable, sellersTable } from "@workspace/db/schema";
+import { eq, desc, sql } from "drizzle-orm";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -181,9 +181,22 @@ export async function connectWA(): Promise<void> {
         const rawJid = msg.key.remoteJid ?? "";
         const phone = rawJid.split("@")[0];
         if (!phone || phone.includes("-")) continue;
-        await handleIncomingReply(phone).catch((e) =>
-          console.error("[WA] Reply handler error:", e),
-        );
+
+        const displayName: string = msg.pushName ?? "";
+        const msgContent =
+          msg.message?.conversation ??
+          msg.message?.extendedTextMessage?.text ??
+          msg.message?.imageMessage?.caption ??
+          "";
+
+        await Promise.all([
+          handleIncomingReply(phone).catch((e) =>
+            console.error("[WA] Reply handler error:", e),
+          ),
+          handleInboundLead(phone, displayName, msgContent).catch((e) =>
+            console.error("[WA] Inbound lead handler error:", e),
+          ),
+        ]);
       }
     });
   } catch (e) {
@@ -258,6 +271,68 @@ async function handleIncomingReply(fromPhone: string): Promise<void> {
   if (leads.length > 0) {
     console.log(`[WA] Marked ${leads.length} lead(s) as replied for phone +${fromPhone}`);
   }
+}
+
+async function handleInboundLead(fromPhone: string, displayName: string, messageText: string): Promise<void> {
+  const normalizedPhone = `+${fromPhone}`;
+
+  const [matchedSeller] = await db
+    .select({ id: sellersTable.id })
+    .from(sellersTable)
+    .where(eq(sellersTable.phone, normalizedPhone))
+    .limit(1);
+
+  const matchedSellerId = matchedSeller?.id ?? null;
+
+  const [existing] = await db
+    .select({ id: waInboundLeadsTable.id })
+    .from(waInboundLeadsTable)
+    .where(eq(waInboundLeadsTable.phone, fromPhone))
+    .limit(1);
+
+  let leadId: number;
+
+  if (existing) {
+    await db
+      .update(waInboundLeadsTable)
+      .set({
+        displayName: displayName || undefined,
+        lastMessage: messageText || null,
+        lastMessageAt: new Date(),
+        matchedSellerId: matchedSellerId ?? undefined,
+        messageCount: sql`${waInboundLeadsTable.messageCount} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(eq(waInboundLeadsTable.id, existing.id));
+    leadId = existing.id;
+    console.log(`[WA] Inbound message from existing lead +${fromPhone} (lead ${leadId})`);
+  } else {
+    const [created] = await db
+      .insert(waInboundLeadsTable)
+      .values({
+        phone: fromPhone,
+        displayName: displayName || null,
+        firstMessage: messageText || null,
+        lastMessage: messageText || null,
+        lastMessageAt: new Date(),
+        matchedSellerId,
+        messageCount: 1,
+        isWarm: true,
+      })
+      .returning({ id: waInboundLeadsTable.id });
+    leadId = created.id;
+    console.log(`[WA] New inbound lead +${fromPhone} (lead ${leadId}, seller=${matchedSellerId ?? "none"})`);
+  }
+
+  if (messageText) {
+    await db.insert(waInboundMessagesTable).values({
+      inboundLeadId: leadId,
+      message: messageText,
+      receivedAt: new Date(),
+    });
+  }
+
+  broadcast({ type: "inbound_lead", leadId, phone: fromPhone, displayName, matchedSellerId });
 }
 
 export async function initWA(): Promise<void> {

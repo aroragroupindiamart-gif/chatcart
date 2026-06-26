@@ -5,8 +5,9 @@ import {
   waSendLogTable,
   waSessionsTable,
   sellersTable,
+  waInboundLeadsTable,
 } from "@workspace/db/schema";
-import { eq, and, lte, count, gte } from "drizzle-orm";
+import { eq, and, lte, count, gte, isNull, or } from "drizzle-orm";
 import { sendWAMessage, getWAState } from "./whatsapp.js";
 
 function interpolate(template: string, vars: Record<string, string>): string {
@@ -56,15 +57,18 @@ export async function processScheduledMessages(): Promise<void> {
   const remaining = dailyLimit - todayCount;
   const now = new Date();
 
+  // Fetch leads — join sellers OR inbound leads depending on which FK is set
   const dueLeads = await db
     .select({
       lead: waCampaignLeadsTable,
-      sellerId: sellersTable.id,
-      phone: sellersTable.phone,
-      storeName: sellersTable.storeName,
+      sellerPhone: sellersTable.phone,
+      sellerStoreName: sellersTable.storeName,
+      inboundPhone: waInboundLeadsTable.phone,
+      inboundDisplayName: waInboundLeadsTable.displayName,
     })
     .from(waCampaignLeadsTable)
-    .innerJoin(sellersTable, eq(waCampaignLeadsTable.sellerId, sellersTable.id))
+    .leftJoin(sellersTable, eq(waCampaignLeadsTable.sellerId, sellersTable.id))
+    .leftJoin(waInboundLeadsTable, eq(waCampaignLeadsTable.inboundLeadId, waInboundLeadsTable.id))
     .where(
       and(
         eq(waCampaignLeadsTable.status, "active"),
@@ -73,7 +77,16 @@ export async function processScheduledMessages(): Promise<void> {
     )
     .limit(remaining);
 
-  for (const { lead, phone, storeName } of dueLeads) {
+  for (const { lead, sellerPhone, sellerStoreName, inboundPhone, inboundDisplayName } of dueLeads) {
+    // Resolve phone and display name — prefer seller FK, fall back to inbound lead
+    const rawPhone = sellerPhone ?? inboundPhone ?? lead.phone ?? null;
+    if (!rawPhone) {
+      console.warn(`[WA-CAMPAIGN] Lead ${lead.id} has no phone — skipping`);
+      continue;
+    }
+    const cleanPhone = rawPhone.replace(/^\+/, "");
+    const displayName = sellerStoreName ?? inboundDisplayName ?? "there";
+
     if (lead.currentDay >= 1 && !lead.repliedAt) {
       await db
         .update(waCampaignLeadsTable)
@@ -104,14 +117,12 @@ export async function processScheduledMessages(): Promise<void> {
       continue;
     }
 
-    const firstName = storeName ? storeName.split(" ")[0] : "there";
+    const firstName = displayName.split(" ")[0];
     const message = interpolate(step.message, {
       name: firstName,
-      storeName: storeName ?? "your store",
+      storeName: displayName,
       firstName,
     });
-
-    const cleanPhone = phone.replace(/^\+/, "");
 
     await randomDelayMs(3000, 8000);
 

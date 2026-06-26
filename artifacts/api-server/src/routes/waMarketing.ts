@@ -7,9 +7,11 @@ import {
   waSequenceStepsTable,
   waCampaignLeadsTable,
   waSendLogTable,
+  waInboundLeadsTable,
+  waInboundMessagesTable,
   sellersTable,
 } from "@workspace/db/schema";
-import { eq, and, desc, gte, count, isNotNull, inArray } from "drizzle-orm";
+import { eq, and, desc, gte, count, isNotNull, inArray, or, isNull } from "drizzle-orm";
 import { z } from "zod";
 import {
   connectWA,
@@ -211,7 +213,10 @@ router.get("/admin/wa/leads", requireAdminAuth, async (req, res) => {
         sequenceId: waCampaignLeadsTable.sequenceId,
         sequenceName: waSequencesTable.name,
         sellerId: waCampaignLeadsTable.sellerId,
+        inboundLeadId: waCampaignLeadsTable.inboundLeadId,
         storeName: sellersTable.storeName,
+        inboundDisplayName: waInboundLeadsTable.displayName,
+        inboundPhone: waInboundLeadsTable.phone,
         phone: sellersTable.phone,
         currentDay: waCampaignLeadsTable.currentDay,
         nextSendAt: waCampaignLeadsTable.nextSendAt,
@@ -221,7 +226,8 @@ router.get("/admin/wa/leads", requireAdminAuth, async (req, res) => {
         createdAt: waCampaignLeadsTable.createdAt,
       })
       .from(waCampaignLeadsTable)
-      .innerJoin(sellersTable, eq(waCampaignLeadsTable.sellerId, sellersTable.id))
+      .leftJoin(sellersTable, eq(waCampaignLeadsTable.sellerId, sellersTable.id))
+      .leftJoin(waInboundLeadsTable, eq(waCampaignLeadsTable.inboundLeadId, waInboundLeadsTable.id))
       .innerJoin(waSequencesTable, eq(waCampaignLeadsTable.sequenceId, waSequencesTable.id))
       .orderBy(desc(waCampaignLeadsTable.createdAt));
     res.json(leads);
@@ -276,6 +282,109 @@ router.patch("/admin/wa/leads/:id", requireAdminAuth, async (req, res) => {
   }
 });
 
+// ── Inbound Leads ─────────────────────────────────────────────────────────────
+
+router.get("/admin/wa/inbound-leads", requireAdminAuth, async (req, res) => {
+  try {
+    const leads = await db
+      .select({
+        id: waInboundLeadsTable.id,
+        phone: waInboundLeadsTable.phone,
+        displayName: waInboundLeadsTable.displayName,
+        firstMessage: waInboundLeadsTable.firstMessage,
+        lastMessage: waInboundLeadsTable.lastMessage,
+        lastMessageAt: waInboundLeadsTable.lastMessageAt,
+        messageCount: waInboundLeadsTable.messageCount,
+        isWarm: waInboundLeadsTable.isWarm,
+        matchedSellerId: waInboundLeadsTable.matchedSellerId,
+        matchedSellerName: sellersTable.storeName,
+        matchedSellerPlan: sellersTable.subscriptionPlan,
+        createdAt: waInboundLeadsTable.createdAt,
+      })
+      .from(waInboundLeadsTable)
+      .leftJoin(sellersTable, eq(waInboundLeadsTable.matchedSellerId, sellersTable.id))
+      .orderBy(desc(waInboundLeadsTable.lastMessageAt));
+    res.json(leads);
+  } catch (e) {
+    res.status(500).json({ error: "Failed to fetch inbound leads" });
+  }
+});
+
+router.get("/admin/wa/inbound-leads/:id/messages", requireAdminAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    const messages = await db
+      .select()
+      .from(waInboundMessagesTable)
+      .where(eq(waInboundMessagesTable.inboundLeadId, id))
+      .orderBy(waInboundMessagesTable.receivedAt);
+    res.json(messages);
+  } catch (e) {
+    res.status(500).json({ error: "Failed to fetch messages" });
+  }
+});
+
+router.post("/admin/wa/inbound-leads/:id/enroll", requireAdminAuth, async (req, res) => {
+  const inboundLeadId = Number(req.params.id);
+  const schema = z.object({ sequenceId: z.number().int().positive() });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid data" }); return; }
+
+  try {
+    const [inboundLead] = await db
+      .select()
+      .from(waInboundLeadsTable)
+      .where(eq(waInboundLeadsTable.id, inboundLeadId))
+      .limit(1);
+    if (!inboundLead) { res.status(404).json({ error: "Lead not found" }); return; }
+
+    const [seq] = await db
+      .select({ id: waSequencesTable.id })
+      .from(waSequencesTable)
+      .where(eq(waSequencesTable.id, parsed.data.sequenceId))
+      .limit(1);
+    if (!seq) { res.status(404).json({ error: "Sequence not found" }); return; }
+
+    // Check if already enrolled via inbound lead OR matched seller
+    const existingChecks: any[] = [eq(waCampaignLeadsTable.inboundLeadId, inboundLeadId)];
+    if (inboundLead.matchedSellerId) {
+      existingChecks.push(eq(waCampaignLeadsTable.sellerId, inboundLead.matchedSellerId));
+    }
+
+    const [existing] = await db
+      .select({ id: waCampaignLeadsTable.id })
+      .from(waCampaignLeadsTable)
+      .where(and(
+        eq(waCampaignLeadsTable.sequenceId, parsed.data.sequenceId),
+        or(...existingChecks),
+      ))
+      .limit(1);
+
+    if (existing) {
+      res.status(400).json({ error: "Already enrolled in this sequence" });
+      return;
+    }
+
+    // If matched seller, enroll via sellerId; otherwise use inboundLeadId + phone
+    const [enrolled] = await db
+      .insert(waCampaignLeadsTable)
+      .values({
+        sequenceId: parsed.data.sequenceId,
+        sellerId: inboundLead.matchedSellerId ?? null,
+        inboundLeadId: inboundLead.id,
+        phone: inboundLead.matchedSellerId ? null : inboundLead.phone,
+        currentDay: 0,
+        nextSendAt: new Date(),
+        status: "active",
+      })
+      .returning();
+
+    res.json({ ok: true, campaignLeadId: enrolled.id });
+  } catch (e) {
+    res.status(500).json({ error: "Failed to enroll lead" });
+  }
+});
+
 // ── Health metrics ─────────────────────────────────────────────────────────────
 
 router.get("/admin/wa/health", requireAdminAuth, async (req, res) => {
@@ -284,7 +393,7 @@ router.get("/admin/wa/health", requireAdminAuth, async (req, res) => {
     const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0);
     const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - 7);
 
-    const [[sentToday], [sentWeek], [failedToday], [repliedLeads], [activeLeads], [pausedLeads], [completedLeads]] =
+    const [[sentToday], [sentWeek], [failedToday], [repliedLeads], [activeLeads], [pausedLeads], [completedLeads], [inboundTotal]] =
       await Promise.all([
         db.select({ c: count() }).from(waSendLogTable).where(and(gte(waSendLogTable.sentAt, startOfDay), eq(waSendLogTable.status, "sent"))),
         db.select({ c: count() }).from(waSendLogTable).where(and(gte(waSendLogTable.sentAt, startOfWeek), eq(waSendLogTable.status, "sent"))),
@@ -293,6 +402,7 @@ router.get("/admin/wa/health", requireAdminAuth, async (req, res) => {
         db.select({ c: count() }).from(waCampaignLeadsTable).where(eq(waCampaignLeadsTable.status, "active")),
         db.select({ c: count() }).from(waCampaignLeadsTable).where(eq(waCampaignLeadsTable.status, "paused_no_reply")),
         db.select({ c: count() }).from(waCampaignLeadsTable).where(eq(waCampaignLeadsTable.status, "completed")),
+        db.select({ c: count() }).from(waInboundLeadsTable),
       ]);
 
     const totalWeekSent = Number(sentWeek?.c ?? 0);
@@ -308,6 +418,7 @@ router.get("/admin/wa/health", requireAdminAuth, async (req, res) => {
       activeLeads: Number(activeLeads?.c ?? 0),
       pausedLeads: Number(pausedLeads?.c ?? 0),
       completedLeads: Number(completedLeads?.c ?? 0),
+      inboundTotal: Number(inboundTotal?.c ?? 0),
       dailyLimit: session.dailyLimit,
       warmupDailyLimit: session.warmupDailyLimit,
       warmupDays: session.warmupDays,

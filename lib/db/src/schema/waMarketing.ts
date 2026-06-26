@@ -31,10 +31,33 @@ export const waSequenceStepsTable = pgTable("wa_sequence_steps", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const waInboundLeadsTable = pgTable("wa_inbound_leads", {
+  id: serial("id").primaryKey(),
+  phone: text("phone").notNull().unique(),
+  displayName: text("display_name"),
+  firstMessage: text("first_message"),
+  lastMessage: text("last_message"),
+  lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
+  matchedSellerId: integer("matched_seller_id").references(() => sellersTable.id, { onDelete: "set null" }),
+  messageCount: integer("message_count").notNull().default(1),
+  isWarm: boolean("is_warm").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const waInboundMessagesTable = pgTable("wa_inbound_messages", {
+  id: serial("id").primaryKey(),
+  inboundLeadId: integer("inbound_lead_id").notNull().references(() => waInboundLeadsTable.id, { onDelete: "cascade" }),
+  message: text("message").notNull(),
+  receivedAt: timestamp("received_at").defaultNow().notNull(),
+});
+
 export const waCampaignLeadsTable = pgTable("wa_campaign_leads", {
   id: serial("id").primaryKey(),
   sequenceId: integer("sequence_id").notNull().references(() => waSequencesTable.id),
-  sellerId: integer("seller_id").notNull().references(() => sellersTable.id),
+  sellerId: integer("seller_id").references(() => sellersTable.id),
+  inboundLeadId: integer("inbound_lead_id").references(() => waInboundLeadsTable.id),
+  phone: text("phone"),
   currentDay: integer("current_day").notNull().default(0),
   nextSendAt: timestamp("next_send_at"),
   lastSentAt: timestamp("last_sent_at"),
@@ -56,5 +79,7 @@ export const waSendLogTable = pgTable("wa_send_log", {
 export type WASession = typeof waSessionsTable.$inferSelect;
 export type WASequence = typeof waSequencesTable.$inferSelect;
 export type WASequenceStep = typeof waSequenceStepsTable.$inferSelect;
+export type WAInboundLead = typeof waInboundLeadsTable.$inferSelect;
+export type WAInboundMessage = typeof waInboundMessagesTable.$inferSelect;
 export type WACampaignLead = typeof waCampaignLeadsTable.$inferSelect;
 export type WASendLog = typeof waSendLogTable.$inferSelect;

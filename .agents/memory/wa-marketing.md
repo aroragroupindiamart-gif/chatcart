@@ -1,6 +1,6 @@
 ---
 name: WA Marketing module
-description: Baileys-based WhatsApp drip-campaign tool in the Chatcart super-admin panel — connection quirks, auth, session, and scheduler details.
+description: Baileys-based WhatsApp drip-campaign tool in the Chatcart super-admin panel — connection quirks, auth, session, scheduler, and inbound lead capture.
 ---
 
 ## Key decisions
@@ -19,9 +19,16 @@ The `/api/admin/wa/stream` endpoint verifies the admin JWT from the `token` quer
 
 **Campaign scheduler:** runs every 60 seconds in-process (startCampaignScheduler). Warmup: 10 msgs/day for first 14 days after connectedAt. Reply-gating: if currentDay >= 1 and lead has not replied, status → paused_no_reply. Incoming messages auto-resume paused leads.
 
+**waCampaignLeadsTable has nullable sellerId.**  
+The column was originally NOT NULL but is now nullable to support inbound leads who are not sellers. When sellerId is null, the scheduler uses inboundLeadId + phone columns directly. Both leftJoin paths must be handled in queries.
+
+**Inbound lead deduplication:** `wa_inbound_leads.phone` is UNIQUE. On repeated messages from the same number, the existing row is updated (messageCount +1, lastMessage, lastMessageAt). Each message is appended to `wa_inbound_messages`. The `handleInboundLead()` function in whatsapp.ts handles this upsert.
+
+**Inbound lead phone format:** Stored without the leading + (e.g. `919876543210` not `+919876543210`). The seller matching check normalises to `+phone` for comparison with `sellers.phone` which stores with `+`.
+
 **Files:**
-- `artifacts/api-server/src/lib/whatsapp.ts` — Baileys singleton
-- `artifacts/api-server/src/lib/waCampaign.ts` — scheduler engine
-- `artifacts/api-server/src/routes/waMarketing.ts` — admin REST endpoints
-- `artifacts/chatcart-admin/src/pages/WhatsAppMarketing.tsx` — 4-tab UI
-- `lib/db/src/schema/waMarketing.ts` — DB tables
+- `artifacts/api-server/src/lib/whatsapp.ts` — Baileys singleton + handleInboundLead()
+- `artifacts/api-server/src/lib/waCampaign.ts` — scheduler engine (handles both seller and inbound leads)
+- `artifacts/api-server/src/routes/waMarketing.ts` — admin REST endpoints incl. /inbound-leads routes
+- `artifacts/chatcart-admin/src/pages/WhatsAppMarketing.tsx` — 5-tab UI (Connection, Sequences, Leads, Inbound, Health)
+- `lib/db/src/schema/waMarketing.ts` — DB tables (wa_inbound_leads, wa_inbound_messages added; wa_campaign_leads.seller_id now nullable)

@@ -9,14 +9,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import {
   Wifi, WifiOff, Loader2, QrCode, MessageCircle, Users, Activity,
   Plus, Trash2, Play, Pause, RefreshCw, CheckCircle2, XCircle,
-  AlertTriangle, Clock, MessageSquare, TrendingUp, Phone
+  AlertTriangle, Clock, MessageSquare, TrendingUp, PhoneIncoming,
+  ChevronDown, ChevronRight, Flame, Link2
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -58,9 +58,12 @@ interface CampaignLead {
   id: number;
   sequenceId: number;
   sequenceName: string;
-  sellerId: number;
-  storeName: string;
-  phone: string;
+  sellerId: number | null;
+  inboundLeadId: number | null;
+  storeName: string | null;
+  inboundDisplayName: string | null;
+  inboundPhone: string | null;
+  phone: string | null;
   currentDay: number;
   nextSendAt: string | null;
   lastSentAt: string | null;
@@ -77,6 +80,28 @@ interface PendingSeller {
   createdAt: string;
 }
 
+interface InboundLead {
+  id: number;
+  phone: string;
+  displayName: string | null;
+  firstMessage: string | null;
+  lastMessage: string | null;
+  lastMessageAt: string;
+  messageCount: number;
+  isWarm: boolean;
+  matchedSellerId: number | null;
+  matchedSellerName: string | null;
+  matchedSellerPlan: string | null;
+  createdAt: string;
+}
+
+interface InboundMessage {
+  id: number;
+  inboundLeadId: number;
+  message: string;
+  receivedAt: string;
+}
+
 interface HealthMetrics {
   sentToday: number;
   sentThisWeek: number;
@@ -85,6 +110,7 @@ interface HealthMetrics {
   activeLeads: number;
   pausedLeads: number;
   completedLeads: number;
+  inboundTotal: number;
   dailyLimit: number;
   warmupDailyLimit: number;
   warmupDays: number;
@@ -110,13 +136,24 @@ function fmtDate(d: string | null) {
   return new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
+function fmtRelative(d: string | null) {
+  if (!d) return '—';
+  const ms = Date.now() - new Date(d).getTime();
+  const mins = Math.floor(ms / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return fmtDate(d);
+}
+
 function StatusBadge({ status }: { status: CampaignLead['status'] }) {
   const map = {
-    active: { label: 'Active', variant: 'default' as const, color: 'bg-green-100 text-green-800' },
-    paused_no_reply: { label: 'Paused (no reply)', variant: 'secondary' as const, color: 'bg-yellow-100 text-yellow-800' },
-    paused_manual: { label: 'Paused', variant: 'secondary' as const, color: 'bg-orange-100 text-orange-800' },
-    completed: { label: 'Completed', variant: 'outline' as const, color: 'bg-blue-100 text-blue-800' },
-    removed: { label: 'Removed', variant: 'destructive' as const, color: 'bg-red-100 text-red-800' },
+    active: { label: 'Active', color: 'bg-green-100 text-green-800' },
+    paused_no_reply: { label: 'Paused (no reply)', color: 'bg-yellow-100 text-yellow-800' },
+    paused_manual: { label: 'Paused', color: 'bg-orange-100 text-orange-800' },
+    completed: { label: 'Completed', color: 'bg-blue-100 text-blue-800' },
+    removed: { label: 'Removed', color: 'bg-red-100 text-red-800' },
   };
   const { label, color } = map[status] ?? map.active;
   return <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${color}`}>{label}</span>;
@@ -156,16 +193,16 @@ function ConnectionTab() {
           setWaState((prev) => ({ ...(prev ?? {} as any), ...data }));
         } else if (data.type === 'qr') {
           setWaState((prev) => prev ? { ...prev, qr: data.qr } : null);
+        } else if (data.type === 'inbound_lead') {
+          qc.invalidateQueries({ queryKey: ['wa-inbound-leads'] });
         }
       } catch {}
     };
 
     es.onerror = () => {};
 
-    return () => {
-      es.close();
-    };
-  }, []);
+    return () => { es.close(); };
+  }, [qc]);
 
   const connectMut = useMutation({
     mutationFn: () => adminFetch('/api/admin/wa/connect', { method: 'POST' }),
@@ -184,10 +221,7 @@ function ConnectionTab() {
 
   const saveMut = useMutation({
     mutationFn: (data: Partial<WASettings>) => adminFetch('/api/admin/wa/settings', { method: 'PATCH', body: JSON.stringify(data) }),
-    onSuccess: (updated: WASettings) => {
-      setSettings(updated);
-      toast({ title: 'Settings saved' });
-    },
+    onSuccess: (updated: WASettings) => { setSettings(updated); toast({ title: 'Settings saved' }); },
     onError: () => toast({ title: 'Error', description: 'Could not save settings', variant: 'destructive' }),
   });
 
@@ -196,17 +230,12 @@ function ConnectionTab() {
 
   return (
     <div className="space-y-6">
-      {/* Connection status card */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            {status === 'connected' ? (
-              <Wifi className="w-5 h-5 text-green-600" />
-            ) : status === 'connecting' ? (
-              <Loader2 className="w-5 h-5 animate-spin text-yellow-600" />
-            ) : (
-              <WifiOff className="w-5 h-5 text-muted-foreground" />
-            )}
+            {status === 'connected' ? <Wifi className="w-5 h-5 text-green-600" /> :
+              status === 'connecting' ? <Loader2 className="w-5 h-5 animate-spin text-yellow-600" /> :
+              <WifiOff className="w-5 h-5 text-muted-foreground" />}
             Connection Status
           </CardTitle>
           <CardDescription>
@@ -222,35 +251,26 @@ function ConnectionTab() {
               <div>
                 <div className="font-medium text-green-800">WhatsApp Connected</div>
                 <div className="text-sm text-green-700">Phone: +{waState?.phone}</div>
-                {waState?.connectedAt && (
-                  <div className="text-xs text-green-600">Since {fmtDate(waState.connectedAt)}</div>
-                )}
+                {waState?.connectedAt && <div className="text-xs text-green-600">Since {fmtDate(waState.connectedAt)}</div>}
               </div>
             </div>
           )}
-
           {status === 'connecting' && qr && (
             <div className="flex flex-col items-center gap-4 p-6 bg-muted rounded-lg">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <QrCode className="w-4 h-4" />
-                Scan this QR code with your WhatsApp (Settings → Linked Devices → Link a Device)
+                Scan with WhatsApp → Settings → Linked Devices → Link a Device
               </div>
-              <img
-                src={qr}
-                alt="WhatsApp QR Code"
-                className="w-64 h-64 rounded-lg border-4 border-white shadow-md"
-              />
+              <img src={qr} alt="WhatsApp QR Code" className="w-64 h-64 rounded-lg border-4 border-white shadow-md" />
               <p className="text-xs text-muted-foreground">QR refreshes automatically. Do not close this window.</p>
             </div>
           )}
-
           {status === 'connecting' && !qr && (
             <div className="flex items-center gap-3 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
               <Loader2 className="w-5 h-5 animate-spin text-yellow-600" />
               <span className="text-yellow-800">Initialising connection…</span>
             </div>
           )}
-
           <div className="flex gap-3">
             {status === 'disconnected' && (
               <Button onClick={() => connectMut.mutate()} disabled={connectMut.isPending}>
@@ -270,14 +290,12 @@ function ConnectionTab() {
                   <AlertDialogHeader>
                     <AlertDialogTitle>Disconnect WhatsApp?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      This will log out the linked WhatsApp number and delete the stored session. You will need to scan a new QR code to reconnect.
+                      This will log out the linked WhatsApp number and delete the stored session. You'll need to scan a new QR code to reconnect.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => disconnectMut.mutate()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                      Disconnect
-                    </AlertDialogAction>
+                    <AlertDialogAction onClick={() => disconnectMut.mutate()} className="bg-destructive text-destructive-foreground">Disconnect</AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
@@ -286,7 +304,6 @@ function ConnectionTab() {
         </CardContent>
       </Card>
 
-      {/* Settings */}
       {settings && (
         <Card>
           <CardHeader>
@@ -304,11 +321,8 @@ function ConnectionTab() {
 
 function SettingsForm({ settings, onSave, saving }: { settings: WASettings; onSave: (d: Partial<WASettings>) => void; saving: boolean }) {
   const [form, setForm] = useState(settings);
-
   useEffect(() => setForm(settings), [settings]);
-
   const changed = JSON.stringify(form) !== JSON.stringify(settings);
-
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -320,23 +334,20 @@ function SettingsForm({ settings, onSave, saving }: { settings: WASettings; onSa
         <div className="space-y-2">
           <Label>Warm-up Daily Limit</Label>
           <Input type="number" min={1} max={50} value={form.warmupDailyLimit} onChange={(e) => setForm((f) => ({ ...f, warmupDailyLimit: +e.target.value }))} />
-          <p className="text-xs text-muted-foreground">Cap during the first {form.warmupDays} days after connecting. Default 10/day.</p>
+          <p className="text-xs text-muted-foreground">Cap during the first {form.warmupDays} days after connecting.</p>
         </div>
         <div className="space-y-2">
           <Label>Warm-up Period (days)</Label>
           <Input type="number" min={1} max={90} value={form.warmupDays} onChange={(e) => setForm((f) => ({ ...f, warmupDays: +e.target.value }))} />
-          <p className="text-xs text-muted-foreground">How many days a new number is in warm-up mode.</p>
         </div>
         <div className="space-y-2">
           <Label>Reply Rate Warning Threshold (%)</Label>
           <Input type="number" min={0} max={100} value={form.replyRateThreshold} onChange={(e) => setForm((f) => ({ ...f, replyRateThreshold: +e.target.value }))} />
-          <p className="text-xs text-muted-foreground">Show a health warning if reply rate drops below this %.</p>
         </div>
       </div>
       {changed && (
         <Button onClick={() => onSave({ dailyLimit: form.dailyLimit, warmupDailyLimit: form.warmupDailyLimit, warmupDays: form.warmupDays, replyRateThreshold: form.replyRateThreshold })} disabled={saving}>
-          {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-          Save Settings
+          {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}Save Settings
         </Button>
       )}
     </div>
@@ -375,12 +386,8 @@ function SequencesTab() {
             <Button><Plus className="w-4 h-4 mr-2" />New Sequence</Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Create Sequence</DialogTitle>
-            </DialogHeader>
-            <CreateSequenceForm
-              onSuccess={() => { setCreating(false); qc.invalidateQueries({ queryKey: ['wa-sequences'] }); }}
-            />
+            <DialogHeader><DialogTitle>Create Sequence</DialogTitle></DialogHeader>
+            <CreateSequenceForm onSuccess={() => { setCreating(false); qc.invalidateQueries({ queryKey: ['wa-sequences'] }); }} />
           </DialogContent>
         </Dialog>
       </div>
@@ -406,9 +413,7 @@ function SequencesTab() {
                   <Badge variant="secondary">{seq.leadCount} lead{seq.leadCount !== 1 ? 's' : ''}</Badge>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8">
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8"><Trash2 className="w-4 h-4" /></Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
@@ -459,8 +464,6 @@ function CreateSequenceForm({ onSuccess }: { onSuccess: () => void }) {
     setSteps((s) => [...s, { dayOffset: nextDay, message: '' }]);
   };
 
-  const removeStep = (idx: number) => setSteps((s) => s.filter((_, i) => i !== idx));
-
   const submit = () => {
     if (!name.trim()) { toast({ title: 'Sequence name is required', variant: 'destructive' }); return; }
     if (steps.some((s) => !s.message.trim())) { toast({ title: 'All message steps must have content', variant: 'destructive' }); return; }
@@ -477,7 +480,6 @@ function CreateSequenceForm({ onSuccess }: { onSuccess: () => void }) {
         <Label>Description (optional)</Label>
         <Input placeholder="Internal note about this sequence" value={description} onChange={(e) => setDescription(e.target.value)} />
       </div>
-
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <Label>Message Steps</Label>
@@ -486,18 +488,16 @@ function CreateSequenceForm({ onSuccess }: { onSuccess: () => void }) {
         {steps.map((step, idx) => (
           <div key={idx} className="border rounded-lg p-4 space-y-3 bg-muted/30">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Label className="text-sm font-semibold text-primary">Day {step.dayOffset}</Label>
-              </div>
+              <Label className="text-sm font-semibold text-primary">Day {step.dayOffset}</Label>
               {steps.length > 1 && (
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeStep(idx)}>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setSteps((s) => s.filter((_, i) => i !== idx))}>
                   <Trash2 className="w-3.5 h-3.5" />
                 </Button>
               )}
             </div>
             <Textarea
               rows={4}
-              placeholder={`Hi {{name}}, this is day ${step.dayOffset} of your Chatcart journey…`}
+              placeholder={`Hi {{name}}, day ${step.dayOffset} message…`}
               value={step.message}
               onChange={(e) => setSteps((s) => s.map((st, i) => i === idx ? { ...st, message: e.target.value } : st))}
               className="font-mono text-sm"
@@ -508,13 +508,10 @@ function CreateSequenceForm({ onSuccess }: { onSuccess: () => void }) {
           <Plus className="w-4 h-4 mr-2" />Add Day {(steps[steps.length - 1]?.dayOffset ?? 0) + 1}
         </Button>
       </div>
-
-      <div className="flex gap-3 pt-2">
-        <Button onClick={submit} disabled={createMut.isPending} className="flex-1">
-          {createMut.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-          Create Sequence
-        </Button>
-      </div>
+      <Button onClick={submit} disabled={createMut.isPending} className="w-full">
+        {createMut.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+        Create Sequence
+      </Button>
     </div>
   );
 }
@@ -539,21 +536,22 @@ function LeadsTab() {
     onError: () => toast({ title: 'Error', description: 'Could not update lead', variant: 'destructive' }),
   });
 
+  const getLeadLabel = (lead: CampaignLead) => lead.storeName ?? lead.inboundDisplayName ?? lead.inboundPhone ?? lead.phone ?? '?';
+  const getLeadPhone = (lead: CampaignLead) => lead.phone ?? (lead.inboundPhone ? `+${lead.inboundPhone}` : null);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold">Campaign Leads</h3>
-          <p className="text-sm text-muted-foreground">Pending sellers enrolled in drip sequences. Reply-gating is enforced automatically.</p>
+          <p className="text-sm text-muted-foreground">All contacts enrolled in drip sequences. Reply-gating is enforced automatically.</p>
         </div>
         <Dialog open={enrollOpen} onOpenChange={setEnrollOpen}>
           <DialogTrigger asChild>
             <Button><Users className="w-4 h-4 mr-2" />Enroll Sellers</Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Enroll Pending Sellers in a Sequence</DialogTitle>
-            </DialogHeader>
+            <DialogHeader><DialogTitle>Enroll Pending Sellers in a Sequence</DialogTitle></DialogHeader>
             <EnrollForm onSuccess={() => { setEnrollOpen(false); qc.invalidateQueries({ queryKey: ['wa-leads'] }); }} />
           </DialogContent>
         </Dialog>
@@ -564,7 +562,7 @@ function LeadsTab() {
       {!isLoading && leads.length === 0 && (
         <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-lg">
           <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
-          <p>No leads enrolled yet. Click "Enroll Sellers" to get started.</p>
+          <p>No leads enrolled yet. Use "Enroll Sellers" or enroll contacts from the Inbound tab.</p>
         </div>
       )}
 
@@ -573,7 +571,7 @@ function LeadsTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-left text-muted-foreground">
-                <th className="pb-2 pr-4 font-medium">Seller</th>
+                <th className="pb-2 pr-4 font-medium">Contact</th>
                 <th className="pb-2 pr-4 font-medium">Sequence</th>
                 <th className="pb-2 pr-4 font-medium">Day</th>
                 <th className="pb-2 pr-4 font-medium">Status</th>
@@ -586,21 +584,22 @@ function LeadsTab() {
               {leads.map((lead) => (
                 <tr key={lead.id} className="hover:bg-muted/30 transition-colors">
                   <td className="py-3 pr-4">
-                    <div className="font-medium">{lead.storeName}</div>
-                    <div className="text-xs text-muted-foreground">{lead.phone}</div>
+                    <div className="font-medium flex items-center gap-1.5">
+                      {getLeadLabel(lead)}
+                      {lead.inboundLeadId && !lead.sellerId && (
+                        <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-medium">inbound</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground">{getLeadPhone(lead)}</div>
                   </td>
                   <td className="py-3 pr-4 text-muted-foreground">{lead.sequenceName}</td>
                   <td className="py-3 pr-4">
                     <span className="font-mono font-semibold">{lead.currentDay === 0 ? '–' : `Day ${lead.currentDay}`}</span>
                   </td>
-                  <td className="py-3 pr-4">
-                    <StatusBadge status={lead.status} />
-                  </td>
+                  <td className="py-3 pr-4"><StatusBadge status={lead.status} /></td>
                   <td className="py-3 pr-4">
                     {lead.repliedAt ? (
-                      <span className="flex items-center gap-1 text-green-700 text-xs">
-                        <CheckCircle2 className="w-3.5 h-3.5" />{fmtDate(lead.repliedAt)}
-                      </span>
+                      <span className="flex items-center gap-1 text-green-700 text-xs"><CheckCircle2 className="w-3.5 h-3.5" />{fmtDate(lead.repliedAt)}</span>
                     ) : (
                       <span className="text-muted-foreground text-xs">No reply</span>
                     )}
@@ -615,13 +614,13 @@ function LeadsTab() {
                         </Button>
                       )}
                       {(lead.status === 'paused_manual' || lead.status === 'paused_no_reply') && (
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600" title="Resume / override reply gate"
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600" title="Resume"
                           onClick={() => updateMut.mutate({ id: lead.id, status: 'active' })}>
                           <Play className="w-3.5 h-3.5" />
                         </Button>
                       )}
                       {lead.status !== 'removed' && lead.status !== 'completed' && (
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Remove from sequence"
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Remove"
                           onClick={() => updateMut.mutate({ id: lead.id, status: 'removed' })}>
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
@@ -643,32 +642,18 @@ function EnrollForm({ onSuccess }: { onSuccess: () => void }) {
   const [selectedSequenceId, setSelectedSequenceId] = useState<number | null>(null);
   const [selectedSellerIds, setSelectedSellerIds] = useState<Set<number>>(new Set());
 
-  const { data: sequences = [] } = useQuery<Sequence[]>({
-    queryKey: ['wa-sequences'],
-    queryFn: () => adminFetch('/api/admin/wa/sequences'),
-  });
-
-  const { data: pendingSellers = [], isLoading: loadingSellers } = useQuery<PendingSeller[]>({
-    queryKey: ['wa-pending-sellers'],
-    queryFn: () => adminFetch('/api/admin/wa/pending-sellers'),
-  });
+  const { data: sequences = [] } = useQuery<Sequence[]>({ queryKey: ['wa-sequences'], queryFn: () => adminFetch('/api/admin/wa/sequences') });
+  const { data: pendingSellers = [], isLoading: loadingSellers } = useQuery<PendingSeller[]>({ queryKey: ['wa-pending-sellers'], queryFn: () => adminFetch('/api/admin/wa/pending-sellers') });
 
   const enrollMut = useMutation({
     mutationFn: (data: { sequenceId: number; sellerIds: number[] }) =>
       adminFetch('/api/admin/wa/leads', { method: 'POST', body: JSON.stringify(data) }),
-    onSuccess: (res: any) => {
-      toast({ title: 'Enrolled', description: `${res.added} seller(s) added. ${res.skipped} already in sequence.` });
-      onSuccess();
-    },
+    onSuccess: (res: any) => { toast({ title: 'Enrolled', description: `${res.added} seller(s) added.` }); onSuccess(); },
     onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
   });
 
   const toggleSeller = (id: number) => {
-    setSelectedSellerIds((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+    setSelectedSellerIds((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
   };
 
   const submit = () => {
@@ -682,7 +667,7 @@ function EnrollForm({ onSuccess }: { onSuccess: () => void }) {
       <div className="space-y-2">
         <Label>Select Sequence</Label>
         {sequences.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No sequences created yet. Create one in the Sequences tab first.</p>
+          <p className="text-sm text-muted-foreground">No sequences yet. Create one in the Sequences tab first.</p>
         ) : (
           <div className="space-y-2">
             {sequences.map((seq) => (
@@ -695,25 +680,21 @@ function EnrollForm({ onSuccess }: { onSuccess: () => void }) {
           </div>
         )}
       </div>
-
       {selectedSequenceId && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label>Select Pending Sellers</Label>
-            {selectedSellerIds.size > 0 && (
-              <span className="text-xs text-muted-foreground">{selectedSellerIds.size} selected</span>
-            )}
+            {selectedSellerIds.size > 0 && <span className="text-xs text-muted-foreground">{selectedSellerIds.size} selected</span>}
           </div>
           {loadingSellers ? (
-            <div className="flex items-center gap-2 text-muted-foreground text-sm"><Loader2 className="w-4 h-4 animate-spin" />Loading sellers…</div>
+            <div className="flex items-center gap-2 text-muted-foreground text-sm"><Loader2 className="w-4 h-4 animate-spin" />Loading…</div>
           ) : pendingSellers.length === 0 ? (
             <p className="text-sm text-muted-foreground">No pending sellers found.</p>
           ) : (
             <div className="max-h-64 overflow-y-auto border rounded-lg divide-y">
               {pendingSellers.map((seller) => (
                 <label key={seller.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted cursor-pointer">
-                  <input type="checkbox" checked={selectedSellerIds.has(seller.id)} onChange={() => toggleSeller(seller.id)}
-                    className="w-4 h-4 rounded" />
+                  <input type="checkbox" checked={selectedSellerIds.has(seller.id)} onChange={() => toggleSeller(seller.id)} className="w-4 h-4 rounded" />
                   <div>
                     <div className="font-medium text-sm">{seller.storeName}</div>
                     <div className="text-xs text-muted-foreground">{seller.phone} · {seller.subdomain}.chatcart.in</div>
@@ -724,11 +705,217 @@ function EnrollForm({ onSuccess }: { onSuccess: () => void }) {
           )}
         </div>
       )}
-
       <Button onClick={submit} disabled={enrollMut.isPending || !selectedSequenceId || selectedSellerIds.size === 0} className="w-full">
         {enrollMut.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Users className="w-4 h-4 mr-2" />}
         Enroll {selectedSellerIds.size > 0 ? `${selectedSellerIds.size} Seller${selectedSellerIds.size > 1 ? 's' : ''}` : 'Sellers'}
       </Button>
+    </div>
+  );
+}
+
+// ── Inbound Leads Tab ──────────────────────────────────────────────────────────
+
+function InboundLeadRow({ lead, sequences, onEnrolled }: { lead: InboundLead; sequences: Sequence[]; onEnrolled: () => void }) {
+  const { toast } = useToast();
+  const [expanded, setExpanded] = useState(false);
+  const [enrollOpen, setEnrollOpen] = useState(false);
+  const [selectedSeqId, setSelectedSeqId] = useState<number | null>(null);
+
+  const { data: messages = [], isLoading: loadingMsgs } = useQuery<InboundMessage[]>({
+    queryKey: ['wa-inbound-messages', lead.id],
+    queryFn: () => adminFetch(`/api/admin/wa/inbound-leads/${lead.id}/messages`),
+    enabled: expanded,
+  });
+
+  const enrollMut = useMutation({
+    mutationFn: (seqId: number) =>
+      adminFetch(`/api/admin/wa/inbound-leads/${lead.id}/enroll`, { method: 'POST', body: JSON.stringify({ sequenceId: seqId }) }),
+    onSuccess: () => {
+      toast({ title: 'Enrolled in sequence', description: `${lead.displayName ?? lead.phone} added to sequence.` });
+      setEnrollOpen(false);
+      onEnrolled();
+    },
+    onError: (e: Error) => toast({ title: 'Already enrolled', description: e.message, variant: 'destructive' }),
+  });
+
+  const isNewContact = !lead.matchedSellerId;
+
+  return (
+    <div className="border rounded-lg overflow-hidden">
+      <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 cursor-pointer" onClick={() => setExpanded((v) => !v)}>
+        <button className="shrink-0 text-muted-foreground">
+          {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+        </button>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium">{lead.displayName || `+${lead.phone}`}</span>
+            {lead.displayName && <span className="text-xs text-muted-foreground">+{lead.phone}</span>}
+            {lead.isWarm && (
+              <span className="flex items-center gap-0.5 text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-medium">
+                <Flame className="w-3 h-3" />warm
+              </span>
+            )}
+            {isNewContact ? (
+              <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">new contact</span>
+            ) : (
+              <span className="flex items-center gap-0.5 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">
+                <Link2 className="w-3 h-3" />{lead.matchedSellerName} ({lead.matchedSellerPlan})
+              </span>
+            )}
+          </div>
+          <div className="text-xs text-muted-foreground mt-0.5 truncate max-w-md">{lead.lastMessage || '—'}</div>
+        </div>
+
+        <div className="shrink-0 text-right">
+          <div className="text-xs text-muted-foreground">{fmtRelative(lead.lastMessageAt)}</div>
+          <div className="text-xs text-muted-foreground">{lead.messageCount} msg{lead.messageCount !== 1 ? 's' : ''}</div>
+        </div>
+
+        <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+          <Dialog open={enrollOpen} onOpenChange={setEnrollOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" variant="outline" className="text-xs h-7">
+                <Plus className="w-3 h-3 mr-1" />Enroll
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Enroll {lead.displayName ?? `+${lead.phone}`} in a Sequence</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 pt-2">
+                {sequences.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No sequences created yet. Create one in the Sequences tab first.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {sequences.map((seq) => (
+                      <button key={seq.id} onClick={() => setSelectedSeqId(seq.id)}
+                        className={`w-full text-left px-4 py-3 rounded-lg border transition-colors ${selectedSeqId === seq.id ? 'border-primary bg-primary/5' : 'hover:bg-muted'}`}>
+                        <div className="font-medium text-sm">{seq.name}</div>
+                        <div className="text-xs text-muted-foreground">{seq.steps.length} days · {seq.leadCount} leads</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <Button className="w-full" disabled={!selectedSeqId || enrollMut.isPending}
+                  onClick={() => selectedSeqId && enrollMut.mutate(selectedSeqId)}>
+                  {enrollMut.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                  Add to Sequence
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="border-t bg-muted/20 px-4 py-3">
+          {loadingMsgs ? (
+            <div className="flex items-center gap-2 text-muted-foreground text-xs"><Loader2 className="w-3 h-3 animate-spin" />Loading messages…</div>
+          ) : messages.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No message history captured.</p>
+          ) : (
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Message History</div>
+              {messages.map((msg) => (
+                <div key={msg.id} className="flex gap-3 text-sm">
+                  <span className="text-xs text-muted-foreground shrink-0 pt-0.5 w-28">{fmtDate(msg.receivedAt)}</span>
+                  <span className="text-foreground/80">{msg.message}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InboundTab() {
+  const qc = useQueryClient();
+
+  const { data: leads = [], isLoading, refetch } = useQuery<InboundLead[]>({
+    queryKey: ['wa-inbound-leads'],
+    queryFn: () => adminFetch('/api/admin/wa/inbound-leads'),
+    refetchInterval: 30000,
+  });
+
+  const { data: sequences = [] } = useQuery<Sequence[]>({
+    queryKey: ['wa-sequences'],
+    queryFn: () => adminFetch('/api/admin/wa/sequences'),
+  });
+
+  const newContacts = leads.filter((l) => !l.matchedSellerId);
+  const matchedSellers = leads.filter((l) => l.matchedSellerId);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <PhoneIncoming className="w-5 h-5 text-green-600" />
+            Inbound Leads
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Contacts who messaged your connected number directly — the safest, highest-priority audience for campaigns.
+          </p>
+        </div>
+        <Button variant="ghost" size="sm" onClick={() => refetch()}>
+          <RefreshCw className="w-4 h-4 mr-1" />Refresh
+        </Button>
+      </div>
+
+      {/* Legend */}
+      <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
+        <span className="flex items-center gap-1.5">
+          <span className="flex items-center gap-0.5 bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded font-medium"><Flame className="w-3 h-3" />warm</span>
+          = messaged you first (lowest ban risk)
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">new contact</span>
+          = not yet in your seller database
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="flex items-center gap-0.5 bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium"><Link2 className="w-3 h-3" />matched</span>
+          = linked to existing seller record
+        </span>
+      </div>
+
+      {isLoading && (
+        <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" />Loading…</div>
+      )}
+
+      {!isLoading && leads.length === 0 && (
+        <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-lg">
+          <PhoneIncoming className="w-10 h-10 mx-auto mb-3 opacity-40" />
+          <p className="font-medium">No inbound messages yet</p>
+          <p className="text-sm mt-1">When someone messages your connected WhatsApp number, they'll appear here automatically.</p>
+        </div>
+      )}
+
+      {matchedSellers.length > 0 && (
+        <div className="space-y-3">
+          <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+            Existing Sellers ({matchedSellers.length})
+          </div>
+          {matchedSellers.map((lead) => (
+            <InboundLeadRow key={lead.id} lead={lead} sequences={sequences}
+              onEnrolled={() => { qc.invalidateQueries({ queryKey: ['wa-leads'] }); qc.invalidateQueries({ queryKey: ['wa-sequences'] }); }} />
+          ))}
+        </div>
+      )}
+
+      {newContacts.length > 0 && (
+        <div className="space-y-3">
+          <div className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+            New Contacts ({newContacts.length})
+          </div>
+          {newContacts.map((lead) => (
+            <InboundLeadRow key={lead.id} lead={lead} sequences={sequences}
+              onEnrolled={() => { qc.invalidateQueries({ queryKey: ['wa-leads'] }); qc.invalidateQueries({ queryKey: ['wa-sequences'] }); }} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -752,11 +939,10 @@ function HealthTab() {
   });
 
   const pauseMut = useMutation({
-    mutationFn: (isPaused: boolean) =>
-      adminFetch('/api/admin/wa/settings', { method: 'PATCH', body: JSON.stringify({ isPaused }) }),
+    mutationFn: (isPaused: boolean) => adminFetch('/api/admin/wa/settings', { method: 'PATCH', body: JSON.stringify({ isPaused }) }),
     onSuccess: (_, isPaused) => {
       qc.invalidateQueries({ queryKey: ['wa-health'] });
-      toast({ title: isPaused ? '⏸ All sending paused' : '▶ Sending resumed', description: isPaused ? 'No messages will be sent until you resume.' : 'Scheduler will resume at next tick.' });
+      toast({ title: isPaused ? 'All sending paused' : 'Sending resumed' });
     },
     onError: () => toast({ title: 'Error', variant: 'destructive' }),
   });
@@ -772,7 +958,6 @@ function HealthTab() {
 
   return (
     <div className="space-y-6">
-      {/* Global pause */}
       <Card className={health?.isPaused ? 'border-orange-300 bg-orange-50' : ''}>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
@@ -782,16 +967,11 @@ function HealthTab() {
                 Global Send Control
               </CardTitle>
               <CardDescription>
-                {health?.isPaused ? 'All outbound messages are paused. No messages will be sent.' : 'Scheduler is active. Messages will be sent according to schedule.'}
+                {health?.isPaused ? 'All outbound messages are paused.' : 'Scheduler is active.'}
               </CardDescription>
             </div>
             {health && (
-              <Button
-                variant={health.isPaused ? 'default' : 'destructive'}
-                onClick={() => pauseMut.mutate(!health.isPaused)}
-                disabled={pauseMut.isPending}
-                className="shrink-0"
-              >
+              <Button variant={health.isPaused ? 'default' : 'destructive'} onClick={() => pauseMut.mutate(!health.isPaused)} disabled={pauseMut.isPending} className="shrink-0">
                 {pauseMut.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : health.isPaused ? <Play className="w-4 h-4 mr-2" /> : <Pause className="w-4 h-4 mr-2" />}
                 {health.isPaused ? 'Resume Sending' : 'Pause All Sending'}
               </Button>
@@ -800,33 +980,26 @@ function HealthTab() {
         </CardHeader>
       </Card>
 
-      {/* Reply rate warning */}
       {replyRateLow && (
         <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
           <AlertTriangle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
           <div>
             <div className="font-semibold text-red-800">Low Reply Rate Warning</div>
-            <div className="text-sm text-red-700">
-              Reply rate is {health!.replyRate}% — below your threshold of {health!.replyRateThreshold}%. Consider pausing sending and reviewing your message content.
-            </div>
+            <div className="text-sm text-red-700">Reply rate is {health!.replyRate}% — below {health!.replyRateThreshold}% threshold.</div>
           </div>
         </div>
       )}
 
-      {/* Warmup badge */}
       {isWarmup && (
         <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <Clock className="w-5 h-5 text-blue-600 shrink-0" />
           <div>
             <div className="font-semibold text-blue-800">Warm-up Mode Active</div>
-            <div className="text-sm text-blue-700">
-              Daily limit is restricted to {health?.warmupDailyLimit}/day for the first {health?.warmupDays} days after connecting.
-            </div>
+            <div className="text-sm text-blue-700">Daily limit is {health?.warmupDailyLimit}/day for the first {health?.warmupDays} days.</div>
           </div>
         </div>
       )}
 
-      {/* Metrics */}
       {loadingHealth ? (
         <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" />Loading metrics…</div>
       ) : health && (
@@ -838,11 +1011,10 @@ function HealthTab() {
           <MetricCard label="Active Leads" value={health.activeLeads} icon={<Play className="w-5 h-5 text-green-600" />} />
           <MetricCard label="Paused Leads" value={health.pausedLeads} icon={<Pause className="w-5 h-5 text-yellow-600" />} />
           <MetricCard label="Completed" value={health.completedLeads} icon={<CheckCircle2 className="w-5 h-5 text-blue-600" />} />
-          <MetricCard label="Daily Limit" value={`${effectiveLimit}${isWarmup ? ' (warmup)' : ''}`} icon={<Activity className="w-5 h-5 text-muted-foreground" />} />
+          <MetricCard label="Inbound Contacts" value={health.inboundTotal} icon={<PhoneIncoming className="w-5 h-5 text-orange-600" />} />
         </div>
       )}
 
-      {/* Send log */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold">Recent Sends</h3>
@@ -917,21 +1089,25 @@ export default function WhatsAppMarketing() {
             WhatsApp Marketing
           </h1>
           <p className="text-muted-foreground mt-1">
-            Connect a dedicated WhatsApp number to run reply-gated drip campaigns for pending sellers.
+            Connect a dedicated WhatsApp number to run reply-gated drip campaigns. Inbound contacts are captured automatically.
           </p>
         </div>
 
         <Tabs defaultValue="connection">
-          <TabsList className="grid grid-cols-4 w-full max-w-lg">
-            <TabsTrigger value="connection" className="gap-1.5"><Wifi className="w-3.5 h-3.5" />Connection</TabsTrigger>
-            <TabsTrigger value="sequences" className="gap-1.5"><MessageSquare className="w-3.5 h-3.5" />Sequences</TabsTrigger>
-            <TabsTrigger value="leads" className="gap-1.5"><Users className="w-3.5 h-3.5" />Leads</TabsTrigger>
-            <TabsTrigger value="health" className="gap-1.5"><Activity className="w-3.5 h-3.5" />Health</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="connection">Connection</TabsTrigger>
+            <TabsTrigger value="sequences">Sequences</TabsTrigger>
+            <TabsTrigger value="leads">Leads</TabsTrigger>
+            <TabsTrigger value="inbound" className="flex items-center gap-1">
+              <PhoneIncoming className="w-3.5 h-3.5" />Inbound
+            </TabsTrigger>
+            <TabsTrigger value="health">Health</TabsTrigger>
           </TabsList>
 
           <TabsContent value="connection" className="mt-6"><ConnectionTab /></TabsContent>
           <TabsContent value="sequences" className="mt-6"><SequencesTab /></TabsContent>
           <TabsContent value="leads" className="mt-6"><LeadsTab /></TabsContent>
+          <TabsContent value="inbound" className="mt-6"><InboundTab /></TabsContent>
           <TabsContent value="health" className="mt-6"><HealthTab /></TabsContent>
         </Tabs>
       </div>
