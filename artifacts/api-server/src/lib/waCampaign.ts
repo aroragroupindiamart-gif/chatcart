@@ -57,7 +57,7 @@ export async function processScheduledMessages(): Promise<void> {
   const remaining = dailyLimit - todayCount;
   const now = new Date();
 
-  // Fetch leads — join sellers OR inbound leads depending on which FK is set
+  // Fetch candidates — join sellers OR inbound leads depending on which FK is set
   const dueLeads = await db
     .select({
       lead: waCampaignLeadsTable,
@@ -78,6 +78,30 @@ export async function processScheduledMessages(): Promise<void> {
     .limit(remaining);
 
   for (const { lead, sellerPhone, sellerStoreName, inboundPhone, inboundDisplayName } of dueLeads) {
+    // ── Atomic claim ────────────────────────────────────────────────────────────
+    // Two scheduler instances (dev + prod) can both SELECT the same lead before
+    // either has updated it. The UPDATE below is atomic: it only succeeds when
+    // status is still 'active' AND next_send_at is still <= now (the original
+    // fetch condition). The first instance to run this UPDATE wins; the second
+    // finds 0 rows (next_send_at is now in the far future) and skips.
+    const [claimed] = await db
+      .update(waCampaignLeadsTable)
+      .set({ nextSendAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) })
+      .where(
+        and(
+          eq(waCampaignLeadsTable.id, lead.id),
+          eq(waCampaignLeadsTable.status, "active"),
+          lte(waCampaignLeadsTable.nextSendAt, now),
+        ),
+      )
+      .returning({ id: waCampaignLeadsTable.id });
+
+    if (!claimed) {
+      console.log(`[WA-CAMPAIGN] Lead ${lead.id} already claimed by another instance — skipping`);
+      continue;
+    }
+    // ────────────────────────────────────────────────────────────────────────────
+
     // Resolve phone and display name — prefer seller FK, fall back to inbound lead
     const rawPhone = sellerPhone ?? inboundPhone ?? lead.phone ?? null;
     if (!rawPhone) {
@@ -185,6 +209,13 @@ export async function processScheduledMessages(): Promise<void> {
           lastSentAt: new Date(),
           nextSendAt,
         })
+        .where(eq(waCampaignLeadsTable.id, lead.id));
+    } else {
+      // Send failed — reset nextSendAt so the lead is retried on the next tick
+      // instead of being stuck with the far-future claim date.
+      await db
+        .update(waCampaignLeadsTable)
+        .set({ nextSendAt: new Date(Date.now() + 5 * 60 * 1000) })
         .where(eq(waCampaignLeadsTable.id, lead.id));
     }
   }
