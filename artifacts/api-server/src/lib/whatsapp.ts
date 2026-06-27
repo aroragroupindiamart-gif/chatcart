@@ -199,11 +199,13 @@ export async function connectWA(): Promise<void> {
       for (const msg of messages) {
         if (msg.key.fromMe) continue;
         const rawJid = msg.key.remoteJid ?? "";
-        // Strip @server and optional :deviceSuffix (Baileys multi-device JIDs can
-        // look like "919876543210:11@s.whatsapp.net" — the ":11" is not part of
-        // the phone number and must be stripped before storing.
+        // Only process real user JIDs — @s.whatsapp.net.
+        // Baileys also emits @lid (linked-device IDs, not phone numbers),
+        // @g.us (groups), and @broadcast — all must be ignored.
+        if (!rawJid.endsWith("@s.whatsapp.net")) continue;
+        // Strip optional :deviceSuffix (multi-device JIDs like "91xxx:11@s.whatsapp.net")
         const phone = rawJid.split("@")[0].split(":")[0];
-        if (!phone || phone.includes("-")) continue;
+        if (!phone) continue;
 
         const displayName: string = msg.pushName ?? "";
         const msgContent =
