@@ -564,6 +564,10 @@ router.delete("/admin/wa/inbound-leads/bulk", requireAdminAuth, async (req, res)
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid data" }); return; }
   try {
+    // Nullify FK references in campaign leads before deleting
+    await db.update(waCampaignLeadsTable)
+      .set({ inboundLeadId: null })
+      .where(sql`inbound_lead_id = ANY(${parsed.data.ids})`);
     await db.delete(waInboundLeadsTable).where(sql`id = ANY(${parsed.data.ids})`);
     res.json({ deleted: parsed.data.ids.length });
   } catch (e) {
@@ -575,6 +579,10 @@ router.delete("/admin/wa/inbound-leads/:id", requireAdminAuth, async (req, res) 
   const id = Number(req.params.id);
   if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
+    // Nullify FK references in campaign leads before deleting
+    await db.update(waCampaignLeadsTable)
+      .set({ inboundLeadId: null })
+      .where(eq(waCampaignLeadsTable.inboundLeadId, id));
     await db.delete(waInboundLeadsTable).where(eq(waInboundLeadsTable.id, id));
     res.json({ ok: true });
   } catch (e) {
