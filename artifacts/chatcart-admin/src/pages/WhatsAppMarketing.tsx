@@ -1091,7 +1091,10 @@ function EnrollForm({ onSuccess }: { onSuccess: () => void }) {
 
 // ── Inbound Leads Tab ──────────────────────────────────────────────────────────
 
-function InboundLeadRow({ lead, sequences, onEnrolled }: { lead: InboundLead; sequences: Sequence[]; onEnrolled: () => void }) {
+function InboundLeadRow({ lead, sequences, onEnrolled, checked, onCheckedChange }: {
+  lead: InboundLead; sequences: Sequence[]; onEnrolled: () => void;
+  checked?: boolean; onCheckedChange?: (v: boolean) => void;
+}) {
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
   const [enrollOpen, setEnrollOpen] = useState(false);
@@ -1117,8 +1120,14 @@ function InboundLeadRow({ lead, sequences, onEnrolled }: { lead: InboundLead; se
   const isNewContact = !lead.matchedSellerId;
 
   return (
-    <div className="border rounded-lg overflow-hidden">
+    <div className={`border rounded-lg overflow-hidden ${checked ? 'border-blue-300 bg-blue-50/30' : ''}`}>
       <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 cursor-pointer" onClick={() => setExpanded((v) => !v)}>
+        {onCheckedChange !== undefined && (
+          <div onClick={(e) => e.stopPropagation()}>
+            <input type="checkbox" checked={!!checked} onChange={e => onCheckedChange(e.target.checked)}
+              className="rounded border-gray-300 cursor-pointer" />
+          </div>
+        )}
         <button className="shrink-0 text-muted-foreground">
           {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         </button>
@@ -1208,7 +1217,10 @@ function InboundLeadRow({ lead, sequences, onEnrolled }: { lead: InboundLead; se
 }
 
 function InboundTab() {
+  const { toast } = useToast();
   const qc = useQueryClient();
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkSeqId, setBulkSeqId] = useState<number | ''>('');
 
   const { data: leads = [], isLoading, refetch } = useQuery<InboundLead[]>({
     queryKey: ['wa-inbound-leads'],
@@ -1223,6 +1235,32 @@ function InboundTab() {
 
   const newContacts = leads.filter((l) => !l.matchedSellerId);
   const matchedSellers = leads.filter((l) => l.matchedSellerId);
+  const allIds = leads.map((l) => l.id);
+  const allSelected = allIds.length > 0 && allIds.every(id => selectedIds.has(id));
+  const someSelected = allIds.some(id => selectedIds.has(id)) && !allSelected;
+
+  const toggleOne = (id: number, v: boolean) => setSelectedIds(prev => {
+    const next = new Set(prev);
+    if (v) next.add(id); else next.delete(id);
+    return next;
+  });
+
+  const onEnrolled = () => {
+    qc.invalidateQueries({ queryKey: ['wa-leads'] });
+    qc.invalidateQueries({ queryKey: ['wa-sequences'] });
+  };
+
+  const bulkEnrollMut = useMutation({
+    mutationFn: ({ ids, sequenceId }: { ids: number[]; sequenceId: number }) =>
+      adminFetch('/api/admin/wa/inbound-leads/bulk-enroll', { method: 'POST', body: JSON.stringify({ ids, sequenceId }) }),
+    onSuccess: (data: any) => {
+      toast({ title: 'Enrolled', description: `${data.enrolled} added, ${data.skipped} already enrolled` });
+      setSelectedIds(new Set());
+      setBulkSeqId('');
+      onEnrolled();
+    },
+    onError: () => toast({ title: 'Error', description: 'Bulk enroll failed', variant: 'destructive' }),
+  });
 
   return (
     <div className="space-y-6">
@@ -1236,10 +1274,40 @@ function InboundTab() {
             Contacts who messaged your connected number directly — the safest, highest-priority audience for campaigns.
           </p>
         </div>
-        <Button variant="ghost" size="sm" onClick={() => refetch()}>
-          <RefreshCw className="w-4 h-4 mr-1" />Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          {leads.length > 0 && (
+            <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer select-none">
+              <input type="checkbox" checked={allSelected}
+                ref={el => { if (el) el.indeterminate = someSelected; }}
+                onChange={e => setSelectedIds(e.target.checked ? new Set(allIds) : new Set())}
+                className="rounded border-gray-300" />
+              Select all
+            </label>
+          )}
+          <Button variant="ghost" size="sm" onClick={() => refetch()}>
+            <RefreshCw className="w-4 h-4 mr-1" />Refresh
+          </Button>
+        </div>
       </div>
+
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg flex-wrap">
+          <span className="text-sm text-blue-800 font-medium">{selectedIds.size} selected</span>
+          <div className="flex items-center gap-2 ml-auto flex-wrap">
+            <select value={bulkSeqId} onChange={e => setBulkSeqId(e.target.value ? Number(e.target.value) : '')}
+              className="text-sm border rounded-md px-2 py-1 bg-background h-7">
+              <option value="">Pick a sequence…</option>
+              {sequences.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <Button size="sm" className="h-7 text-xs" disabled={!bulkSeqId || bulkEnrollMut.isPending}
+              onClick={() => bulkSeqId && bulkEnrollMut.mutate({ ids: [...selectedIds], sequenceId: Number(bulkSeqId) })}>
+              {bulkEnrollMut.isPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Plus className="w-3 h-3 mr-1" />}
+              Enroll in Sequence
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSelectedIds(new Set())}>Clear</Button>
+          </div>
+        </div>
+      )}
 
       {/* Legend */}
       <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
@@ -1275,8 +1343,8 @@ function InboundTab() {
             Existing Sellers ({matchedSellers.length})
           </div>
           {matchedSellers.map((lead) => (
-            <InboundLeadRow key={lead.id} lead={lead} sequences={sequences}
-              onEnrolled={() => { qc.invalidateQueries({ queryKey: ['wa-leads'] }); qc.invalidateQueries({ queryKey: ['wa-sequences'] }); }} />
+            <InboundLeadRow key={lead.id} lead={lead} sequences={sequences} onEnrolled={onEnrolled}
+              checked={selectedIds.has(lead.id)} onCheckedChange={v => toggleOne(lead.id, v)} />
           ))}
         </div>
       )}
@@ -1287,8 +1355,8 @@ function InboundTab() {
             New Contacts ({newContacts.length})
           </div>
           {newContacts.map((lead) => (
-            <InboundLeadRow key={lead.id} lead={lead} sequences={sequences}
-              onEnrolled={() => { qc.invalidateQueries({ queryKey: ['wa-leads'] }); qc.invalidateQueries({ queryKey: ['wa-sequences'] }); }} />
+            <InboundLeadRow key={lead.id} lead={lead} sequences={sequences} onEnrolled={onEnrolled}
+              checked={selectedIds.has(lead.id)} onCheckedChange={v => toggleOne(lead.id, v)} />
           ))}
         </div>
       )}

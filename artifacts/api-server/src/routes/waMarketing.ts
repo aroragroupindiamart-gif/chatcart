@@ -95,8 +95,8 @@ router.post("/admin/wa/disconnect", requireAdminAuth, async (req, res) => {
 
 router.patch("/admin/wa/settings", requireAdminAuth, async (req, res) => {
   const schema = z.object({
-    dailyLimit: z.number().int().min(1).max(200).optional(),
-    warmupDailyLimit: z.number().int().min(1).max(50).optional(),
+    dailyLimit: z.number().int().min(1).max(1000).optional(),
+    warmupDailyLimit: z.number().int().min(1).max(500).optional(),
     warmupDays: z.number().int().min(1).max(90).optional(),
     replyRateThreshold: z.number().int().min(0).max(100).optional(),
     isPaused: z.boolean().optional(),
@@ -439,6 +439,62 @@ router.get("/admin/wa/inbound-leads/:id/messages", requireAdminAuth, async (req,
     res.json(messages);
   } catch (e) {
     res.status(500).json({ error: "Failed to fetch messages" });
+  }
+});
+
+router.post("/admin/wa/inbound-leads/bulk-enroll", requireAdminAuth, async (req, res) => {
+  const schema = z.object({
+    ids: z.array(z.number()).min(1),
+    sequenceId: z.number().int().positive(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid data" }); return; }
+
+  const { ids, sequenceId } = parsed.data;
+  try {
+    const [seq] = await db
+      .select({ id: waSequencesTable.id })
+      .from(waSequencesTable)
+      .where(eq(waSequencesTable.id, sequenceId))
+      .limit(1);
+    if (!seq) { res.status(404).json({ error: "Sequence not found" }); return; }
+
+    const inboundLeads = await db
+      .select()
+      .from(waInboundLeadsTable)
+      .where(sql`id = ANY(${ids})`);
+
+    let enrolled = 0;
+    let skipped = 0;
+
+    for (const lead of inboundLeads) {
+      const existingChecks: any[] = [eq(waCampaignLeadsTable.inboundLeadId, lead.id)];
+      if (lead.matchedSellerId) {
+        existingChecks.push(eq(waCampaignLeadsTable.sellerId, lead.matchedSellerId));
+      }
+      const [existing] = await db
+        .select({ id: waCampaignLeadsTable.id })
+        .from(waCampaignLeadsTable)
+        .where(and(eq(waCampaignLeadsTable.sequenceId, sequenceId), or(...existingChecks)))
+        .limit(1);
+
+      if (existing) { skipped++; continue; }
+
+      await db.insert(waCampaignLeadsTable).values({
+        sequenceId,
+        sellerId: lead.matchedSellerId ?? null,
+        inboundLeadId: lead.id,
+        phone: lead.matchedSellerId ? null : lead.phone,
+        currentHourOffset: -1,
+        nextSendAt: new Date(),
+        status: "active",
+      });
+      enrolled++;
+    }
+
+    res.json({ enrolled, skipped });
+  } catch (e) {
+    res.status(500).json({ error: "Bulk enroll failed" });
   }
 });
 

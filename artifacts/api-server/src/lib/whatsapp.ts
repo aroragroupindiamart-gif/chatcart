@@ -199,7 +199,10 @@ export async function connectWA(): Promise<void> {
       for (const msg of messages) {
         if (msg.key.fromMe) continue;
         const rawJid = msg.key.remoteJid ?? "";
-        const phone = rawJid.split("@")[0];
+        // Strip @server and optional :deviceSuffix (Baileys multi-device JIDs can
+        // look like "919876543210:11@s.whatsapp.net" — the ":11" is not part of
+        // the phone number and must be stripped before storing.
+        const phone = rawJid.split("@")[0].split(":")[0];
         if (!phone || phone.includes("-")) continue;
 
         const displayName: string = msg.pushName ?? "";
