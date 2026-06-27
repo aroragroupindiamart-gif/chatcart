@@ -232,6 +232,7 @@ export async function processScheduledMessages(): Promise<void> {
               currentHourOffset: step.hourOffset,
               lastSentAt: new Date(),
               nextSendAt,
+              sendFailureCount: 0,
             })
             .where(eq(waCampaignLeadsTable.id, lead.id));
         } else {
@@ -244,16 +245,26 @@ export async function processScheduledMessages(): Promise<void> {
               currentHourOffset: step.hourOffset,
               lastSentAt: new Date(),
               status: "completed",
+              sendFailureCount: 0,
             })
             .where(eq(waCampaignLeadsTable.id, lead.id));
           console.log(`[WA-CAMPAIGN] Lead ${lead.id} completed — all sequence steps sent`);
         }
       } else {
-        // Send failed — reset nextSendAt for retry on the next tick
-        await db
-          .update(waCampaignLeadsTable)
-          .set({ nextSendAt: new Date(Date.now() + 5 * 60 * 1000) })
-          .where(eq(waCampaignLeadsTable.id, lead.id));
+        // Send failed — track consecutive failures; retry at +10 min, mark send_failed after 3
+        const newFailCount = (lead.sendFailureCount ?? 0) + 1;
+        if (newFailCount >= 3) {
+          await db
+            .update(waCampaignLeadsTable)
+            .set({ status: "send_failed", sendFailureCount: newFailCount, nextSendAt: new Date(Date.now() + 24 * 60 * 60 * 1000) })
+            .where(eq(waCampaignLeadsTable.id, lead.id));
+          console.warn(`[WA-CAMPAIGN] Lead ${lead.id} marked send_failed after ${newFailCount} consecutive failures`);
+        } else {
+          await db
+            .update(waCampaignLeadsTable)
+            .set({ sendFailureCount: newFailCount, nextSendAt: new Date(Date.now() + 10 * 60 * 1000) })
+            .where(eq(waCampaignLeadsTable.id, lead.id));
+        }
       }
     } catch (e: any) {
       // Unexpected exception — reset nextSendAt so the lead is not stranded.

@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { Link } from 'wouter';
 import { Layout } from '@/components/Layout';
-import { useSellers } from '@/hooks/useAdminApi';
+import { useSellers, useBulkActivateSellers } from '@/hooks/useAdminApi';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Search, Phone, Store, Clock, MessageCircle, X } from 'lucide-react';
+import { Search, Phone, Store, Clock, MessageCircle, X, CheckCircle2, Loader2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { EnrollInSequenceModal } from '@/components/EnrollInSequenceModal';
+import { useToast } from '@/hooks/use-toast';
 
 function PlanBadge({ plan }: { plan: string }) {
   if (plan === 'pending') {
@@ -43,6 +44,10 @@ export default function Sellers() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [enrollModalOpen, setEnrollModalOpen] = useState(false);
   const [enrollTarget, setEnrollTarget] = useState<number[]>([]);
+
+  const { toast } = useToast();
+  const [activatePlan, setActivatePlan] = useState('starter');
+  const activateMut = useBulkActivateSellers();
 
   const allIds = sellers?.map(s => s.id) ?? [];
   const allSelected = allIds.length > 0 && allIds.every(id => selected.has(id));
@@ -256,6 +261,39 @@ export default function Sellers() {
           <Button size="sm" className="gap-1.5 rounded-full" onClick={openEnrollBulk}>
             <MessageCircle className="w-3.5 h-3.5" />
             Enroll in WA Sequence
+          </Button>
+          <span className="w-px h-4 bg-border" />
+          <Select value={activatePlan} onValueChange={setActivatePlan}>
+            <SelectTrigger className="h-8 text-xs w-28 rounded-full border-dashed">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="starter">Starter</SelectItem>
+              <SelectItem value="growth">Growth</SelectItem>
+              <SelectItem value="pro">Pro</SelectItem>
+              <SelectItem value="lifetime">Lifetime</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5 rounded-full"
+            disabled={activateMut.isPending}
+            onClick={() => {
+              activateMut.mutate(
+                { sellerIds: [...selected].map(Number), plan: activatePlan },
+                {
+                  onSuccess: (data) => {
+                    toast({ title: 'Activated', description: `${data.updated} seller(s) activated to ${activatePlan}` });
+                    setSelected(new Set());
+                  },
+                  onError: () => toast({ title: 'Error', description: 'Could not activate sellers', variant: 'destructive' }),
+                }
+              );
+            }}
+          >
+            {activateMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+            Activate
           </Button>
           <button
             onClick={() => setSelected(new Set())}

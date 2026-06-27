@@ -66,6 +66,7 @@ export const waCampaignLeadsTable = pgTable("wa_campaign_leads", {
   lastSentAt: timestamp("last_sent_at"),
   repliedAt: timestamp("replied_at"),
   status: text("status").notNull().default("active"),
+  sendFailureCount: integer("send_failure_count").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

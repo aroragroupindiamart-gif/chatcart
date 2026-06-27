@@ -22,6 +22,7 @@ import {
   getOrCreateSession,
 } from "../lib/whatsapp.js";
 import { ObjectStorageService } from "../lib/objectStorage.js";
+import { purgeStaleSessionFiles } from "../lib/waAuthState.js";
 
 const router = Router();
 
@@ -297,6 +298,7 @@ router.get("/admin/wa/leads", requireAdminAuth, async (req, res) => {
         lastSentAt: waCampaignLeadsTable.lastSentAt,
         repliedAt: waCampaignLeadsTable.repliedAt,
         status: waCampaignLeadsTable.status,
+        sendFailureCount: waCampaignLeadsTable.sendFailureCount,
         createdAt: waCampaignLeadsTable.createdAt,
       })
       .from(waCampaignLeadsTable)
@@ -358,7 +360,12 @@ router.patch("/admin/wa/leads/:id", requireAdminAuth, async (req, res) => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid data" }); return; }
   try {
-    const [updated] = await db.update(waCampaignLeadsTable).set(parsed.data).where(eq(waCampaignLeadsTable.id, id)).returning();
+    const updateData: Record<string, unknown> = { ...parsed.data };
+    if (parsed.data.status === "active") {
+      updateData.sendFailureCount = 0;
+      updateData.nextSendAt = new Date();
+    }
+    const [updated] = await db.update(waCampaignLeadsTable).set(updateData as never).where(eq(waCampaignLeadsTable.id, id)).returning();
     res.json(updated);
   } catch (e) {
     res.status(500).json({ error: "Failed to update lead" });
@@ -476,7 +483,7 @@ router.get("/admin/wa/health", requireAdminAuth, async (req, res) => {
     const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0);
     const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - 7);
 
-    const [[sentToday], [sentWeek], [failedToday], [repliedLeads], [activeLeads], [pausedLeads], [completedLeads], [inboundTotal]] =
+    const [[sentToday], [sentWeek], [failedToday], [repliedLeads], [activeLeads], [pausedLeads], [completedLeads], [inboundTotal], [sendFailedLeads]] =
       await Promise.all([
         db.select({ c: count() }).from(waSendLogTable).where(and(gte(waSendLogTable.sentAt, startOfDay), eq(waSendLogTable.status, "sent"))),
         db.select({ c: count() }).from(waSendLogTable).where(and(gte(waSendLogTable.sentAt, startOfWeek), eq(waSendLogTable.status, "sent"))),
@@ -486,6 +493,7 @@ router.get("/admin/wa/health", requireAdminAuth, async (req, res) => {
         db.select({ c: count() }).from(waCampaignLeadsTable).where(eq(waCampaignLeadsTable.status, "paused_no_reply")),
         db.select({ c: count() }).from(waCampaignLeadsTable).where(eq(waCampaignLeadsTable.status, "completed")),
         db.select({ c: count() }).from(waInboundLeadsTable),
+        db.select({ c: count() }).from(waCampaignLeadsTable).where(eq(waCampaignLeadsTable.status, "send_failed")),
       ]);
 
     const totalWeekSent = Number(sentWeek?.c ?? 0);
@@ -501,6 +509,7 @@ router.get("/admin/wa/health", requireAdminAuth, async (req, res) => {
       activeLeads: Number(activeLeads?.c ?? 0),
       pausedLeads: Number(pausedLeads?.c ?? 0),
       completedLeads: Number(completedLeads?.c ?? 0),
+      sendFailedLeads: Number(sendFailedLeads?.c ?? 0),
       inboundTotal: Number(inboundTotal?.c ?? 0),
       dailyLimit: session.dailyLimit,
       warmupDailyLimit: session.warmupDailyLimit,
@@ -511,6 +520,17 @@ router.get("/admin/wa/health", requireAdminAuth, async (req, res) => {
     });
   } catch (e) {
     res.status(500).json({ error: "Failed to fetch health metrics" });
+  }
+});
+
+// ── Purge stale session files ──────────────────────────────────────────────────
+
+router.post("/admin/wa/purge-stale-files", requireAdminAuth, async (req, res) => {
+  try {
+    const deleted = await purgeStaleSessionFiles();
+    res.json({ ok: true, deleted });
+  } catch (e) {
+    res.status(500).json({ error: "Failed to purge files" });
   }
 });
 

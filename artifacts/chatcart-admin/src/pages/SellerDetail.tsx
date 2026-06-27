@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useRoute } from 'wouter';
 import { Layout } from '@/components/Layout';
-import { useSeller, useSellerProducts, useSellerOrders, useUpdateSubscription, useSuspendSeller, useReactivateSeller, useWALeadsBySeller } from '@/hooks/useAdminApi';
+import { useSeller, useSellerProducts, useSellerOrders, useUpdateSubscription, useSuspendSeller, useReactivateSeller, useWALeadsBySeller, useRemoveFromWASequence } from '@/hooks/useAdminApi';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { AlertTriangle, Store, Package, ShoppingCart, Calendar, Phone, Globe, CreditCard, MessageCircle, CheckCircle2, PauseCircle, Clock } from 'lucide-react';
+import { AlertTriangle, Store, Package, ShoppingCart, Calendar, Phone, Globe, CreditCard, MessageCircle, CheckCircle2, PauseCircle, Clock, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { EnrollInSequenceModal } from '@/components/EnrollInSequenceModal';
 import { formatOffset } from '@/lib/waOffset';
@@ -19,8 +19,11 @@ import { formatOffset } from '@/lib/waOffset';
 function WALeadStatusBadge({ status }: { status: string }) {
   if (status === 'active') return <Badge className="bg-green-100 text-green-800 border border-green-200 hover:bg-green-100 gap-1 text-xs"><CheckCircle2 className="w-3 h-3" />Active</Badge>;
   if (status === 'paused_no_reply') return <Badge className="bg-amber-100 text-amber-800 border border-amber-200 hover:bg-amber-100 gap-1 text-xs"><PauseCircle className="w-3 h-3" />Paused (no reply)</Badge>;
+  if (status === 'paused_manual') return <Badge className="bg-orange-100 text-orange-800 border border-orange-200 hover:bg-orange-100 text-xs">Paused</Badge>;
   if (status === 'completed') return <Badge className="bg-blue-100 text-blue-800 border border-blue-200 hover:bg-blue-100 text-xs">Completed</Badge>;
-  return <Badge variant="secondary" className="text-xs capitalize">{status}</Badge>;
+  if (status === 'send_failed') return <Badge className="bg-red-100 text-red-800 border border-red-200 hover:bg-red-100 text-xs">Send Failed</Badge>;
+  if (status === 'removed') return <Badge className="bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-100 text-xs">Removed</Badge>;
+  return <Badge variant="secondary" className="text-xs capitalize">{status.replace(/_/g, ' ')}</Badge>;
 }
 
 export default function SellerDetail() {
@@ -36,6 +39,7 @@ export default function SellerDetail() {
   const updateSub = useUpdateSubscription();
   const suspendSeller = useSuspendSeller();
   const reactivateSeller = useReactivateSeller();
+  const removeFromSequence = useRemoveFromWASequence();
 
   const [suspendReason, setSuspendReason] = useState('');
   const [suspendDialogOpen, setSuspendDialogOpen] = useState(false);
@@ -346,7 +350,23 @@ export default function SellerDetail() {
                             <span>Enrolled {new Date(lead.createdAt).toLocaleDateString()}</span>
                           </div>
                         </div>
-                        <WALeadStatusBadge status={lead.status} />
+                        <div className="flex items-center gap-2 shrink-0">
+                          <WALeadStatusBadge status={lead.status} />
+                          {lead.status !== 'completed' && lead.status !== 'removed' && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                              title="Remove from sequence"
+                              disabled={removeFromSequence.isPending}
+                              onClick={() => removeFromSequence.mutate(lead.id, {
+                                onSuccess: () => toast({ title: 'Removed from sequence' }),
+                              })}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>

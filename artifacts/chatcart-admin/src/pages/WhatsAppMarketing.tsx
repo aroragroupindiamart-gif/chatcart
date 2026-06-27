@@ -73,7 +73,8 @@ interface CampaignLead {
   nextSendAt: string | null;
   lastSentAt: string | null;
   repliedAt: string | null;
-  status: 'active' | 'paused_no_reply' | 'paused_manual' | 'completed' | 'removed';
+  status: 'active' | 'paused_no_reply' | 'paused_manual' | 'completed' | 'removed' | 'send_failed';
+  sendFailureCount: number;
   createdAt: string;
 }
 
@@ -115,6 +116,7 @@ interface HealthMetrics {
   activeLeads: number;
   pausedLeads: number;
   completedLeads: number;
+  sendFailedLeads: number;
   inboundTotal: number;
   dailyLimit: number;
   warmupDailyLimit: number;
@@ -153,12 +155,13 @@ function fmtRelative(d: string | null) {
 }
 
 function StatusBadge({ status }: { status: CampaignLead['status'] }) {
-  const map = {
+  const map: Record<string, { label: string; color: string }> = {
     active: { label: 'Active', color: 'bg-green-100 text-green-800' },
     paused_no_reply: { label: 'Paused (no reply)', color: 'bg-yellow-100 text-yellow-800' },
     paused_manual: { label: 'Paused', color: 'bg-orange-100 text-orange-800' },
     completed: { label: 'Completed', color: 'bg-blue-100 text-blue-800' },
-    removed: { label: 'Removed', color: 'bg-red-100 text-red-800' },
+    removed: { label: 'Removed', color: 'bg-gray-100 text-gray-600' },
+    send_failed: { label: 'Send Failed', color: 'bg-red-100 text-red-800' },
   };
   const { label, color } = map[status] ?? map.active;
   return <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${color}`}>{label}</span>;
@@ -228,6 +231,12 @@ function ConnectionTab() {
     mutationFn: (data: Partial<WASettings>) => adminFetch('/api/admin/wa/settings', { method: 'PATCH', body: JSON.stringify(data) }),
     onSuccess: (updated: WASettings) => { setSettings(updated); toast({ title: 'Settings saved' }); },
     onError: () => toast({ title: 'Error', description: 'Could not save settings', variant: 'destructive' }),
+  });
+
+  const purgeFilesMut = useMutation({
+    mutationFn: () => adminFetch<{ ok: boolean; deleted: number }>('/api/admin/wa/purge-stale-files', { method: 'POST' }),
+    onSuccess: (data) => toast({ title: 'Done', description: `Purged ${data.deleted} stale file(s)` }),
+    onError: () => toast({ title: 'Error', description: 'Failed to purge files', variant: 'destructive' }),
   });
 
   const status = waState?.status ?? 'disconnected';
@@ -320,6 +329,24 @@ function ConnectionTab() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">Maintenance</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Remove stale Baileys key files from object storage. Only{' '}
+              <code className="text-xs bg-muted px-1 rounded">creds.json</code> is kept.
+            </p>
+            <Button variant="outline" size="sm" onClick={() => purgeFilesMut.mutate()} disabled={purgeFilesMut.isPending}>
+              {purgeFilesMut.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+              Purge stale session files
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -776,12 +803,16 @@ function LeadsTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [enrollOpen, setEnrollOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const { data: leads = [], isLoading } = useQuery<CampaignLead[]>({
     queryKey: ['wa-leads'],
     queryFn: () => adminFetch('/api/admin/wa/leads'),
     refetchInterval: 30000,
   });
+
+  const sendFailedCount = leads.filter(l => l.status === 'send_failed').length;
+  const filteredLeads = statusFilter === 'all' ? leads : leads.filter(l => l.status === statusFilter);
 
   const updateMut = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) =>
@@ -813,6 +844,16 @@ function LeadsTab() {
 
       {isLoading && <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" />Loading…</div>}
 
+      {!isLoading && sendFailedCount > 0 && (
+        <div className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <XCircle className="w-4 h-4 text-red-600 shrink-0" />
+          <span className="text-sm text-red-800 font-medium">{sendFailedCount} lead{sendFailedCount !== 1 ? 's' : ''} failed to send after 3 attempts.</span>
+          <Button size="sm" variant="outline" className="ml-auto h-7 text-xs border-red-300 text-red-700 hover:bg-red-100" onClick={() => setStatusFilter('send_failed')}>
+            View failed
+          </Button>
+        </div>
+      )}
+
       {!isLoading && leads.length === 0 && (
         <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-lg">
           <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
@@ -821,6 +862,24 @@ function LeadsTab() {
       )}
 
       {leads.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="text-sm border rounded-md px-3 py-1.5 bg-background">
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="paused_no_reply">Paused (no reply)</option>
+              <option value="paused_manual">Paused (manual)</option>
+              <option value="send_failed">Send Failed</option>
+              <option value="completed">Completed</option>
+              <option value="removed">Removed</option>
+            </select>
+            {statusFilter !== 'all' && (
+              <button onClick={() => setStatusFilter('all')} className="text-xs text-muted-foreground hover:text-foreground underline">
+                Clear filter
+              </button>
+            )}
+            <span className="text-xs text-muted-foreground ml-auto">{filteredLeads.length} of {leads.length}</span>
+          </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -835,7 +894,7 @@ function LeadsTab() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {leads.map((lead) => (
+              {filteredLeads.map((lead) => (
                 <tr key={lead.id} className="hover:bg-muted/30 transition-colors">
                   <td className="py-3 pr-4">
                     <div className="font-medium flex items-center gap-1.5">
@@ -873,7 +932,13 @@ function LeadsTab() {
                           <Play className="w-3.5 h-3.5" />
                         </Button>
                       )}
-                      {lead.status !== 'removed' && lead.status !== 'completed' && (
+                      {lead.status === 'send_failed' && (
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-blue-600" title="Retry sending"
+                          onClick={() => updateMut.mutate({ id: lead.id, status: 'active' })}>
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                      {lead.status !== 'removed' && lead.status !== 'completed' && lead.status !== 'send_failed' && (
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Remove"
                           onClick={() => updateMut.mutate({ id: lead.id, status: 'removed' })}>
                           <Trash2 className="w-3.5 h-3.5" />
@@ -885,6 +950,7 @@ function LeadsTab() {
               ))}
             </tbody>
           </table>
+        </div>
         </div>
       )}
     </div>
@@ -1263,6 +1329,7 @@ function HealthTab() {
           <MetricCard label="Reply Rate" value={health.replyRate !== null ? `${health.replyRate}%` : '—'} icon={<MessageSquare className="w-5 h-5 text-purple-600" />} warn={replyRateLow} />
           <MetricCard label="Failed Today" value={health.failedToday} icon={<XCircle className="w-5 h-5 text-red-600" />} warn={health.failedToday > 0} />
           <MetricCard label="Active Leads" value={health.activeLeads} icon={<Play className="w-5 h-5 text-green-600" />} />
+          <MetricCard label="Send Failed" value={health.sendFailedLeads} icon={<XCircle className="w-5 h-5 text-red-600" />} />
           <MetricCard label="Paused Leads" value={health.pausedLeads} icon={<Pause className="w-5 h-5 text-yellow-600" />} />
           <MetricCard label="Completed" value={health.completedLeads} icon={<CheckCircle2 className="w-5 h-5 text-blue-600" />} />
           <MetricCard label="Inbound Contacts" value={health.inboundTotal} icon={<PhoneIncoming className="w-5 h-5 text-orange-600" />} />

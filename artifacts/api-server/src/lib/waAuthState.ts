@@ -97,3 +97,24 @@ export async function sessionExistsInStorage(): Promise<boolean> {
     return false;
   }
 }
+
+export async function purgeStaleSessionFiles(): Promise<number> {
+  try {
+    const { bucketName, basePath } = getStorageBase();
+    const bucket = objectStorageClient.bucket(bucketName);
+    const prefix = objectPrefix(basePath);
+
+    const [files] = await bucket.getFiles({ prefix });
+    const credsPath = `${prefix}${CREDS_FILENAME}`;
+    const stale = files.filter((f) => f.name !== credsPath);
+
+    if (stale.length > 0) {
+      await Promise.all(stale.map((f) => f.delete().catch(() => {})));
+      console.log(`[WA-AUTH] Purged ${stale.length} stale session file(s)`);
+    }
+    return stale.length;
+  } catch (e) {
+    console.error("[WA-AUTH] Failed to purge stale session files:", e);
+    return 0;
+  }
+}

@@ -9,7 +9,7 @@ import {
   orderItemsTable,
   contactSubmissions,
 } from "@workspace/db/schema";
-import { eq, desc, and, gte, lte, ilike, or, count, sql } from "drizzle-orm";
+import { eq, desc, and, gte, lte, ilike, or, count, sql, inArray } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import { signAdminToken, requireAdminAuth, type AdminJwtPayload } from "../middleware/adminAuth.js";
 import { z } from "zod";
@@ -163,6 +163,27 @@ router.post("/admin/sellers/:id/suspend", requireAdminAuth, async (req, res) => 
     details: { reason: parsed.data.reason },
   });
   res.json(updated);
+});
+
+router.post("/admin/sellers/bulk-activate", requireAdminAuth, async (req, res) => {
+  const parsed = z.object({
+    sellerIds: z.array(z.number().int().positive()).min(1),
+    plan: z.enum(["starter", "growth", "pro", "lifetime"]),
+    status: z.enum(["active", "trial"]).default("active"),
+  }).safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
+
+  const { sellerIds, plan, status } = parsed.data;
+  await db
+    .update(sellersTable)
+    .set({ subscriptionPlan: plan as never, subscriptionStatus: status as never, subscriptionStartDate: new Date() })
+    .where(inArray(sellersTable.id, sellerIds));
+
+  await audit(req.admin!.adminId, "bulk_activate_sellers", req.ip ?? "unknown", {
+    details: { sellerIds, plan, status, count: sellerIds.length },
+  });
+
+  res.json({ ok: true, updated: sellerIds.length });
 });
 
 router.post("/admin/sellers/:id/reactivate", requireAdminAuth, async (req, res) => {

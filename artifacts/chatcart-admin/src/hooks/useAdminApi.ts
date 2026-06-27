@@ -238,3 +238,31 @@ export const useEnrollInSequence = () => {
     },
   });
 };
+
+export const useRemoveFromWASequence = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (leadId: number) =>
+      adminFetch(`/api/admin/wa/leads/${leadId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'removed' }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'wa', 'leads'] });
+    },
+  });
+};
+
+export const useBulkActivateSellers = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sellerIds, plan, status }: { sellerIds: number[]; plan: string; status?: string }) =>
+      adminFetch<{ ok: boolean; updated: number }>('/api/admin/sellers/bulk-activate', {
+        method: 'POST',
+        body: JSON.stringify({ sellerIds, plan, status: status ?? 'active' }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'sellers'] });
+    },
+  });
+};
