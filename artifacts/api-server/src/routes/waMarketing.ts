@@ -559,6 +559,29 @@ router.post("/admin/wa/inbound-leads/:id/enroll", requireAdminAuth, async (req, 
   }
 });
 
+router.delete("/admin/wa/inbound-leads/bulk", requireAdminAuth, async (req, res) => {
+  const schema = z.object({ ids: z.array(z.number()).min(1) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid data" }); return; }
+  try {
+    await db.delete(waInboundLeadsTable).where(sql`id = ANY(${parsed.data.ids})`);
+    res.json({ deleted: parsed.data.ids.length });
+  } catch (e) {
+    res.status(500).json({ error: "Bulk delete failed" });
+  }
+});
+
+router.delete("/admin/wa/inbound-leads/:id", requireAdminAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+  try {
+    await db.delete(waInboundLeadsTable).where(eq(waInboundLeadsTable.id, id));
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: "Delete failed" });
+  }
+});
+
 // ── Health metrics ─────────────────────────────────────────────────────────────
 
 router.get("/admin/wa/health", requireAdminAuth, async (req, res) => {

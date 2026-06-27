@@ -1091,14 +1091,20 @@ function EnrollForm({ onSuccess }: { onSuccess: () => void }) {
 
 // ── Inbound Leads Tab ──────────────────────────────────────────────────────────
 
-function InboundLeadRow({ lead, sequences, onEnrolled, checked, onCheckedChange }: {
-  lead: InboundLead; sequences: Sequence[]; onEnrolled: () => void;
+function InboundLeadRow({ lead, sequences, onEnrolled, onDeleted, checked, onCheckedChange }: {
+  lead: InboundLead; sequences: Sequence[]; onEnrolled: () => void; onDeleted: () => void;
   checked?: boolean; onCheckedChange?: (v: boolean) => void;
 }) {
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
   const [enrollOpen, setEnrollOpen] = useState(false);
   const [selectedSeqId, setSelectedSeqId] = useState<number | null>(null);
+
+  const deleteMut = useMutation({
+    mutationFn: () => adminFetch(`/api/admin/wa/inbound-leads/${lead.id}`, { method: 'DELETE' }),
+    onSuccess: () => { toast({ title: 'Lead removed' }); onDeleted(); },
+    onError: () => toast({ title: 'Delete failed', variant: 'destructive' }),
+  });
 
   const { data: messages = [], isLoading: loadingMsgs } = useQuery<InboundMessage[]>({
     queryKey: ['wa-inbound-messages', lead.id],
@@ -1157,7 +1163,12 @@ function InboundLeadRow({ lead, sequences, onEnrolled, checked, onCheckedChange 
           <div className="text-xs text-muted-foreground">{lead.messageCount} msg{lead.messageCount !== 1 ? 's' : ''}</div>
         </div>
 
-        <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div className="shrink-0 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+            disabled={deleteMut.isPending}
+            onClick={() => deleteMut.mutate()}>
+            {deleteMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+          </Button>
           <Dialog open={enrollOpen} onOpenChange={setEnrollOpen}>
             <DialogTrigger asChild>
               <Button size="sm" variant="outline" className="text-xs h-7">
@@ -1221,6 +1232,17 @@ function InboundTab() {
   const qc = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkSeqId, setBulkSeqId] = useState<number | ''>('');
+
+  const bulkDeleteMut = useMutation({
+    mutationFn: (ids: number[]) =>
+      adminFetch('/api/admin/wa/inbound-leads/bulk', { method: 'DELETE', body: JSON.stringify({ ids }) }),
+    onSuccess: (data: any) => {
+      toast({ title: `${data.deleted} lead${data.deleted !== 1 ? 's' : ''} removed` });
+      setSelectedIds(new Set());
+      qc.invalidateQueries({ queryKey: ['wa-inbound-leads'] });
+    },
+    onError: () => toast({ title: 'Delete failed', variant: 'destructive' }),
+  });
 
   const { data: leads = [], isLoading, refetch } = useQuery<InboundLead[]>({
     queryKey: ['wa-inbound-leads'],
@@ -1304,6 +1326,11 @@ function InboundTab() {
               {bulkEnrollMut.isPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Plus className="w-3 h-3 mr-1" />}
               Enroll in Sequence
             </Button>
+            <Button size="sm" variant="destructive" className="h-7 text-xs" disabled={bulkDeleteMut.isPending}
+              onClick={() => bulkDeleteMut.mutate([...selectedIds])}>
+              {bulkDeleteMut.isPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Trash2 className="w-3 h-3 mr-1" />}
+              Delete Selected
+            </Button>
             <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSelectedIds(new Set())}>Clear</Button>
           </div>
         </div>
@@ -1344,6 +1371,7 @@ function InboundTab() {
           </div>
           {matchedSellers.map((lead) => (
             <InboundLeadRow key={lead.id} lead={lead} sequences={sequences} onEnrolled={onEnrolled}
+              onDeleted={() => qc.invalidateQueries({ queryKey: ['wa-inbound-leads'] })}
               checked={selectedIds.has(lead.id)} onCheckedChange={v => toggleOne(lead.id, v)} />
           ))}
         </div>
@@ -1356,6 +1384,7 @@ function InboundTab() {
           </div>
           {newContacts.map((lead) => (
             <InboundLeadRow key={lead.id} lead={lead} sequences={sequences} onEnrolled={onEnrolled}
+              onDeleted={() => qc.invalidateQueries({ queryKey: ['wa-inbound-leads'] })}
               checked={selectedIds.has(lead.id)} onCheckedChange={v => toggleOne(lead.id, v)} />
           ))}
         </div>
