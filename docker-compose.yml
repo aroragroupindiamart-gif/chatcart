@@ -38,6 +38,33 @@ services:
       retries: 3
       start_period: 40s
 
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGUSER: chatcart
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: chatcart
+      DO_SPACES_KEY: ${DO_SPACES_KEY}
+      DO_SPACES_SECRET: ${DO_SPACES_SECRET}
+      DO_SPACES_REGION: ${DO_SPACES_REGION}
+      DO_SPACES_BUCKET: ${DO_SPACES_BUCKET}
+      AWS_ACCESS_KEY_ID: ${DO_SPACES_KEY}
+      AWS_SECRET_ACCESS_KEY: ${DO_SPACES_SECRET}
+    volumes:
+      - ./scripts/backup-db.sh:/backup-db.sh:ro
+    entrypoint: >
+      sh -c "
+        apk add --no-cache aws-cli &&
+        echo '0 2 * * * /backup-db.sh >> /var/log/backup.log 2>&1' | crontab - &&
+        echo 'Backup service started. Nightly job runs at 02:00 UTC.' &&
+        crond -f -d 6
+      "
+
   nginx:
     image: nginx:alpine
     restart: unless-stopped

@@ -364,9 +364,81 @@ docker compose restart api
 docker compose restart nginx
 ```
 
-### Backup the database
+### Backup the database (manual)
 
 ```bash
 docker compose exec postgres \
   pg_dump -U chatcart chatcart > chatcart-backup-$(date +%Y%m%d).sql
 ```
+
+---
+
+## N. Automated Database Backups
+
+The `backup` service in `docker-compose.yml` runs a cron job every night at **02:00 UTC**.
+It dumps the Postgres database, gzip-compresses it, uploads it to DO Spaces under the
+`backups/` prefix, and automatically deletes dumps older than 7 days.
+
+No extra setup is needed — the service starts alongside the rest of the stack when you
+run `docker compose up -d`.
+
+### What the backup service needs
+
+The service re-uses the DO Spaces credentials already in your `.env` file:
+
+| Variable | Purpose |
+|---|---|
+| `DO_SPACES_KEY` | Spaces access key (read/write) |
+| `DO_SPACES_SECRET` | Spaces secret key |
+| `DO_SPACES_REGION` | e.g. `blr1` |
+| `DO_SPACES_BUCKET` | e.g. `chatcart-uploads` |
+| `POSTGRES_PASSWORD` | Used by pg_dump to authenticate |
+
+### Verify the backup service is running
+
+```bash
+docker compose ps backup
+# Should show: Up
+
+docker compose logs backup --tail 30
+# Should show install steps then "Backup service started. Nightly job runs at 02:00 UTC."
+```
+
+### Run a backup manually (any time)
+
+```bash
+docker compose exec backup /backup-db.sh
+```
+
+You will see progress logged to stdout. The resulting file appears in your Spaces
+bucket under `backups/chatcart-YYYYMMDD-HHMMSS.sql.gz`.
+
+### List available backups
+
+```bash
+# From the Droplet (loads .env automatically)
+bash scripts/restore-backup.sh
+```
+
+Or browse them in the DO control panel:
+**Spaces → chatcart-uploads → backups/**
+
+### Restore from a backup
+
+```bash
+# List backups first:
+bash scripts/restore-backup.sh
+
+# Then restore (replace filename with the one you want):
+bash scripts/restore-backup.sh chatcart-20260627-020000.sql.gz
+```
+
+The restore script will:
+1. Stop the API container to prevent new writes
+2. Download the chosen dump from DO Spaces
+3. Drop and recreate the `chatcart` database
+4. Pipe the dump through `psql` to restore all tables and data
+5. Restart the API container
+
+> **Tip:** The restore script asks for confirmation before making any changes.
+> It also lists the restored tables at the end so you can verify the restore succeeded.
