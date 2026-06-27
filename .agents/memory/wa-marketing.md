@@ -15,14 +15,33 @@ The `/api/admin/wa/stream` endpoint verifies the admin JWT from the `token` quer
 
 **How to apply:** When adding new SSE endpoints, replicate the `verifyAdminToken(req.query.token)` pattern, not the `requireAdminAuth` middleware.
 
-**Session directory:** `artifacts/api-server/wa-session/` — useMultiFileAuthState persists here. If the directory exists on startup, initWA() auto-reconnects without needing to scan QR again.
+**CRITICAL: Dev server must NEVER auto-connect to WhatsApp when production is running.**  
+Both the Replit dev API server and the production deployment use the same WhatsApp account. If both auto-connect they kick each other with Code 440 (connectionReplaced) every ~60s in an infinite loop — causing all campaign sends to fail with "WhatsApp not connected" or "Cannot read properties of null".
 
-**Campaign scheduler — step selection uses gt(dayOffset, currentDay) not eq(dayOffset, currentDay+1).**  
-The scheduler finds the next step with `gt(waSequenceStepsTable.dayOffset, lead.currentDay)` ordered ASC — NOT `eq(dayOffset, currentDay+1)`. The +1 pattern breaks for non-consecutive day-offsets (e.g. Day 1, Day 4, Day 9). After a step sends, `currentDay` is set to `step.dayOffset` (the actual offset), not a counter.
+Fix applied:
+- `initWA()` returns early when `NODE_ENV !== "production"` — dev server stays dark on startup
+- `waAuthState.ts` uses environment-prefixed storage keys: `wa-session/` (prod) vs `wa-session-dev/` (dev)
+- Admin can still manually click "Connect" in the WA Marketing panel during local dev testing
 
-**Why:** The sequence builder allows any dayOffset — gaps between days are intentional. Hardcoding +1 causes the scheduler to look for dayOffset=2 when none exists and incorrectly mark the lead as completed.
+**Why:** Production deployment and Replit dev workflow both run the same api-server code sharing the same object storage bucket. Without isolation, every restart of either server triggers a 440 loop.
 
-**Warmup, rate-limiting, reply-gating:** All work generically on "next due step" — not hardcoded to 8 steps or consecutive offsets. Reply-gate: if currentDay >= 1 and repliedAt IS NULL → paused_no_reply. Resume happens when incoming message updates repliedAt.
+**Campaign scheduler — step selection uses gt(hourOffset, currentHourOffset) not eq(...).**  
+The scheduler finds the next step with `gt(waSequenceStepsTable.hourOffset, lead.currentHourOffset)` ordered ASC. The +1 pattern breaks for non-consecutive offsets. After a step sends, `currentHourOffset` is set to `step.hourOffset` (the actual offset).
+
+**Reply-gate removed.**  
+The paused_no_reply status is no longer set by the scheduler. All sequence steps fire automatically on schedule regardless of whether the lead replied. Leads never get stuck after the first message.
+
+**Send safety — null socket race condition fix.**  
+`sendWAMessage` and `sendWAMediaMessage` capture `sock` into a local `localSock` before the 2–8s typing simulation delay. After delay, `state.status` is re-checked — throws "WhatsApp disconnected during send" cleanly instead of crashing with "Cannot read properties of null (reading 'sendMessage')".
+
+**Code 440 reconnect backoff: 60s (vs 8s for other codes).**  
+Prevents rapid flip-flop when something external kicks the session.
+
+**Stable browser identity:** `browser: ["Chatcart", "Chrome", "120.0.0"]` in makeWASocket config — reduces session replacement frequency.
+
+**Bulk actions:**  
+`POST /admin/wa/leads/bulk` accepts `{ ids: number[], action: 'pause'|'resume'|'retry' }`.
+Frontend has per-row checkboxes with select-all (indeterminate state) and bulk action bar in the Leads tab.
 
 **waCampaignLeadsTable has nullable sellerId.**  
 Nullable to support inbound leads who are not sellers. Scheduler leftJoins both sellersTable and waInboundLeadsTable.
@@ -47,8 +66,9 @@ Three nullable columns: `mediaUrl` (objectPath like `/objects/uploads/uuid`), `m
 After an audit finding, the endpoint validates all sellerIds correspond to `subscriptionPlan='pending'` sellers. UI-only restriction was insufficient.
 
 **Files:**
-- `artifacts/api-server/src/lib/whatsapp.ts` — Baileys singleton + sendWAMessage + sendWAMediaMessage + handleInboundLead
+- `artifacts/api-server/src/lib/whatsapp.ts` — Baileys singleton + sendWAMessage + sendWAMediaMessage + handleInboundLead + initWA
 - `artifacts/api-server/src/lib/waCampaign.ts` — scheduler (gt/asc step selection, media send dispatch)
-- `artifacts/api-server/src/routes/waMarketing.ts` — all WA admin endpoints + /media/request-upload-url
-- `artifacts/chatcart-admin/src/pages/WhatsAppMarketing.tsx` — 5-tab UI, flexible sequence builder with media upload
-- `lib/db/src/schema/waMarketing.ts` — DB tables (mediaUrl/mediaType/mediaFilename on wa_sequence_steps)
+- `artifacts/api-server/src/lib/waAuthState.ts` — object storage session backup/restore (env-prefixed keys)
+- `artifacts/api-server/src/routes/waMarketing.ts` — all WA admin endpoints + bulk leads action
+- `artifacts/chatcart-admin/src/pages/WhatsAppMarketing.tsx` — 5-tab UI, flexible sequence builder with media upload, bulk actions
+- `lib/db/src/schema/waMarketing.ts` — DB tables

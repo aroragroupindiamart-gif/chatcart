@@ -2,7 +2,11 @@ import path from "path";
 import { readFile, mkdir, writeFile } from "fs/promises";
 import { objectStorageClient } from "./objectStorage.js";
 
-const WA_SESSION_PREFIX = "wa-session";
+// Production uses "wa-session/" (existing key — no re-scan needed).
+// Dev uses "wa-session-dev/" so both environments never share the same
+// WhatsApp credentials and cannot kick each other with Code 440.
+const WA_SESSION_PREFIX =
+  process.env.NODE_ENV === "production" ? "wa-session" : "wa-session-dev";
 const CREDS_FILENAME = "creds.json";
 
 function getPrivateDir(): string {

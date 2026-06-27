@@ -414,6 +414,16 @@ async function handleInboundLead(fromPhone: string, displayName: string, message
 }
 
 export async function initWA(): Promise<void> {
+  // In development, skip auto-connect entirely. The dev API server and the
+  // production deployment share the same WhatsApp account. If both auto-connect
+  // they kick each other every ~60s with Code 440 (connectionReplaced), causing
+  // continuous send failures. Production handles the live session; dev stays dark
+  // unless the admin manually clicks "Connect" in the WA Marketing panel.
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[WA] Dev mode — auto-connect skipped (prevents Code 440 loop with production)");
+    return;
+  }
+
   // 1. Check local working dir first (survives process restarts within same container)
   try {
     const { access } = await import("fs/promises");
