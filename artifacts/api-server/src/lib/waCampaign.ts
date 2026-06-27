@@ -56,6 +56,29 @@ export async function processScheduledMessages(): Promise<void> {
   // Capture cutoff once — leads that become due during this tick are handled next tick
   const now = new Date();
 
+  // ── Recovery guard ────────────────────────────────────────────────────────────
+  // Detect and fix any active lead whose next_send_at is more than 30 days beyond
+  // its correct anchor (created_at + nextStep.hourOffset). This prevents leads from
+  // being permanently stranded if a bug ever sets a far-future sentinel.
+  await db.execute(sql`
+    UPDATE wa_campaign_leads wcl
+    SET next_send_at = wcl.created_at + (
+      SELECT INTERVAL '1 hour' * wss.hour_offset
+      FROM wa_sequence_steps wss
+      WHERE wss.sequence_id = wcl.sequence_id
+        AND wss.hour_offset > wcl.current_hour_offset
+      ORDER BY wss.hour_offset ASC
+      LIMIT 1
+    )
+    WHERE wcl.status = 'active'
+      AND wcl.next_send_at > NOW() + INTERVAL '30 days'
+      AND EXISTS (
+        SELECT 1 FROM wa_sequence_steps wss2
+        WHERE wss2.sequence_id = wcl.sequence_id
+          AND wss2.hour_offset > wcl.current_hour_offset
+      )
+  `);
+
   // ── One-at-a-time claim loop ─────────────────────────────────────────────────
   // Each iteration claims exactly ONE lead with a 5-minute lease using
   // FOR UPDATE SKIP LOCKED. Two concurrent scheduler instances (dev + prod) can
@@ -198,25 +221,33 @@ export async function processScheduledMessages(): Promise<void> {
           .orderBy(asc(waSequenceStepsTable.hourOffset))
           .limit(1);
 
-        // Anchor nextSendAt to enrolledAt (createdAt) + nextStep.hourOffset.
-        // This prevents scheduler delays from compounding across steps.
-        let nextSendAt: Date;
         if (nextStep) {
+          // Anchor nextSendAt to enrolledAt (createdAt) + nextStep.hourOffset.
+          // This prevents scheduler delays from compounding across steps.
           const enrolledAt = new Date(lead.createdAt).getTime();
-          nextSendAt = new Date(enrolledAt + nextStep.hourOffset * 60 * 60 * 1000);
+          const nextSendAt = new Date(enrolledAt + nextStep.hourOffset * 60 * 60 * 1000);
+          await db
+            .update(waCampaignLeadsTable)
+            .set({
+              currentHourOffset: step.hourOffset,
+              lastSentAt: new Date(),
+              nextSendAt,
+            })
+            .where(eq(waCampaignLeadsTable.id, lead.id));
         } else {
-          // No next step — set far future; status will be completed on next poll
-          nextSendAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+          // No next step — last step was just sent; mark completed immediately.
+          // Never use a far-future sentinel here: the scheduler only claims leads
+          // with next_send_at <= now, so a far-future date would strand the lead.
+          await db
+            .update(waCampaignLeadsTable)
+            .set({
+              currentHourOffset: step.hourOffset,
+              lastSentAt: new Date(),
+              status: "completed",
+            })
+            .where(eq(waCampaignLeadsTable.id, lead.id));
+          console.log(`[WA-CAMPAIGN] Lead ${lead.id} completed — all sequence steps sent`);
         }
-
-        await db
-          .update(waCampaignLeadsTable)
-          .set({
-            currentHourOffset: step.hourOffset,
-            lastSentAt: new Date(),
-            nextSendAt,
-          })
-          .where(eq(waCampaignLeadsTable.id, lead.id));
       } else {
         // Send failed — reset nextSendAt for retry on the next tick
         await db

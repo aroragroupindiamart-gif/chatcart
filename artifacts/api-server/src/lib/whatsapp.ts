@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { waSessionsTable, waInboundLeadsTable, waInboundMessagesTable, sellersTable } from "@workspace/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
 import {
-  uploadAllSessionFiles,
+  uploadCredsToStorage,
   downloadSessionFromStorage,
   deleteSessionFromStorage,
 } from "./waAuthState.js";
@@ -118,10 +118,10 @@ export async function connectWA(): Promise<void> {
     await mkdir(SESSION_LOCAL_DIR, { recursive: true });
     const { state: authState, saveCreds } = await useMultiFileAuthState(SESSION_LOCAL_DIR);
 
-    // Wrap saveCreds: save locally first, then mirror to object storage (non-blocking)
+    // Wrap saveCreds: save locally first, then mirror creds.json to object storage (non-blocking)
     const saveCredsAndBackup = async () => {
       await saveCreds();
-      uploadAllSessionFiles(SESSION_LOCAL_DIR).catch((e) =>
+      uploadCredsToStorage(SESSION_LOCAL_DIR).catch((e) =>
         console.error("[WA] Storage backup error:", e),
       );
     };
