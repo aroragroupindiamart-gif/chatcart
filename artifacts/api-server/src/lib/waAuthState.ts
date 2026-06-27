@@ -1,6 +1,13 @@
 import path from "path";
 import { readFile, mkdir, writeFile } from "fs/promises";
-import { objectStorageClient } from "./objectStorage.js";
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+  ListObjectsV2Command,
+  HeadObjectCommand,
+} from "@aws-sdk/client-s3";
 
 // Production uses "wa-session/" (existing key — no re-scan needed).
 // Dev uses "wa-session-dev/" so both environments never share the same
@@ -9,60 +16,70 @@ const WA_SESSION_PREFIX =
   process.env.NODE_ENV === "production" ? "wa-session" : "wa-session-dev";
 const CREDS_FILENAME = "creds.json";
 
-function getPrivateDir(): string {
-  const dir = process.env.PRIVATE_OBJECT_DIR || "";
-  if (!dir) throw new Error("PRIVATE_OBJECT_DIR not set — configure object storage first");
-  return dir.replace(/\/$/, "");
+function getS3Client(): S3Client {
+  const region = process.env.DO_SPACES_REGION;
+  const key = process.env.DO_SPACES_KEY;
+  const secret = process.env.DO_SPACES_SECRET;
+  if (!region || !key || !secret) {
+    throw new Error(
+      "Missing DO Spaces config: DO_SPACES_REGION, DO_SPACES_KEY, DO_SPACES_SECRET"
+    );
+  }
+  return new S3Client({
+    region,
+    endpoint: `https://${region}.digitaloceanspaces.com`,
+    credentials: { accessKeyId: key, secretAccessKey: secret },
+    forcePathStyle: false,
+  });
 }
 
-function getStorageBase(): { bucketName: string; basePath: string } {
-  const privateDir = getPrivateDir();
-  const normalized = privateDir.startsWith("/") ? privateDir : `/${privateDir}`;
-  const parts = normalized.split("/");
-  return {
-    bucketName: parts[1],
-    basePath: parts.slice(2).join("/"),
-  };
+function getBucket(): string {
+  const bucket = process.env.DO_SPACES_BUCKET;
+  if (!bucket) throw new Error("DO_SPACES_BUCKET not set");
+  return bucket;
 }
 
-function objectPrefix(basePath: string): string {
-  return basePath ? `${basePath}/${WA_SESSION_PREFIX}/` : `${WA_SESSION_PREFIX}/`;
+function keyPrefix(): string {
+  return `${WA_SESSION_PREFIX}/`;
 }
 
-// Upload creds.json + lid-mapping-*.json files to object storage.
+// Upload creds.json + lid-mapping-*.json files to DO Spaces.
 // lid-mapping files are small and essential for resolving @lid JIDs to phone
 // numbers across container restarts. All other signal keys (pre-key, session,
 // sender-key) are ephemeral and regenerated automatically by Baileys.
-// Files are uploaded sequentially to avoid network saturation.
 export async function uploadCredsToStorage(localDir: string): Promise<void> {
   try {
     const { readdir } = await import("fs/promises");
-    const { bucketName, basePath } = getStorageBase();
-    const bucket = objectStorageClient.bucket(bucketName);
-    const prefix = objectPrefix(basePath);
+    const client = getS3Client();
+    const bucket = getBucket();
+    const prefix = keyPrefix();
 
     const allFiles = await readdir(localDir);
-    // Upload only creds.json and lid-mapping files — keep signal/session keys local-only
     const filesToUpload = allFiles.filter(
-      (f) => f === CREDS_FILENAME || f.startsWith("lid-mapping-"),
+      (f) => f === CREDS_FILENAME || f.startsWith("lid-mapping-")
     );
 
-    // Sequential uploads to avoid flooding the network
     for (const filename of filesToUpload) {
       const localPath = path.join(localDir, filename);
-      const objectName = `${prefix}${filename}`;
+      const key = `${prefix}${filename}`;
       try {
         const content = await readFile(localPath);
-        await bucket.file(objectName).save(content, {
-          contentType: "application/json",
-          resumable: false,
-        });
+        await client.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: key,
+            Body: content,
+            ContentType: "application/json",
+          })
+        );
       } catch (e) {
         console.error(`[WA-AUTH] Failed to upload ${filename}:`, e);
       }
     }
 
-    console.log(`[WA-AUTH] Backed up ${filesToUpload.length} session file(s) to object storage`);
+    console.log(
+      `[WA-AUTH] Backed up ${filesToUpload.length} session file(s) to DO Spaces`
+    );
   } catch (e) {
     console.error("[WA-AUTH] Failed to upload session files to storage:", e);
   }
@@ -70,30 +87,50 @@ export async function uploadCredsToStorage(localDir: string): Promise<void> {
 
 export async function downloadSessionFromStorage(): Promise<boolean> {
   try {
-    const { bucketName, basePath } = getStorageBase();
-    const bucket = objectStorageClient.bucket(bucketName);
-    const prefix = objectPrefix(basePath);
+    const client = getS3Client();
+    const bucket = getBucket();
+    const prefix = keyPrefix();
 
     // Check creds.json exists first (canonical presence check)
-    const credsObject = bucket.file(`${prefix}${CREDS_FILENAME}`);
-    const [exists] = await credsObject.exists();
-    if (!exists) return false;
+    try {
+      await client.send(
+        new HeadObjectCommand({ Bucket: bucket, Key: `${prefix}${CREDS_FILENAME}` })
+      );
+    } catch {
+      return false;
+    }
 
-    // Download all .json files under the prefix
-    const [files] = await bucket.getFiles({ prefix });
-    const jsonFiles = files.filter((f) => f.name.endsWith(".json"));
-
-    await mkdir("/tmp/wa-session", { recursive: true });
-    await Promise.all(
-      jsonFiles.map(async (file) => {
-        const filename = path.basename(file.name);
-        const localPath = path.join("/tmp/wa-session", filename);
-        const [buffer] = await file.download();
-        await writeFile(localPath, buffer);
-      }),
+    // List all objects under the prefix
+    const list = await client.send(
+      new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix })
+    );
+    const objects = (list.Contents ?? []).filter((o) =>
+      o.Key?.endsWith(".json")
     );
 
-    console.log(`[WA-AUTH] Downloaded ${jsonFiles.length} session file(s) from object storage`);
+    const sessionDir = process.env.WA_SESSION_DIR ?? "/data/wa-session";
+    await mkdir(sessionDir, { recursive: true });
+
+    await Promise.all(
+      objects.map(async (obj) => {
+        if (!obj.Key) return;
+        const resp = await client.send(
+          new GetObjectCommand({ Bucket: bucket, Key: obj.Key })
+        );
+        const body = resp.Body as any;
+        const chunks: Buffer[] = [];
+        for await (const chunk of body) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        const buffer = Buffer.concat(chunks);
+        const filename = path.basename(obj.Key);
+        await writeFile(path.join(sessionDir, filename), buffer);
+      })
+    );
+
+    console.log(
+      `[WA-AUTH] Downloaded ${objects.length} session file(s) from DO Spaces`
+    );
     return true;
   } catch (e) {
     console.error("[WA-AUTH] Failed to download session files from storage:", e);
@@ -103,14 +140,28 @@ export async function downloadSessionFromStorage(): Promise<boolean> {
 
 export async function deleteSessionFromStorage(): Promise<void> {
   try {
-    const { bucketName, basePath } = getStorageBase();
-    const bucket = objectStorageClient.bucket(bucketName);
-    const prefix = objectPrefix(basePath);
+    const client = getS3Client();
+    const bucket = getBucket();
+    const prefix = keyPrefix();
 
-    const [files] = await bucket.getFiles({ prefix });
-    if (files.length > 0) {
-      await Promise.all(files.map((f) => f.delete().catch(() => {})));
-      console.log(`[WA-AUTH] Deleted ${files.length} session file(s) from object storage`);
+    const list = await client.send(
+      new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix })
+    );
+    const objects = list.Contents ?? [];
+
+    if (objects.length > 0) {
+      await Promise.all(
+        objects.map((obj) =>
+          obj.Key
+            ? client
+                .send(new DeleteObjectCommand({ Bucket: bucket, Key: obj.Key }))
+                .catch(() => {})
+            : Promise.resolve()
+        )
+      );
+      console.log(
+        `[WA-AUTH] Deleted ${objects.length} session file(s) from DO Spaces`
+      );
     }
   } catch (e) {
     console.error("[WA-AUTH] Failed to delete session from storage:", e);
@@ -119,12 +170,11 @@ export async function deleteSessionFromStorage(): Promise<void> {
 
 export async function sessionExistsInStorage(): Promise<boolean> {
   try {
-    const { bucketName, basePath } = getStorageBase();
-    const bucket = objectStorageClient.bucket(bucketName);
-    const prefix = objectPrefix(basePath);
-    const objectName = `${prefix}${CREDS_FILENAME}`;
-    const [exists] = await bucket.file(objectName).exists();
-    return exists;
+    const client = getS3Client();
+    const bucket = getBucket();
+    const key = `${keyPrefix()}${CREDS_FILENAME}`;
+    await client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+    return true;
   } catch {
     return false;
   }
@@ -132,16 +182,26 @@ export async function sessionExistsInStorage(): Promise<boolean> {
 
 export async function purgeStaleSessionFiles(): Promise<number> {
   try {
-    const { bucketName, basePath } = getStorageBase();
-    const bucket = objectStorageClient.bucket(bucketName);
-    const prefix = objectPrefix(basePath);
+    const client = getS3Client();
+    const bucket = getBucket();
+    const prefix = keyPrefix();
 
-    const [files] = await bucket.getFiles({ prefix });
-    const credsPath = `${prefix}${CREDS_FILENAME}`;
-    const stale = files.filter((f) => f.name !== credsPath);
+    const list = await client.send(
+      new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix })
+    );
+    const credsKey = `${prefix}${CREDS_FILENAME}`;
+    const stale = (list.Contents ?? []).filter((o) => o.Key !== credsKey);
 
     if (stale.length > 0) {
-      await Promise.all(stale.map((f) => f.delete().catch(() => {})));
+      await Promise.all(
+        stale.map((obj) =>
+          obj.Key
+            ? client
+                .send(new DeleteObjectCommand({ Bucket: bucket, Key: obj.Key }))
+                .catch(() => {})
+            : Promise.resolve()
+        )
+      );
       console.log(`[WA-AUTH] Purged ${stale.length} stale session file(s)`);
     }
     return stale.length;

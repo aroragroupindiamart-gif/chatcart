@@ -8,7 +8,7 @@ import {
   deleteSessionFromStorage,
 } from "./waAuthState.js";
 
-const SESSION_LOCAL_DIR = "/tmp/wa-session";
+const SESSION_LOCAL_DIR = process.env.WA_SESSION_DIR ?? "/data/wa-session";
 
 export type WAStatus = "disconnected" | "connecting" | "connected";
 
