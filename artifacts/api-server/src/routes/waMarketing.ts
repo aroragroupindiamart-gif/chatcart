@@ -11,7 +11,7 @@ import {
   waInboundMessagesTable,
   sellersTable,
 } from "@workspace/db/schema";
-import { eq, and, desc, gte, count, isNotNull, inArray, or, isNull } from "drizzle-orm";
+import { eq, and, desc, gte, count, isNotNull, inArray, or, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   connectWA,

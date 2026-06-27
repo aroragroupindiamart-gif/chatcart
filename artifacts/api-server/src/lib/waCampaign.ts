@@ -246,9 +246,9 @@ export async function processScheduledMessages(): Promise<void> {
         // without counting it as a failure. Real failures (spam block, invalid number, etc.)
         // count toward the 3-strike limit and use a 10-min backoff.
         const isConnectionError =
-          sendResult?.error?.includes("disconnected") ||
-          sendResult?.error?.includes("connection") ||
-          sendResult?.error?.includes("timed out");
+          errorMessage?.includes("disconnected") ||
+          errorMessage?.includes("connection") ||
+          errorMessage?.includes("timed out");
         if (isConnectionError) {
           await db
             .update(waCampaignLeadsTable)

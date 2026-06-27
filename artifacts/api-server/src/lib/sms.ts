@@ -27,10 +27,10 @@ export async function sendOtp(phone: string, otp: string): Promise<void> {
     throw new Error(`MSG91 API error ${response.status}: ${body}`);
   }
 
-  const data = await response.json().catch(() => null);
+  const data = await response.json().catch(() => null) as Record<string, unknown> | null;
 
-  if (data && data.type === "error") {
-    throw new Error(`MSG91 error: ${data.message ?? JSON.stringify(data)}`);
+  if (data && data["type"] === "error") {
+    throw new Error(`MSG91 error: ${(data["message"] as string | undefined) ?? JSON.stringify(data)}`);
   }
 
   console.log(`[OTP] Sent to ${phone} via MSG91`);
