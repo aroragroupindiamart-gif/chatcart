@@ -132,6 +132,9 @@ export async function connectWA(): Promise<void> {
       logger: silentLogger as any,
       generateHighQualityLinkPreview: false,
       markOnlineOnConnect: false,
+      // Stable browser identity — prevents WhatsApp treating every reconnect
+      // as a brand-new session and kicking it immediately after (Code 440)
+      browser: ["Chatcart", "Chrome", "120.0.0"],
     });
 
     sock.ev.on("creds.update", saveCredsAndBackup);
@@ -181,8 +184,13 @@ export async function connectWA(): Promise<void> {
           // Delete from object storage so next boot doesn't try to restore a dead session
           deleteSessionFromStorage().catch(() => {});
         } else if (!isLoggedOut) {
-          // Transient disconnect (408, network blip, etc.) — reconnect after 8s
-          reconnectTimer = setTimeout(() => connectWA(), 8000);
+          // Code 440 = connectionReplaced — another WhatsApp Web tab / device opened the
+          // same number and kicked us. Back off for 60s to avoid a flip-flop loop where
+          // the phone keeps kicking our reconnects. Any other transient error (408 timeout,
+          // 503 server unavailable, network blip) retries quickly after 8s.
+          const delayMs = statusCode === 440 ? 60_000 : 8_000;
+          console.log(`[WA] Reconnecting in ${delayMs / 1000}s (code=${statusCode})`);
+          reconnectTimer = setTimeout(() => connectWA(), delayMs);
         }
       }
     });
@@ -242,18 +250,28 @@ export async function disconnectWA(): Promise<void> {
 }
 
 export async function sendWAMessage(phone: string, message: string): Promise<void> {
-  if (!sock || state.status !== "connected") {
+  // Capture sock reference BEFORE any async delay. If the connection drops while
+  // we are simulating typing (2–5s), the module-level `sock` becomes null but our
+  // local reference is still valid — we check state.status after the delay to
+  // detect that case and throw cleanly instead of crashing on null.sendMessage().
+  const localSock = sock;
+  if (!localSock || state.status !== "connected") {
     throw new Error("WhatsApp not connected");
   }
   const jid = `${phone}@s.whatsapp.net`;
 
   try {
-    await sock.sendPresenceUpdate("composing", jid);
+    await localSock.sendPresenceUpdate("composing", jid);
     await new Promise((r) => setTimeout(r, 2000 + Math.random() * 3000));
-    await sock.sendPresenceUpdate("paused", jid);
+    await localSock.sendPresenceUpdate("paused", jid);
   } catch {}
 
-  await sock.sendMessage(jid, { text: message });
+  // Re-check: connection might have dropped during the typing simulation delay
+  if (state.status !== "connected") {
+    throw new Error("WhatsApp disconnected during send");
+  }
+
+  await localSock.sendMessage(jid, { text: message });
 }
 
 export async function sendWAMediaMessage(
@@ -263,7 +281,8 @@ export async function sendWAMediaMessage(
   caption: string,
   filename: string | null,
 ): Promise<void> {
-  if (!sock || state.status !== "connected") {
+  const localSock = sock;
+  if (!localSock || state.status !== "connected") {
     throw new Error("WhatsApp not connected");
   }
   const jid = `${phone}@s.whatsapp.net`;
@@ -278,17 +297,22 @@ export async function sendWAMediaMessage(
 
   // Simulate composing presence — extended delay accommodates realistic media typing time
   try {
-    await sock.sendPresenceUpdate("composing", jid);
+    await localSock.sendPresenceUpdate("composing", jid);
     await new Promise((r) => setTimeout(r, 3000 + Math.random() * 5000));
-    await sock.sendPresenceUpdate("paused", jid);
+    await localSock.sendPresenceUpdate("paused", jid);
   } catch {}
 
+  // Re-check: connection might have dropped during the typing simulation delay
+  if (state.status !== "connected") {
+    throw new Error("WhatsApp disconnected during send");
+  }
+
   if (mediaType === "image") {
-    await sock.sendMessage(jid, { image: fileBuffer, caption, mimetype });
+    await localSock.sendMessage(jid, { image: fileBuffer, caption, mimetype });
   } else if (mediaType === "video") {
-    await sock.sendMessage(jid, { video: fileBuffer, caption, mimetype });
+    await localSock.sendMessage(jid, { video: fileBuffer, caption, mimetype });
   } else {
-    await sock.sendMessage(jid, {
+    await localSock.sendMessage(jid, {
       document: fileBuffer,
       mimetype,
       fileName: filename ?? "attachment",
