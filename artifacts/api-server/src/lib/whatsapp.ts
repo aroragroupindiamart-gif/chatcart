@@ -160,8 +160,23 @@ export async function connectWA(): Promise<void> {
 
     sock.ev.on("creds.update", saveCredsAndBackup);
 
-    // Build LID→phone map so messages arriving with @lid JIDs can be resolved
+    // Build LID→phone map so messages arriving with @lid JIDs can be resolved.
+    // Three sources in Baileys:
+    //  - messaging-history.set  : bulk contacts on reconnect / history sync
+    //  - contacts.upsert        : real-time new contacts
+    //  - contacts.update        : real-time contact edits
+    sock.ev.on("messaging-history.set", ({ contacts }: any) => {
+      const arr: any[] = contacts ?? [];
+      if (arr.length > 0) {
+        console.log(`[WA] messaging-history.set sample contact:`, JSON.stringify(arr[0]));
+      }
+      updateLidMap(arr);
+      console.log(`[WA] messaging-history.set: ${arr.length} contacts, lid map size=${Object.keys(lidToPhone).length}`);
+    });
     sock.ev.on("contacts.upsert", (contacts: any[]) => {
+      if (contacts.length > 0) {
+        console.log(`[WA] contacts.upsert sample:`, JSON.stringify(contacts[0]));
+      }
       updateLidMap(contacts);
       console.log(`[WA] contacts.upsert: ${contacts.length} contacts, lid map size=${Object.keys(lidToPhone).length}`);
     });
