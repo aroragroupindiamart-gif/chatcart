@@ -29,23 +29,34 @@ function objectPrefix(basePath: string): string {
   return basePath ? `${basePath}/${WA_SESSION_PREFIX}/` : `${WA_SESSION_PREFIX}/`;
 }
 
+// Upload every file in localDir to object storage (creds.json + all key files).
+// This preserves lid-mapping, app-state-sync-key, and sender-key files so that
+// Baileys can fully restore its state (including LID→phone mappings) on restart.
 export async function uploadCredsToStorage(localDir: string): Promise<void> {
   try {
+    const { readdir } = await import("fs/promises");
     const { bucketName, basePath } = getStorageBase();
     const bucket = objectStorageClient.bucket(bucketName);
     const prefix = objectPrefix(basePath);
-    const objectName = `${prefix}${CREDS_FILENAME}`;
-    const localPath = path.join(localDir, CREDS_FILENAME);
 
-    const content = await readFile(localPath);
-    await bucket.file(objectName).save(content, {
-      contentType: "application/json",
-      resumable: false,
-    });
+    const files = await readdir(localDir);
+    const jsonFiles = files.filter((f) => f.endsWith(".json"));
 
-    console.log(`[WA-AUTH] Backed up creds.json to object storage`);
+    await Promise.all(
+      jsonFiles.map(async (filename) => {
+        const localPath = path.join(localDir, filename);
+        const objectName = `${prefix}${filename}`;
+        const content = await readFile(localPath);
+        await bucket.file(objectName).save(content, {
+          contentType: "application/json",
+          resumable: false,
+        });
+      }),
+    );
+
+    console.log(`[WA-AUTH] Backed up ${jsonFiles.length} session file(s) to object storage`);
   } catch (e) {
-    console.error("[WA-AUTH] Failed to upload creds.json to storage:", e);
+    console.error("[WA-AUTH] Failed to upload session files to storage:", e);
   }
 }
 
@@ -54,21 +65,30 @@ export async function downloadSessionFromStorage(): Promise<boolean> {
     const { bucketName, basePath } = getStorageBase();
     const bucket = objectStorageClient.bucket(bucketName);
     const prefix = objectPrefix(basePath);
-    const objectName = `${prefix}${CREDS_FILENAME}`;
 
-    const file = bucket.file(objectName);
-    const [exists] = await file.exists();
+    // Check creds.json exists first (canonical presence check)
+    const credsObject = bucket.file(`${prefix}${CREDS_FILENAME}`);
+    const [exists] = await credsObject.exists();
     if (!exists) return false;
 
-    const localPath = path.join("/tmp/wa-session", CREDS_FILENAME);
-    await mkdir(path.dirname(localPath), { recursive: true });
-    const [buffer] = await file.download();
-    await writeFile(localPath, buffer);
+    // Download all .json files under the prefix
+    const [files] = await bucket.getFiles({ prefix });
+    const jsonFiles = files.filter((f) => f.name.endsWith(".json"));
 
-    console.log(`[WA-AUTH] Downloaded creds.json from object storage`);
+    await mkdir("/tmp/wa-session", { recursive: true });
+    await Promise.all(
+      jsonFiles.map(async (file) => {
+        const filename = path.basename(file.name);
+        const localPath = path.join("/tmp/wa-session", filename);
+        const [buffer] = await file.download();
+        await writeFile(localPath, buffer);
+      }),
+    );
+
+    console.log(`[WA-AUTH] Downloaded ${jsonFiles.length} session file(s) from object storage`);
     return true;
   } catch (e) {
-    console.error("[WA-AUTH] Failed to download creds.json from storage:", e);
+    console.error("[WA-AUTH] Failed to download session files from storage:", e);
     return false;
   }
 }

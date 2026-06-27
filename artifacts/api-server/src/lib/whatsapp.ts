@@ -257,10 +257,22 @@ export async function connectWA(): Promise<void> {
           // Standard JID — phone number is the prefix
           phone = rawJid.split("@")[0].split(":")[0];
         } else if (rawJid.endsWith("@lid")) {
-          // Multi-device LID — look up real phone from the contact map
-          phone = lidToPhone[rawJid] ?? null;
-          if (!phone) {
-            console.log(`[WA] @lid not yet in contact map, skipping: ${rawJid} (map size=${Object.keys(lidToPhone).length})`);
+          // Multi-device LID — Baileys stores the reverse mapping in authState.keys
+          // under key type 'lid-mapping' with key '{lidUser}_reverse' → pnUser.
+          // This is populated by Baileys during message decryption (before this event fires).
+          const lidUser = rawJid.split("@")[0];
+          try {
+            const result = await authState.keys.get("lid-mapping", [`${lidUser}_reverse`]);
+            const pnUser = result[`${lidUser}_reverse`];
+            if (pnUser && typeof pnUser === "string") {
+              phone = pnUser;
+              console.log(`[WA] resolved @lid ${rawJid} → phone=${pnUser}`);
+            } else {
+              console.log(`[WA] @lid not in key store yet: ${rawJid} (result=${JSON.stringify(result)})`);
+              continue;
+            }
+          } catch (e) {
+            console.error(`[WA] key store lookup failed for ${rawJid}:`, e);
             continue;
           }
         } else {
