@@ -31,6 +31,27 @@ let sock: any = null;
 let reconnectTimer: NodeJS.Timeout | null = null;
 let isLoggedOut = false;
 
+// Multi-device Baileys: contacts arrive with @lid JIDs, not @s.whatsapp.net.
+// We build a lid→phone map from contacts.upsert/contacts.update so we can
+// resolve the actual phone number when a message arrives with an @lid JID.
+const lidToPhone: Record<string, string> = {};
+
+function updateLidMap(contacts: any[]): void {
+  for (const c of contacts) {
+    const id: string = c.id ?? "";
+    const lid: string = c.lid ?? "";
+    // contacts.upsert gives us both id (@s.whatsapp.net) and lid (@lid)
+    if (id.endsWith("@s.whatsapp.net") && lid) {
+      const phone = id.split("@")[0].split(":")[0];
+      lidToPhone[lid] = phone;
+    }
+    // Sometimes the contact entry itself is the @lid and name/phone are inline
+    if (id.endsWith("@lid") && c.notify) {
+      // keep as-is; phone is unknown without the paired @s.whatsapp.net entry
+    }
+  }
+}
+
 const silentLogger = {
   level: "silent",
   info: () => {},
@@ -139,6 +160,15 @@ export async function connectWA(): Promise<void> {
 
     sock.ev.on("creds.update", saveCredsAndBackup);
 
+    // Build LID→phone map so messages arriving with @lid JIDs can be resolved
+    sock.ev.on("contacts.upsert", (contacts: any[]) => {
+      updateLidMap(contacts);
+      console.log(`[WA] contacts.upsert: ${contacts.length} contacts, lid map size=${Object.keys(lidToPhone).length}`);
+    });
+    sock.ev.on("contacts.update", (updates: any[]) => {
+      updateLidMap(updates);
+    });
+
     sock.ev.on("connection.update", async (update: any) => {
       const { connection, lastDisconnect, qr } = update;
 
@@ -204,18 +234,27 @@ export async function connectWA(): Promise<void> {
       }
       for (const msg of messages) {
         const rawJid = msg.key.remoteJid ?? "";
-        console.log(`[WA] msg jid=${rawJid} fromMe=${msg.key.fromMe}`);
         if (msg.key.fromMe) continue;
-        // Only process real user JIDs — @s.whatsapp.net.
-        // Baileys also emits @lid (linked-device IDs, not phone numbers),
-        // @g.us (groups), and @broadcast — all must be ignored.
-        if (!rawJid.endsWith("@s.whatsapp.net")) {
-          console.log(`[WA] Skipping non-whatsapp.net JID: ${rawJid}`);
+
+        let phone: string | null = null;
+
+        if (rawJid.endsWith("@s.whatsapp.net")) {
+          // Standard JID — phone number is the prefix
+          phone = rawJid.split("@")[0].split(":")[0];
+        } else if (rawJid.endsWith("@lid")) {
+          // Multi-device LID — look up real phone from the contact map
+          phone = lidToPhone[rawJid] ?? null;
+          if (!phone) {
+            console.log(`[WA] @lid not yet in contact map, skipping: ${rawJid} (map size=${Object.keys(lidToPhone).length})`);
+            continue;
+          }
+        } else {
+          // Group, broadcast, status — ignore
           continue;
         }
-        // Strip optional :deviceSuffix (multi-device JIDs like "91xxx:11@s.whatsapp.net")
-        const phone = rawJid.split("@")[0].split(":")[0];
+
         if (!phone) continue;
+        console.log(`[WA] inbound from phone=${phone} jid=${rawJid}`);
 
         const displayName: string = msg.pushName ?? "";
         const msgContent =
