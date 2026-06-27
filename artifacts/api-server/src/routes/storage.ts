@@ -230,6 +230,8 @@ router.get("/public/img/*path", async (req: Request, res: Response) => {
 
     res.status(response.status);
     response.headers.forEach((value, key) => res.setHeader(key, value));
+    // UUID-based filenames are immutable — cache aggressively in browsers and CDNs
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
 
     if (response.body) {
       const { Readable } = await import("stream");
