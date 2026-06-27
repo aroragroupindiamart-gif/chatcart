@@ -241,19 +241,34 @@ export async function processScheduledMessages(): Promise<void> {
           console.log(`[WA-CAMPAIGN] Lead ${lead.id} completed — all sequence steps sent`);
         }
       } else {
-        // Send failed — track consecutive failures; retry at +10 min, mark send_failed after 3
-        const newFailCount = (lead.sendFailureCount ?? 0) + 1;
-        if (newFailCount >= 3) {
+        // Send failed — distinguish transient connection errors from real message failures.
+        // "WhatsApp disconnected" means the socket dropped mid-send; retry quickly (60s)
+        // without counting it as a failure. Real failures (spam block, invalid number, etc.)
+        // count toward the 3-strike limit and use a 10-min backoff.
+        const isConnectionError =
+          sendResult?.error?.includes("disconnected") ||
+          sendResult?.error?.includes("connection") ||
+          sendResult?.error?.includes("timed out");
+        if (isConnectionError) {
           await db
             .update(waCampaignLeadsTable)
-            .set({ status: "send_failed", sendFailureCount: newFailCount, nextSendAt: new Date(Date.now() + 24 * 60 * 60 * 1000) })
+            .set({ nextSendAt: new Date(Date.now() + 60_000) })
             .where(eq(waCampaignLeadsTable.id, lead.id));
-          console.warn(`[WA-CAMPAIGN] Lead ${lead.id} marked send_failed after ${newFailCount} consecutive failures`);
+          console.log(`[WA-CAMPAIGN] Lead ${lead.id} connection error — retry in 60s`);
         } else {
-          await db
-            .update(waCampaignLeadsTable)
-            .set({ sendFailureCount: newFailCount, nextSendAt: new Date(Date.now() + 10 * 60 * 1000) })
-            .where(eq(waCampaignLeadsTable.id, lead.id));
+          const newFailCount = (lead.sendFailureCount ?? 0) + 1;
+          if (newFailCount >= 3) {
+            await db
+              .update(waCampaignLeadsTable)
+              .set({ status: "send_failed", sendFailureCount: newFailCount, nextSendAt: new Date(Date.now() + 24 * 60 * 60 * 1000) })
+              .where(eq(waCampaignLeadsTable.id, lead.id));
+            console.warn(`[WA-CAMPAIGN] Lead ${lead.id} marked send_failed after ${newFailCount} consecutive failures`);
+          } else {
+            await db
+              .update(waCampaignLeadsTable)
+              .set({ sendFailureCount: newFailCount, nextSendAt: new Date(Date.now() + 10 * 60 * 1000) })
+              .where(eq(waCampaignLeadsTable.id, lead.id));
+          }
         }
       }
     } catch (e: any) {

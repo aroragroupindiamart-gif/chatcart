@@ -31,6 +31,13 @@ let sock: any = null;
 let reconnectTimer: NodeJS.Timeout | null = null;
 let isLoggedOut = false;
 
+// Hook called immediately after WA connects — used by the campaign scheduler
+// to flush any pending messages without waiting for the next 60s tick.
+let onConnectHook: (() => void) | null = null;
+export function setOnConnectHook(fn: () => void): void {
+  onConnectHook = fn;
+}
+
 // Multi-device Baileys: contacts arrive with @lid JIDs, not @s.whatsapp.net.
 // We build a lid→phone map from contacts.upsert/contacts.update so we can
 // resolve the actual phone number when a message arrives with an @lid JID.
@@ -207,6 +214,8 @@ export async function connectWA(): Promise<void> {
         broadcast({ type: "state", ...state });
         await updateSessionInDB({ status: "connected", phone, connectedAt: new Date() });
         console.log(`[WA] Connected as ${phone}`);
+        // Flush any due campaign messages immediately rather than waiting for the next tick
+        if (onConnectHook) setTimeout(onConnectHook, 2000);
       }
 
       if (connection === "close") {

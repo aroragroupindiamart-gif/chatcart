@@ -1,7 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { initWA } from "./lib/whatsapp.js";
-import { startCampaignScheduler } from "./lib/waCampaign.js";
+import { initWA, setOnConnectHook } from "./lib/whatsapp.js";
+import { startCampaignScheduler, processScheduledMessages } from "./lib/waCampaign.js";
 
 const rawPort = process.env["PORT"];
 
@@ -25,6 +25,10 @@ app.listen(port, (err) => {
 
   logger.info({ port }, "Server listening");
 
+  // Fire the campaign scheduler immediately each time WA reconnects
+  setOnConnectHook(() => {
+    processScheduledMessages().catch((e) => logger.error({ err: e }, "[WA-CAMPAIGN] Post-connect flush error"));
+  });
   initWA().catch((e) => logger.error({ err: e }, "[WA] Init error"));
   startCampaignScheduler();
 });

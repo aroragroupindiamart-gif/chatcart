@@ -567,8 +567,8 @@ router.delete("/admin/wa/inbound-leads/bulk", requireAdminAuth, async (req, res)
     // Nullify FK references in campaign leads before deleting
     await db.update(waCampaignLeadsTable)
       .set({ inboundLeadId: null })
-      .where(sql`inbound_lead_id = ANY(${parsed.data.ids})`);
-    await db.delete(waInboundLeadsTable).where(sql`id = ANY(${parsed.data.ids})`);
+      .where(inArray(waCampaignLeadsTable.inboundLeadId, parsed.data.ids));
+    await db.delete(waInboundLeadsTable).where(inArray(waInboundLeadsTable.id, parsed.data.ids));
     res.json({ deleted: parsed.data.ids.length });
   } catch (e) {
     res.status(500).json({ error: "Bulk delete failed" });
