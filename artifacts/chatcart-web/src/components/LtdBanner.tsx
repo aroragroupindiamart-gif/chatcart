@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { useGetMe, useListProducts } from "@workspace/api-client-react";
-import { X, Infinity } from "lucide-react";
+import { useGetMe, useListProducts, getListProductsQueryKey } from "@workspace/api-client-react";
+import { X, Infinity as InfinityIcon } from "lucide-react";
 
 const LTD_CAP = 100;
 const SUPPORT_WHATSAPP = "919319724678";
@@ -14,7 +14,7 @@ interface LtdStatus {
 
 export function LtdBanner() {
   const { data: seller } = useGetMe();
-  const { data: products } = useListProducts(undefined, { query: { staleTime: Infinity } });
+  const { data: products } = useListProducts(undefined, { query: { queryKey: getListProductsQueryKey(), staleTime: Infinity } });
   const [ltdStatus, setLtdStatus] = useState<LtdStatus | null>(null);
   const [dismissed, setDismissed] = useState(
     () => localStorage.getItem(DISMISSED_KEY) === "1"
@@ -44,7 +44,7 @@ export function LtdBanner() {
   return (
     <div className="mb-6 bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3">
       <div className="flex-shrink-0 w-9 h-9 bg-amber-100 rounded-full flex items-center justify-center">
-        <Infinity className="w-5 h-5 text-amber-600" />
+        <InfinityIcon className="w-5 h-5 text-amber-600" />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-slate-900">

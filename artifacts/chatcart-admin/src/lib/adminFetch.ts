@@ -1,8 +1,8 @@
 export async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const token = localStorage.getItem('chatcart_admin_token');
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(init?.headers || {}),
+    ...(init?.headers as Record<string, string> || {}),
   };
   
   if (token) {
