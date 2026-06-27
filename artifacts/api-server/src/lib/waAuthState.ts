@@ -29,9 +29,11 @@ function objectPrefix(basePath: string): string {
   return basePath ? `${basePath}/${WA_SESSION_PREFIX}/` : `${WA_SESSION_PREFIX}/`;
 }
 
-// Upload every file in localDir to object storage (creds.json + all key files).
-// This preserves lid-mapping, app-state-sync-key, and sender-key files so that
-// Baileys can fully restore its state (including LID→phone mappings) on restart.
+// Upload creds.json + lid-mapping-*.json files to object storage.
+// lid-mapping files are small and essential for resolving @lid JIDs to phone
+// numbers across container restarts. All other signal keys (pre-key, session,
+// sender-key) are ephemeral and regenerated automatically by Baileys.
+// Files are uploaded sequentially to avoid network saturation.
 export async function uploadCredsToStorage(localDir: string): Promise<void> {
   try {
     const { readdir } = await import("fs/promises");
@@ -39,22 +41,28 @@ export async function uploadCredsToStorage(localDir: string): Promise<void> {
     const bucket = objectStorageClient.bucket(bucketName);
     const prefix = objectPrefix(basePath);
 
-    const files = await readdir(localDir);
-    const jsonFiles = files.filter((f) => f.endsWith(".json"));
+    const allFiles = await readdir(localDir);
+    // Upload only creds.json and lid-mapping files — keep signal/session keys local-only
+    const filesToUpload = allFiles.filter(
+      (f) => f === CREDS_FILENAME || f.startsWith("lid-mapping-"),
+    );
 
-    await Promise.all(
-      jsonFiles.map(async (filename) => {
-        const localPath = path.join(localDir, filename);
-        const objectName = `${prefix}${filename}`;
+    // Sequential uploads to avoid flooding the network
+    for (const filename of filesToUpload) {
+      const localPath = path.join(localDir, filename);
+      const objectName = `${prefix}${filename}`;
+      try {
         const content = await readFile(localPath);
         await bucket.file(objectName).save(content, {
           contentType: "application/json",
           resumable: false,
         });
-      }),
-    );
+      } catch (e) {
+        console.error(`[WA-AUTH] Failed to upload ${filename}:`, e);
+      }
+    }
 
-    console.log(`[WA-AUTH] Backed up ${jsonFiles.length} session file(s) to object storage`);
+    console.log(`[WA-AUTH] Backed up ${filesToUpload.length} session file(s) to object storage`);
   } catch (e) {
     console.error("[WA-AUTH] Failed to upload session files to storage:", e);
   }
