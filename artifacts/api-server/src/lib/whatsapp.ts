@@ -17,6 +17,7 @@ interface WAState {
   qr: string | null;
   phone: string | null;
   connectedAt: Date | null;
+  disconnectedAt: Date | null;
 }
 
 const state: WAState = {
@@ -24,6 +25,7 @@ const state: WAState = {
   qr: null,
   phone: null,
   connectedAt: null,
+  disconnectedAt: null,
 };
 
 const sseClients = new Set<ServerResponse>();
@@ -211,6 +213,7 @@ export async function connectWA(): Promise<void> {
         state.qr = null;
         state.phone = phone;
         state.connectedAt = new Date();
+        state.disconnectedAt = null;
         broadcast({ type: "state", ...state });
         await updateSessionInDB({ status: "connected", phone, connectedAt: new Date() });
         console.log(`[WA] Connected as ${phone}`);
@@ -225,6 +228,7 @@ export async function connectWA(): Promise<void> {
         state.status = "disconnected";
         state.phone = null;
         state.qr = null;
+        state.disconnectedAt = new Date();
         sock = null;
         broadcast({ type: "state", ...state });
         await updateSessionInDB({ status: "disconnected", phone: null });
@@ -312,6 +316,7 @@ export async function connectWA(): Promise<void> {
   } catch (e) {
     console.error("[WA] Connect error:", e);
     state.status = "disconnected";
+    state.disconnectedAt = new Date();
     broadcast({ type: "state", ...state });
   }
 }
@@ -331,6 +336,7 @@ export async function disconnectWA(): Promise<void> {
   state.status = "disconnected";
   state.phone = null;
   state.qr = null;
+  state.disconnectedAt = new Date();
   broadcast({ type: "state", ...state });
   await updateSessionInDB({ status: "disconnected", phone: null, connectedAt: null });
 

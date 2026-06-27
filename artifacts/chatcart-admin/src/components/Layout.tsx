@@ -1,9 +1,31 @@
 import React from 'react';
 import { Link, useLocation } from 'wouter';
 import { useAdminAuth } from '@/lib/adminAuth';
-import { LayoutDashboard, Users, ShoppingCart, Activity, Mail, LogOut, Menu, MessageCircle } from 'lucide-react';
+import { LayoutDashboard, Users, ShoppingCart, Activity, Mail, LogOut, Menu, MessageCircle, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { useQuery } from '@tanstack/react-query';
+
+const WA_DISCONNECT_WARN_MS = 5 * 60 * 1000;
+
+function useWAHealthBanner() {
+  const { data } = useQuery<{ status: string; wa: { status: string; disconnectedAt: string | null } }>({
+    queryKey: ['healthz-wa'],
+    queryFn: async () => {
+      const res = await fetch('/api/healthz');
+      return res.json();
+    },
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
+  if (!data?.wa) return false;
+  const { status, disconnectedAt } = data.wa;
+  if (status === 'connected') return false;
+  if (!disconnectedAt) return false;
+  const elapsed = Date.now() - new Date(disconnectedAt).getTime();
+  return elapsed > WA_DISCONNECT_WARN_MS;
+}
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -17,6 +39,7 @@ const NAV_ITEMS = [
 export function Layout({ children }: { children: React.ReactNode }) {
   const { admin, logout } = useAdminAuth();
   const [location] = useLocation();
+  const showWABanner = useWAHealthBanner();
 
   const NavLinks = () => (
     <>
@@ -86,9 +109,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 md:ml-0 mt-16 md:mt-0 p-6 md:p-8 max-w-[1600px] mx-auto w-full">
-        {children}
-      </main>
+      <div className="flex-1 md:ml-0 flex flex-col min-h-0 mt-16 md:mt-0">
+        {showWABanner && (
+          <div className="bg-amber-50 border-b border-amber-300 px-4 py-2.5 flex items-center gap-3 text-sm text-amber-900">
+            <WifiOff className="w-4 h-4 shrink-0 text-amber-600" />
+            <span className="font-medium">WhatsApp has been disconnected for more than 5 minutes.</span>
+            <Link href="/wa-marketing">
+              <span className="underline cursor-pointer hover:text-amber-700">Go to WA Marketing →</span>
+            </Link>
+          </div>
+        )}
+        <main className="flex-1 p-6 md:p-8 max-w-[1600px] mx-auto w-full">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
