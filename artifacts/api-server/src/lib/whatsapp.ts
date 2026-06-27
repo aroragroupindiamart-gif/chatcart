@@ -195,14 +195,24 @@ export async function connectWA(): Promise<void> {
       }
     });
 
-    sock.ev.on("messages.upsert", async ({ messages }: any) => {
+    sock.ev.on("messages.upsert", async ({ messages, type }: any) => {
+      console.log(`[WA] messages.upsert type=${type} count=${messages.length}`);
+      // "notify" = real-time new messages; "append" = history sync on reconnect — skip those
+      if (type !== "notify") {
+        console.log(`[WA] Skipping non-notify batch (type=${type})`);
+        return;
+      }
       for (const msg of messages) {
-        if (msg.key.fromMe) continue;
         const rawJid = msg.key.remoteJid ?? "";
+        console.log(`[WA] msg jid=${rawJid} fromMe=${msg.key.fromMe}`);
+        if (msg.key.fromMe) continue;
         // Only process real user JIDs — @s.whatsapp.net.
         // Baileys also emits @lid (linked-device IDs, not phone numbers),
         // @g.us (groups), and @broadcast — all must be ignored.
-        if (!rawJid.endsWith("@s.whatsapp.net")) continue;
+        if (!rawJid.endsWith("@s.whatsapp.net")) {
+          console.log(`[WA] Skipping non-whatsapp.net JID: ${rawJid}`);
+          continue;
+        }
         // Strip optional :deviceSuffix (multi-device JIDs like "91xxx:11@s.whatsapp.net")
         const phone = rawJid.split("@")[0].split(":")[0];
         if (!phone) continue;
