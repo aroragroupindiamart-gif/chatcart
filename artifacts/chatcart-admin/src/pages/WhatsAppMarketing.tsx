@@ -73,7 +73,7 @@ interface CampaignLead {
   nextSendAt: string | null;
   lastSentAt: string | null;
   repliedAt: string | null;
-  status: 'active' | 'paused_no_reply' | 'paused_manual' | 'completed' | 'removed' | 'send_failed';
+  status: 'active' | 'paused_no_reply' | 'paused_manual' | 'completed' | 'removed' | 'send_failed'; // paused_no_reply is legacy — no longer set by scheduler
   sendFailureCount: number;
   createdAt: string;
 }
@@ -804,6 +804,7 @@ function LeadsTab() {
   const qc = useQueryClient();
   const [enrollOpen, setEnrollOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const { data: leads = [], isLoading } = useQuery<CampaignLead[]>({
     queryKey: ['wa-leads'],
@@ -814,11 +815,39 @@ function LeadsTab() {
   const sendFailedCount = leads.filter(l => l.status === 'send_failed').length;
   const filteredLeads = statusFilter === 'all' ? leads : leads.filter(l => l.status === statusFilter);
 
+  const allFilteredIds = filteredLeads.map(l => l.id);
+  const allSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedIds.has(id));
+  const someSelected = allFilteredIds.some(id => selectedIds.has(id)) && !allSelected;
+
+  const toggleAll = () => {
+    if (allSelected) setSelectedIds(new Set());
+    else setSelectedIds(new Set(allFilteredIds));
+  };
+
+  const toggleOne = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
   const updateMut = useMutation({
     mutationFn: ({ id, status }: { id: number; status: string }) =>
       adminFetch(`/api/admin/wa/leads/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['wa-leads'] }),
     onError: () => toast({ title: 'Error', description: 'Could not update lead', variant: 'destructive' }),
+  });
+
+  const bulkMut = useMutation({
+    mutationFn: ({ ids, action }: { ids: number[]; action: 'pause' | 'resume' | 'retry' }) =>
+      adminFetch('/api/admin/wa/leads/bulk', { method: 'POST', body: JSON.stringify({ ids, action }) }),
+    onSuccess: (_data, vars) => {
+      toast({ title: 'Done', description: `${vars.ids.length} lead${vars.ids.length !== 1 ? 's' : ''} updated` });
+      setSelectedIds(new Set());
+      qc.invalidateQueries({ queryKey: ['wa-leads'] });
+    },
+    onError: () => toast({ title: 'Error', description: 'Bulk action failed', variant: 'destructive' }),
   });
 
   const getLeadLabel = (lead: CampaignLead) => lead.storeName ?? lead.inboundDisplayName ?? lead.inboundPhone ?? lead.phone ?? '?';
@@ -829,7 +858,7 @@ function LeadsTab() {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold">Campaign Leads</h3>
-          <p className="text-sm text-muted-foreground">All contacts enrolled in drip sequences. Reply-gating is enforced automatically.</p>
+          <p className="text-sm text-muted-foreground">All contacts enrolled in drip sequences. All steps send automatically regardless of reply.</p>
         </div>
         <Dialog open={enrollOpen} onOpenChange={setEnrollOpen}>
           <DialogTrigger asChild>
@@ -864,11 +893,10 @@ function LeadsTab() {
       {leads.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="text-sm border rounded-md px-3 py-1.5 bg-background">
+            <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setSelectedIds(new Set()); }} className="text-sm border rounded-md px-3 py-1.5 bg-background">
               <option value="all">All statuses</option>
               <option value="active">Active</option>
-              <option value="paused_no_reply">Paused (no reply)</option>
-              <option value="paused_manual">Paused (manual)</option>
+              <option value="paused_manual">Paused</option>
               <option value="send_failed">Send Failed</option>
               <option value="completed">Completed</option>
               <option value="removed">Removed</option>
@@ -880,10 +908,34 @@ function LeadsTab() {
             )}
             <span className="text-xs text-muted-foreground ml-auto">{filteredLeads.length} of {leads.length}</span>
           </div>
+        {selectedIds.size > 0 && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+            <span className="text-sm text-blue-800 font-medium">{selectedIds.size} selected</span>
+            <div className="flex gap-1.5 ml-auto">
+              <Button size="sm" variant="outline" className="h-7 text-xs" disabled={bulkMut.isPending}
+                onClick={() => bulkMut.mutate({ ids: [...selectedIds], action: 'pause' })}>
+                <Pause className="w-3 h-3 mr-1" />Pause
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs text-green-700 border-green-300 hover:bg-green-50" disabled={bulkMut.isPending}
+                onClick={() => bulkMut.mutate({ ids: [...selectedIds], action: 'resume' })}>
+                <Play className="w-3 h-3 mr-1" />Resume
+              </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs text-blue-700 border-blue-300 hover:bg-blue-50" disabled={bulkMut.isPending}
+                onClick={() => bulkMut.mutate({ ids: [...selectedIds], action: 'retry' })}>
+                <RefreshCw className="w-3 h-3 mr-1" />Retry
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSelectedIds(new Set())}>Clear</Button>
+            </div>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-left text-muted-foreground">
+                <th className="pb-2 pr-2 w-8">
+                  <input type="checkbox" checked={allSelected} ref={el => { if (el) el.indeterminate = someSelected; }}
+                    onChange={toggleAll} className="rounded border-gray-300 cursor-pointer" />
+                </th>
                 <th className="pb-2 pr-4 font-medium">Contact</th>
                 <th className="pb-2 pr-4 font-medium">Sequence</th>
                 <th className="pb-2 pr-4 font-medium">Step</th>
@@ -895,7 +947,11 @@ function LeadsTab() {
             </thead>
             <tbody className="divide-y">
               {filteredLeads.map((lead) => (
-                <tr key={lead.id} className="hover:bg-muted/30 transition-colors">
+                <tr key={lead.id} className={`hover:bg-muted/30 transition-colors ${selectedIds.has(lead.id) ? 'bg-blue-50/50' : ''}`}>
+                  <td className="py-3 pr-2">
+                    <input type="checkbox" checked={selectedIds.has(lead.id)} onChange={() => toggleOne(lead.id)}
+                      className="rounded border-gray-300 cursor-pointer" />
+                  </td>
                   <td className="py-3 pr-4">
                     <div className="font-medium flex items-center gap-1.5">
                       {getLeadLabel(lead)}
@@ -926,7 +982,7 @@ function LeadsTab() {
                           <Pause className="w-3.5 h-3.5" />
                         </Button>
                       )}
-                      {(lead.status === 'paused_manual' || lead.status === 'paused_no_reply') && (
+                      {(lead.status === 'paused_manual' || lead.status === 'paused_no_reply' || lead.status === 'send_failed') && (
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600" title="Resume"
                           onClick={() => updateMut.mutate({ id: lead.id, status: 'active' })}>
                           <Play className="w-3.5 h-3.5" />

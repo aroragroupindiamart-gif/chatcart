@@ -354,6 +354,34 @@ router.post("/admin/wa/leads", requireAdminAuth, async (req, res) => {
   }
 });
 
+router.post("/admin/wa/leads/bulk", requireAdminAuth, async (req, res) => {
+  const schema = z.object({
+    ids: z.array(z.number()).min(1),
+    action: z.enum(["pause", "resume", "retry"]),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "Invalid data" }); return; }
+
+  const { ids, action } = parsed.data;
+  try {
+    let updateData: Record<string, unknown>;
+    if (action === "pause") {
+      updateData = { status: "paused_manual" };
+    } else if (action === "resume") {
+      updateData = { status: "active", sendFailureCount: 0, nextSendAt: new Date() };
+    } else {
+      updateData = { status: "active", sendFailureCount: 0, nextSendAt: new Date() };
+    }
+    await db
+      .update(waCampaignLeadsTable)
+      .set(updateData as never)
+      .where(sql`id = ANY(${ids})`);
+    res.json({ updated: ids.length });
+  } catch (e) {
+    res.status(500).json({ error: "Bulk update failed" });
+  }
+});
+
 router.patch("/admin/wa/leads/:id", requireAdminAuth, async (req, res) => {
   const id = Number(req.params.id);
   const schema = z.object({ status: z.enum(["active", "paused_manual", "removed"]).optional() });

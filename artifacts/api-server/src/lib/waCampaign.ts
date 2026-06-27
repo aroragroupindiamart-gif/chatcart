@@ -141,16 +141,6 @@ export async function processScheduledMessages(): Promise<void> {
       const cleanPhone = rawPhone.replace(/^\+/, "");
       const displayName = sellerStoreName ?? inboundDisplayName ?? "there";
 
-      // Reply-gate: if at least one step has been sent, require a reply before continuing
-      if (lead.currentHourOffset >= 0 && !lead.repliedAt) {
-        await db
-          .update(waCampaignLeadsTable)
-          .set({ status: "paused_no_reply" })
-          .where(eq(waCampaignLeadsTable.id, lead.id));
-        console.log(`[WA-CAMPAIGN] Lead ${lead.id} paused (no reply after ${lead.currentHourOffset}h step)`);
-        continue;
-      }
-
       // Find the next step — supports non-consecutive hourOffsets
       const [step] = await db
         .select()
