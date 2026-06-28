@@ -143,9 +143,9 @@ export default function Contact() {
                 We're built on WhatsApp, so naturally we're fast to reply there.
               </p>
               <Button asChild size="lg" className="w-full bg-[#25D366] text-white hover:bg-[#128C7E] border-none">
-                <a href="https://wa.me/919876543210" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
+                <a href="https://wa.me/919319724678" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
                   <Phone className="w-5 h-5" />
-                  Chat with us (+91 98765 43210)
+                  Chat with us (+91 93197 24678)
                 </a>
               </Button>
             </div>
