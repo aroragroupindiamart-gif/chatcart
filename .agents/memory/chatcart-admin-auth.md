@@ -20,8 +20,7 @@ description: How admin authentication works — separate from seller OTP auth, i
 Admin login: 5 failed attempts → 15-minute lockout. Tracked via `login_attempts` + `login_locked_until` columns on `admin_users` table.
 
 ## Seeded dev admin
-- Email: `admin@chatcart.in`
-- Password: set at seed time (see `scripts/seed-admin.ts` — pass via `ADMIN_PASSWORD` env var)
+- See `scripts/seed-admin.ts` — email and password passed via env vars at seed time
 - Role: `super_admin`
 
 **How to apply:** Any future admin route must use `requireAdminAuth`. Never use `requireAuth` (seller middleware) on admin routes or vice versa.

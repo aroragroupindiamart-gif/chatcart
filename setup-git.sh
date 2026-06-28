@@ -9,27 +9,34 @@ echo ""
 echo "=== Chatcart GitHub Setup ==="
 echo ""
 echo "You need your GitHub Personal Access Token to continue."
-echo "(This is the token you created on github.com — starts with ghp_)"
+echo "(Starts with ghp_ — create one at github.com → Settings → Developer settings)"
 echo ""
 read -rp "Paste your GitHub token: " GITHUB_TOKEN
 echo ""
 
 GITHUB_REPO="aroragroupindiamart-gif/chatcart"
 
-echo "[ 1/3 ] Initialising git..."
+echo "[ 1/4 ] Initialising git..."
 git init -b main 2>/dev/null || git init
 git config user.email "deploy@chatcart.in"
 git config user.name "Chatcart Deploy"
 echo "        Done."
 echo ""
 
-echo "[ 2/3 ] Connecting to GitHub..."
-git remote remove origin 2>/dev/null || true
-git remote add origin "https://${GITHUB_TOKEN}@github.com/${GITHUB_REPO}.git"
+echo "[ 2/4 ] Storing credentials securely..."
+git config credential.helper store
+printf "https://%s:x-oauth-basic@github.com\n" "$GITHUB_TOKEN" > ~/.git-credentials
+chmod 600 ~/.git-credentials
 echo "        Done."
 echo ""
 
-echo "[ 3/3 ] Syncing with GitHub (your .env and docker-data are safe)..."
+echo "[ 3/4 ] Connecting to GitHub..."
+git remote remove origin 2>/dev/null || true
+git remote add origin "https://github.com/${GITHUB_REPO}.git"
+echo "        Done."
+echo ""
+
+echo "[ 4/4 ] Syncing with GitHub (your .env and docker-data are safe)..."
 git fetch origin main
 # Reset tracking without touching working files (.env, docker-data, certs)
 git reset origin/main
@@ -37,5 +44,5 @@ echo "        Done."
 echo ""
 
 echo "=== Setup complete! ==="
-echo "From now on, run ./deploy.sh whenever updates are ready."
+echo "Run ./deploy.sh whenever updates are ready."
 echo ""

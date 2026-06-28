@@ -4,7 +4,7 @@ description: Key facts about the Chatcart project — DB seed data, store URLs, 
 ---
 
 ## Seeded demo data
-- Demo seller subdomain: `sharma-general`, store name: "Sharma General Store", phone: +919876543210
+- Demo seller subdomain: `sharma-general`, store name: "Sharma General Store"
 - Plan: `starter` (updated from `trial`)
 - Products: Bluetooth Earbuds, USB-C Cable, Cotton Kurta, Denim Jeans (OOS), Chakli, Dry Fruit Box, Phone Stand (hidden)
 - Categories: Electronics, Clothing, Food & Snacks
