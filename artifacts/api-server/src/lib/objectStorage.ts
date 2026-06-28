@@ -210,6 +210,27 @@ export class ObjectStorageService {
     return new Response(webStream, { headers });
   }
 
+  // Upload a file buffer directly from the server to DO Spaces.
+  // Returns the internal /objects/uploads/<uuid> path.
+  async uploadFileBuffer(buffer: Buffer, contentType: string): Promise<string> {
+    const client = getS3Client();
+    const bucket = getS3BucketName();
+    const objectId = randomUUID();
+    const key = `uploads/${objectId}`;
+
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+        ContentLength: buffer.length,
+      })
+    );
+
+    return `/objects/${key}`;
+  }
+
   // Generates a presigned PUT URL and returns it. The key is uploads/<uuid>.
   async getObjectEntityUploadURL(): Promise<string> {
     const client = getS3Client();

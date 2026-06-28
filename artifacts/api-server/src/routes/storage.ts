@@ -1,5 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { Readable } from "stream";
+import multer from "multer";
 import {
   RequestUploadUrlBody,
   RequestUploadUrlResponse,
@@ -12,8 +13,100 @@ import { db } from "@workspace/db";
 import { productImagesTable, productsTable } from "@workspace/db/schema";
 import { eq, and, count } from "drizzle-orm";
 
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB hard limit
+});
+
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
+
+/**
+ * POST /storage/uploads/file
+ *
+ * Proxy multipart product-image upload through the API server → DO Spaces.
+ * Accepts a multipart/form-data body with fields:
+ *   file        — the image file
+ *   productId   — integer
+ *   displayOrder — integer (0-indexed)
+ *
+ * Eliminates the need for browser ↔ DO Spaces CORS config.
+ */
+router.post(
+  "/storage/uploads/file",
+  requireAuth,
+  upload.single("file"),
+  async (req: Request, res: Response) => {
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: "No file provided" });
+      return;
+    }
+
+    const productId = parseInt(req.body?.productId, 10);
+    const displayOrder = parseInt(req.body?.displayOrder ?? "0", 10);
+
+    if (!productId || isNaN(productId)) {
+      res.status(400).json({ error: "Missing or invalid productId" });
+      return;
+    }
+
+    const sellerId = req.seller!.sellerId;
+
+    try {
+      const [product] = await db
+        .select({ id: productsTable.id })
+        .from(productsTable)
+        .where(and(eq(productsTable.id, productId), eq(productsTable.sellerId, sellerId)))
+        .limit(1);
+
+      if (!product) {
+        res.status(404).json({ error: "Product not found or not owned by this seller" });
+        return;
+      }
+
+      const objectPath = await objectStorageService.uploadFileBuffer(file.buffer, file.mimetype);
+
+      const [newImage] = await db
+        .insert(productImagesTable)
+        .values({ productId, url: objectPath, displayOrder })
+        .returning({ id: productImagesTable.id });
+
+      res.json({ imageId: newImage.id, objectPath });
+    } catch (error) {
+      req.log.error({ err: error }, "Error uploading product image");
+      res.status(500).json({ error: "Upload failed" });
+    }
+  }
+);
+
+/**
+ * POST /storage/uploads/logo
+ *
+ * Proxy multipart logo/banner upload through the API server → DO Spaces.
+ * Accepts a multipart/form-data body with a single `file` field.
+ * Returns { objectPath } — caller saves this to the seller record.
+ */
+router.post(
+  "/storage/uploads/logo",
+  requireAuth,
+  upload.single("file"),
+  async (req: Request, res: Response) => {
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: "No file provided" });
+      return;
+    }
+
+    try {
+      const objectPath = await objectStorageService.uploadFileBuffer(file.buffer, file.mimetype);
+      res.json({ objectPath });
+    } catch (error) {
+      req.log.error({ err: error }, "Error uploading logo");
+      res.status(500).json({ error: "Upload failed" });
+    }
+  }
+);
 
 /**
  * POST /storage/uploads/request-url

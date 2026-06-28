@@ -9,12 +9,33 @@ import {
   ProductStatus,
   useDeleteProduct,
   useGetMe,
-  useRequestUploadUrl,
   useDeleteProductImage,
   useReorderProductImages,
-  RequestUploadUrlBodyContentType,
   listProducts,
 } from "@workspace/api-client-react";
+
+async function uploadImageToApi(
+  file: File,
+  productId: number,
+  displayOrder: number
+): Promise<{ imageId: number; objectPath: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("productId", String(productId));
+  formData.append("displayOrder", String(displayOrder));
+
+  const res = await fetch("/api/storage/uploads/file", {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Upload failed (${res.status})`);
+  }
+  return res.json();
+}
 import { useLocation, useParams } from "wouter";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
@@ -245,7 +266,6 @@ function ProductDetailContent() {
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
-  const requestUploadUrl = useRequestUploadUrl();
   const deleteProductImage = useDeleteProductImage();
   const reorderProductImages = useReorderProductImages();
 
@@ -369,25 +389,7 @@ function ProductDetailContent() {
     displayOrder: number
   ): Promise<UploadResult> => {
     try {
-      const { uploadURL } = await requestUploadUrl.mutateAsync({
-        data: {
-          productId: targetProductId,
-          name: file.name,
-          size: file.size,
-          contentType: file.type as RequestUploadUrlBodyContentType,
-          displayOrder,
-        },
-      });
-
-      const res = await fetch(uploadURL, {
-        method: "PUT",
-        body: file,
-        headers: { "Content-Type": file.type },
-      });
-
-      if (!res.ok) {
-        throw new Error(`Upload failed (${res.status} ${res.statusText})`);
-      }
+      await uploadImageToApi(file, targetProductId, displayOrder);
 
       setUploadingFiles((prev) =>
         prev.map((e) => (e.id === entryId ? { ...e, status: "done" } : e))
@@ -420,25 +422,7 @@ function ProductDetailContent() {
       );
 
       try {
-        const { uploadURL } = await requestUploadUrl.mutateAsync({
-          data: {
-            productId: targetProductId,
-            name: entry.file.name,
-            size: entry.file.size,
-            contentType: entry.file.type as RequestUploadUrlBodyContentType,
-            displayOrder: existingImageCount + i,
-          },
-        });
-
-        const res = await fetch(uploadURL, {
-          method: "PUT",
-          body: entry.file,
-          headers: { "Content-Type": entry.file.type },
-        });
-
-        if (!res.ok) {
-          throw new Error(`Upload failed (${res.status} ${res.statusText})`);
-        }
+        await uploadImageToApi(entry.file, targetProductId, existingImageCount + i);
 
         setPendingFiles((prev) =>
           prev.map((f) => (f.id === entry.id ? { ...f, status: "done" } : f))
@@ -774,7 +758,7 @@ function ProductDetailContent() {
               variant="outline"
               size="sm"
               onClick={() => fileInputRef.current?.click()}
-              disabled={requestUploadUrl.isPending || isUploadingAfterCreate}
+              disabled={isUploadingAfterCreate}
             >
               <Upload className="w-4 h-4 mr-2" />
               Add Images

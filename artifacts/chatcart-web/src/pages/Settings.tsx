@@ -7,10 +7,25 @@ import {
   useCreateCategory,
   useUpdateCategory,
   useDeleteCategory,
-  useRequestLogoUploadUrl,
-  RequestLogoUploadUrlBodyContentType,
   getListCategoriesQueryKey,
 } from "@workspace/api-client-react";
+
+async function uploadLogoToApi(file: File): Promise<{ objectPath: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch("/api/storage/uploads/logo", {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Upload failed (${res.status})`);
+  }
+  return res.json();
+}
 import { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -68,7 +83,6 @@ function SettingsContent() {
   const queryClient = useQueryClient();
   const { data: seller } = useGetMe();
   const updateSeller = useUpdateSeller();
-  const requestLogoUploadUrl = useRequestLogoUploadUrl();
 
   const planName = normalizePlan((seller as any)?.subscriptionPlan);
   const isPro = planName === "Pro" || planName === "Lifetime";
@@ -163,14 +177,7 @@ function SettingsContent() {
 
     setUploadingLogo(true);
     try {
-      const { uploadURL, objectPath } = await requestLogoUploadUrl.mutateAsync({
-        data: { name: file.name, size: file.size, contentType: file.type as RequestLogoUploadUrlBodyContentType },
-      });
-      await fetch(uploadURL, {
-        method: "PUT",
-        body: file,
-        headers: { "Content-Type": file.type },
-      });
+      const { objectPath } = await uploadLogoToApi(file);
       setBannerImageUrl(objectPath);
       toast({ title: "Logo uploaded — click Save to apply" });
     } catch (err: any) {
