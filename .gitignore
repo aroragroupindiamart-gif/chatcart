@@ -3,6 +3,20 @@
 # compiled output
 dist
 tmp
+
+# Exceptions: include built frontend assets so Droplet deploys need no build step
+!artifacts/chatcart-admin/dist/
+!artifacts/chatcart-admin/dist/public/
+!artifacts/chatcart-admin/dist/public/**
+!artifacts/chatcart-marketing/dist/
+!artifacts/chatcart-marketing/dist/public/
+!artifacts/chatcart-marketing/dist/public/**
+!artifacts/chatcart-store/dist/
+!artifacts/chatcart-store/dist/public/
+!artifacts/chatcart-store/dist/public/**
+!artifacts/chatcart-web/dist/
+!artifacts/chatcart-web/dist/public/
+!artifacts/chatcart-web/dist/public/**
 out-tsc
 *.tsbuildinfo
 .expo
