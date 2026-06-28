@@ -1,0 +1,33 @@
+root@chatcart:/opt/chatcart# docker compose exec postgres psql -U chatcart -d chatcart -c "SELECT subdomain, business_name FROM sellers;"
+ERROR:  column "business_name" does not exist
+LINE 1: SELECT subdomain, business_name FROM sellers;
+                          ^
+root@chatcart:/opt/chatcart# docker compose exec postgres psql -U chatcart -d chatcart -c "\d sellers"
+                                               Table "public.sellers"
+         Column          |            Type             | Collation | Nullable |               Default               
+-------------------------+-----------------------------+-----------+----------+-------------------------------------
+ id                      | integer                     |           | not null | nextval('sellers_id_seq'::regclass)
+ phone                   | text                        |           | not null | 
+ store_name              | text                        |           | not null | 'My Store'::text
+ subdomain               | text                        |           | not null | 
+ whatsapp_number         | text                        |           | not null | 
+ created_at              | timestamp without time zone |           | not null | now()
+ updated_at              | timestamp without time zone |           | not null | now()
+ banner_image_url        | text                        |           |          | 
+ tagline                 | text                        |           |          | 
+ token_version           | integer                     |           | not null | 1
+ subscription_plan       | subscription_plan           |           | not null | 'pending'::subscription_plan
+ subscription_status     | subscription_status         |           | not null | 'trial'::subscription_status
+ subscription_start_date | timestamp without time zone |           |          | 
+ subscription_end_date   | timestamp without time zone |           |          | 
+ is_suspended            | boolean                     |           | not null | false
+ suspension_reason       | text                        |           |          | 
+ suspended_at            | timestamp without time zone |           |          | 
+Indexes:
+    "sellers_pkey" PRIMARY KEY, btree (id)
+    "sellers_phone_unique" UNIQUE CONSTRAINT, btree (phone)
+    "sellers_subdomain_unique" UNIQUE CONSTRAINT, btree (subdomain)
+Referenced by:
+    TABLE "categories" CONSTRAINT "categories_seller_id_sellers_id_fk" FOREIGN KEY (seller_id) REFERENCES sellers(id) ON DELETE CASCADE
+    TABLE "orders" CONSTRAINT "orders_seller_id_sellers_id_fk" FOREIGN KEY (seller_id) REFERENCES sellers(id) ON DELETE CASCADE
+    TABLE "products" CONSTRAINT "products_seller_id_sellers_id_fk" FOREIGN KEY (seller_id) REFERENCES sellers--More-- 

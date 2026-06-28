@@ -1,0 +1,50 @@
+Successfully copied 23.9kB (transferred 25.6kB) to chatcart-postgres-1:/tmp/audit-patch.sql
+psql:/tmp/audit-patch.sql:6: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:7: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:8: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:9: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:10: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:11: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:12: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:14: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:17: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:20: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:23: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:24: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:26: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:30: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:31: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:34: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:36: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:38: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:40: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:44: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:45: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:47: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:51: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:52: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:55: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:58: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:61: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:68: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:69: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:72: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:75: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:76: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:79: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:81: ERROR:  invalid input syntax for type json
+psql:/tmp/audit-patch.sql:92: ERROR:  invalid input syntax for type json
+       tbl       | cnt  
+-----------------+------
+ admin_audit_log |   59
+ categories      |   20
+ order_items     |   85
+ orders          |   28
+ product_images  | 1194
+ products        |  359
+ sellers         |   27
+ wa_send_log     |  105
+ wa_sessions     |    1
+(9 rows)
+
+root@chatcart:~# 
