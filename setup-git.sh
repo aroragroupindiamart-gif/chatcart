@@ -17,7 +17,7 @@ echo ""
 GITHUB_REPO="aroragroupindiamart-gif/chatcart"
 
 echo "[ 1/4 ] Initialising git..."
-git init -b main 2>/dev/null || git init
+git init -b main 2>/dev/null || git checkout -b main 2>/dev/null || true
 git config user.email "deploy@chatcart.in"
 git config user.name "Chatcart Deploy"
 echo "        Done."
@@ -36,10 +36,12 @@ git remote add origin "https://github.com/${GITHUB_REPO}.git"
 echo "        Done."
 echo ""
 
-echo "[ 4/4 ] Syncing with GitHub (your .env and docker-data are safe)..."
+echo "[ 4/4 ] Syncing with GitHub (your .env and docker-data are safe — they are gitignored)..."
 git fetch origin main
-# Reset tracking without touching working files (.env, docker-data, certs)
-git reset origin/main
+# Hard reset to exactly match GitHub. .env and docker-data/ are gitignored so
+# git never touches them. All other files are overwritten to match GitHub.
+git reset --hard FETCH_HEAD
+git branch --set-upstream-to=origin/main main 2>/dev/null || true
 echo "        Done."
 echo ""
 
