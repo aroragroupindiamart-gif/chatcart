@@ -81,3 +81,7 @@ services:
       - ./artifacts/chatcart-web/dist/public:/srv/app:ro
       - ./docker-data/certbot/conf:/etc/letsencrypt:ro
       - ./docker-data/certbot/www:/var/www/certbot:ro
+      - nginx-img-cache:/var/cache/nginx/img
+
+volumes:
+  nginx-img-cache:

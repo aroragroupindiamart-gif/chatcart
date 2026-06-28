@@ -4,3 +4,4 @@
 - [MSG91 OTP setup](msg91-otp-setup.md) — Three secrets required; MSG91_SENDER_ID must be env var (not secret); sendOtp() must be explicitly called in auth.ts.
 - [WA Marketing module](wa-marketing.md) — Baileys-based WhatsApp campaign tool in admin panel; @hapi/boom must be a direct dep of api-server; SSE stream uses ?token= query param; session at artifacts/api-server/wa-session/.
 - [DO Droplet deploy pipeline](droplet-deploy.md) — deploy.sh + setup-git.sh at repo root; frontends built in Replit and committed to git (dist/public tracked); BASE_PATH values: admin=/admin/, store=/store/, dashboard=/dashboard/, marketing=/.
+- [Dockerfile must use node:20-slim not alpine](dockerfile-slim.md) — sharp's prebuilt glibc binary breaks on Alpine (musl); switched to node:20-slim; addgroup/adduser syntax also differs between distros.

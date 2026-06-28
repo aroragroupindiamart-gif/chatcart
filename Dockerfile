@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 
 RUN corepack enable && corepack prepare pnpm@10.26.1 --activate
 
@@ -13,9 +13,9 @@ RUN pnpm install --frozen-lockfile
 
 RUN pnpm --filter @workspace/api-server run build
 
-FROM node:20-alpine AS runner
+FROM node:20-slim AS runner
 
-RUN addgroup -S chatcart && adduser -S chatcart -G chatcart
+RUN addgroup --system chatcart && adduser --system --ingroup chatcart chatcart
 
 WORKDIR /app
 
