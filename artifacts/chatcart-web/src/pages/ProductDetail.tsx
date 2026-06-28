@@ -24,10 +24,11 @@ async function uploadImageToApi(
   formData.append("productId", String(productId));
   formData.append("displayOrder", String(displayOrder));
 
+  const token = localStorage.getItem("chatcart_token");
   const res = await fetch("/api/storage/uploads/file", {
     method: "POST",
     body: formData,
-    credentials: "include",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
 
   if (!res.ok) {

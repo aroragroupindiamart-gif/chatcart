@@ -14,10 +14,11 @@ async function uploadLogoToApi(file: File): Promise<{ objectPath: string }> {
   const formData = new FormData();
   formData.append("file", file);
 
+  const token = localStorage.getItem("chatcart_token");
   const res = await fetch("/api/storage/uploads/logo", {
     method: "POST",
     body: formData,
-    credentials: "include",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
 
   if (!res.ok) {
