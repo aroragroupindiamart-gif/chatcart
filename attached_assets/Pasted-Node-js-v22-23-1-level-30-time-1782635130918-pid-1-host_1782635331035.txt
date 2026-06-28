@@ -1,0 +1,16 @@
+Node.js v22.23.1
+{"level":30,"time":1782635130918,"pid":1,"hostname":"2895a63cf4f6","port":8080,"msg":"Server listening"}
+[WA-CAMPAIGN] Scheduler started (60s interval)
+[WA] No existing session — scan QR to connect
+{"level":30,"time":1782635134884,"pid":1,"hostname":"2895a63cf4f6","req":{"id":2,"method":"GET","url":"/api/healthz"},"res":{"statusCode":200},"responseTime":10,"msg":"request completed"}
+{"level":30,"time":1782635161078,"pid":1,"hostname":"2895a63cf4f6","req":{"id":3,"method":"GET","url":"/api/healthz"},"res":{"statusCode":304},"responseTime":2,"msg":"request completed"}
+{"level":30,"time":1782635164952,"pid":1,"hostname":"2895a63cf4f6","req":{"id":4,"method":"GET","url":"/api/healthz"},"res":{"statusCode":200},"responseTime":2,"msg":"request completed"}
+{"level":30,"time":1782635195020,"pid":1,"hostname":"2895a63cf4f6","req":{"id":5,"method":"GET","url":"/api/healthz"},"res":{"statusCode":200},"responseTime":1,"msg":"request completed"}
+{"level":30,"time":1782635225093,"pid":1,"hostname":"2895a63cf4f6","req":{"id":6,"method":"GET","url":"/api/healthz"},"res":{"statusCode":200},"responseTime":2,"msg":"request completed"}
+{"level":30,"time":1782635255166,"pid":1,"hostname":"2895a63cf4f6","req":{"id":7,"method":"GET","url":"/api/healthz"},"res":{"statusCode":200},"responseTime":3,"msg":"request completed"}
+{"level":30,"time":1782635262784,"pid":1,"hostname":"2895a63cf4f6","req":{"id":8,"method":"GET","url":"/api/public/ltd-status"},"res":{"statusCode":304},"responseTime":79,"msg":"request completed"}
+{"level":30,"time":1782635264235,"pid":1,"hostname":"2895a63cf4f6","req":{"id":9,"method":"GET","url":"/api/public/ltd-status"},"res":{"statusCode":304},"responseTime":6,"msg":"request completed"}
+{"level":30,"time":1782635285249,"pid":1,"hostname":"2895a63cf4f6","req":{"id":10,"method":"GET","url":"/api/healthz"},"res":{"statusCode":200},"responseTime":4,"msg":"request completed"}
+{"level":30,"time":1782635286873,"pid":1,"hostname":"2895a63cf4f6","req":{"id":11,"method":"GET","url":"/api/public/ltd-status"},"res":{"statusCode":304},"responseTime":29,"msg":"request completed"}
+{"level":30,"time":1782635315323,"pid":1,"hostname":"2895a63cf4f6","req":{"id":12,"method":"GET","url":"/api/healthz"},"res":{"statusCode":200},"responseTime":1,"msg":"request completed"}
+root@chatcart:/opt/chatcart# 
