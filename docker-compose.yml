@@ -78,6 +78,6 @@ services:
       - ./artifacts/chatcart-marketing/dist/public:/srv/marketing:ro
       - ./artifacts/chatcart-admin/dist/public:/srv/admin:ro
       - ./artifacts/chatcart-store/dist/public:/srv/store:ro
-      - ./artifacts/chatcart-web/dist/public:/srv/dashboard:ro
+      - ./artifacts/chatcart-web/dist/public:/srv/app:ro
       - ./docker-data/certbot/conf:/etc/letsencrypt:ro
       - ./docker-data/certbot/www:/var/www/certbot:ro
