@@ -26,6 +26,7 @@ export interface Product {
   id: number;
   sellerId: number;
   name: string;
+  sku: string | null;
   description: string | null;
   price: number | null;
   status: string;
