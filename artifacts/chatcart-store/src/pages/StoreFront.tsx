@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
-import { ShoppingCart, Store, Search, X } from "lucide-react";
+import { ShoppingCart, Store, Search, X, ArrowUp } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
 import { api, imgSrc, formatPrice, type Seller, type Product, type Category } from "@/lib/api";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,14 @@ export default function StoreFront() {
     const cat = params.get("category");
     return cat ? Number(cat) : null;
   });
+
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setShowScrollTop(window.scrollY > 300);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   const tabsRef = useRef<HTMLDivElement>(null);
   const [showLeftFade, setShowLeftFade] = useState(false);
@@ -109,7 +117,11 @@ export default function StoreFront() {
   const showTabs = visibleCategories.length > 0;
 
   const filtered = isSearching
-    ? products.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()))
+    ? products.filter(
+        (p) =>
+          p.name.toLowerCase().includes(search.toLowerCase()) ||
+          (p.sku?.toLowerCase() ?? "").includes(search.toLowerCase())
+      )
     : selectedCategoryId === null
     ? products
     : products.filter((p) => p.categoryId !== null && Number(p.categoryId) === Number(selectedCategoryId));
@@ -303,6 +315,16 @@ export default function StoreFront() {
             {seller.storeName ? ` · ${seller.storeName}` : ""}
           </p>
         </footer>
+      )}
+
+      {showScrollTop && (
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          className="fixed bottom-6 right-4 z-50 w-10 h-10 rounded-full bg-primary text-white shadow-lg flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all"
+          aria-label="Scroll to top"
+        >
+          <ArrowUp className="w-5 h-5" />
+        </button>
       )}
 
       <CartSheet open={cartOpen} onClose={() => setCartOpen(false)} seller={seller} />

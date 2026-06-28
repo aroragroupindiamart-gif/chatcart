@@ -96,7 +96,10 @@ function SettingsContent() {
   const [tagline, setTagline] = useState("");
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number; duplicates: string[] } | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const RESERVED_SLUGS = new Set([
     "www", "api", "admin", "store", "app", "mail", "support", "help", "chatcart",
@@ -191,7 +194,7 @@ function SettingsContent() {
   const handleExport = async () => {
     setExportLoading(true);
     try {
-      const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+      const token = localStorage.getItem("chatcart_token");
       const response = await fetch("/api/export", {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -216,6 +219,35 @@ function SettingsContent() {
       toast({ title: "Export failed", description: err.message, variant: "destructive" });
     } finally {
       setExportLoading(false);
+    }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportLoading(true);
+    setImportResult(null);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const token = localStorage.getItem("chatcart_token");
+      const response = await fetch("/api/import-json", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ products: data.products, categories: data.categories }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Import failed");
+      setImportResult(result);
+      toast({ title: `Import complete — ${result.imported} products added` });
+    } catch (err: any) {
+      toast({ title: "Import failed", description: err.message, variant: "destructive" });
+    } finally {
+      setImportLoading(false);
+      if (importInputRef.current) importInputRef.current.value = "";
     }
   };
 
@@ -548,21 +580,55 @@ function SettingsContent() {
         </CardHeader>
         <CardContent>
           {isPro ? (
-            <div className="flex items-center gap-4">
-              <Button
-                variant="outline"
-                onClick={handleExport}
-                disabled={exportLoading}
-              >
-                {exportLoading ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Preparing export…</>
-                ) : (
-                  <><Download className="w-4 h-4 mr-2" />Download Store Data (JSON)</>
-                )}
-              </Button>
-              <p className="text-xs text-slate-500">
-                Includes all active products, images, variants, and full order history.
-              </p>
+            <div className="space-y-4">
+              <div className="flex items-center gap-4 flex-wrap">
+                <Button
+                  variant="outline"
+                  onClick={handleExport}
+                  disabled={exportLoading}
+                >
+                  {exportLoading ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Preparing export…</>
+                  ) : (
+                    <><Download className="w-4 h-4 mr-2" />Download Store Data (JSON)</>
+                  )}
+                </Button>
+                <p className="text-xs text-slate-500">
+                  Includes all active products, categories, images, variants, and full order history.
+                </p>
+              </div>
+              <div className="border-t pt-4">
+                <p className="text-sm font-medium text-slate-700 mb-1">Import from JSON</p>
+                <p className="text-xs text-slate-500 mb-3">
+                  Upload a Chatcart JSON export to import products. Duplicates (by name or SKU) are skipped.
+                </p>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <input
+                    ref={importInputRef}
+                    type="file"
+                    accept="application/json,.json"
+                    className="hidden"
+                    onChange={handleImport}
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={() => importInputRef.current?.click()}
+                    disabled={importLoading}
+                  >
+                    {importLoading ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Importing…</>
+                    ) : (
+                      <><Upload className="w-4 h-4 mr-2" />Import JSON File</>
+                    )}
+                  </Button>
+                  {importResult && (
+                    <p className="text-xs text-slate-600">
+                      ✓ {importResult.imported} imported
+                      {importResult.skipped > 0 ? `, ${importResult.skipped} skipped (duplicates)` : ""}
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           ) : (
             <div className="rounded-xl border-2 border-dashed border-purple-100 bg-purple-50/40 p-6 text-center">

@@ -213,7 +213,7 @@ export default function Home() {
           </div>
 
           <div className="max-w-4xl mx-auto overflow-x-auto rounded-xl border border-border shadow-sm">
-            <table className="w-full border-collapse">
+            <table className="w-full min-w-[480px] border-collapse">
               <thead>
                 <tr className="border-b border-border">
                   <th className="text-left py-4 px-5 text-sm font-semibold text-foreground w-1/2 bg-muted/20"></th>
@@ -508,12 +508,12 @@ export default function Home() {
                 ) : (
                   <Button
                     size="lg"
-                    className="w-full h-14 text-lg font-bold bg-primary text-primary-foreground hover:bg-primary/90 shadow-md"
+                    className="w-full min-h-14 h-auto py-3 text-base font-bold bg-primary text-primary-foreground hover:bg-primary/90 shadow-md"
                     asChild
                   >
-                    <a href={LTD_WA_LINK} target="_blank" rel="noopener noreferrer">
-                      <MessageSquare className="w-5 h-5 mr-2" />
-                      Claim your lifetime deal on WhatsApp
+                    <a href={LTD_WA_LINK} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 flex-wrap text-center leading-snug">
+                      <MessageSquare className="w-5 h-5 shrink-0" />
+                      <span>Claim Lifetime Deal on WhatsApp</span>
                     </a>
                   </Button>
                 )}

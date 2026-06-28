@@ -1,13 +1,15 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { categoriesTable } from "@workspace/db/schema";
-import { eq, and } from "drizzle-orm";
+import { categoriesTable, productsTable } from "@workspace/db/schema";
+import { eq, and, ne, count } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
 import { requireActiveSubscription } from "../lib/planLimits.js";
 
 const router = Router();
 
-function serializeCategory(c: typeof categoriesTable.$inferSelect & { productCount?: number }) {
+function serializeCategory(
+  c: typeof categoriesTable.$inferSelect & { productCount?: number }
+) {
   return {
     ...c,
     dozenDiscountPercent:
@@ -15,18 +17,34 @@ function serializeCategory(c: typeof categoriesTable.$inferSelect & { productCou
         ? parseFloat(c.dozenDiscountPercent as unknown as string)
         : null,
     bulkDiscountMinQty: c.bulkDiscountMinQty ?? null,
-    productCount: c.productCount ?? 0,
+    productCount: typeof c.productCount === "number" ? c.productCount : Number(c.productCount ?? 0),
   };
 }
 
 router.get("/categories", requireAuth, requireActiveSubscription, async (req, res) => {
   try {
     const categories = await db
-      .select()
+      .select({
+        id: categoriesTable.id,
+        sellerId: categoriesTable.sellerId,
+        name: categoriesTable.name,
+        dozenDiscountPercent: categoriesTable.dozenDiscountPercent,
+        bulkDiscountMinQty: categoriesTable.bulkDiscountMinQty,
+        createdAt: categoriesTable.createdAt,
+        productCount: count(productsTable.id),
+      })
       .from(categoriesTable)
+      .leftJoin(
+        productsTable,
+        and(
+          eq(productsTable.categoryId, categoriesTable.id),
+          ne(productsTable.status, "deleted")
+        )
+      )
       .where(eq(categoriesTable.sellerId, req.seller!.sellerId))
+      .groupBy(categoriesTable.id)
       .orderBy(categoriesTable.name);
-    res.json(categories.map(c => serializeCategory(c)));
+    res.json(categories.map((c) => serializeCategory(c)));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to list categories" });

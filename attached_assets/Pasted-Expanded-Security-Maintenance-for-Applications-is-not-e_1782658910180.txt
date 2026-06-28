@@ -1,0 +1,109 @@
+Expanded Security Maintenance for Applications is not enabled.
+
+50 updates can be applied immediately.
+1 of these updates is a standard security update.
+To see these additional updates run: apt list --upgradable
+
+Enable ESM Apps to receive additional future security updates.
+See https://ubuntu.com/esm or run: sudo pro status
+
+
+*** System restart required ***
+Last login: Sun Jun 28 12:15:39 2026 from 162.243.188.66
+root@chatcart:~# ssh root@206.189.202.35
+root@206.189.202.35's password: 
+Welcome to Ubuntu 24.04.3 LTS (GNU/Linux 6.8.0-71-generic x86_64)
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/pro
+
+ System information as of Sun Jun 28 15:00:32 UTC 2026
+
+  System load:  0.19               Processes:             122
+  Usage of /:   29.5% of 23.17GB   Users logged in:       0
+  Memory usage: 53%                IPv4 address for eth0: 206.189.202.35
+  Swap usage:   0%                 IPv4 address for eth0: 10.10.0.5
+
+Expanded Security Maintenance for Applications is not enabled.
+
+50 updates can be applied immediately.
+1 of these updates is a standard security update.
+To see these additional updates run: apt list --upgradable
+
+Enable ESM Apps to receive additional future security updates.
+See https://ubuntu.com/esm or run: sudo pro status
+
+
+*** System restart required ***
+Last login: Sun Jun 28 15:00:35 2026 from 162.243.190.66
+root@chatcart:~# cd /opt/chatcart && ./deploy.sh
+
+========================================
+  Chatcart Deploy — Sun Jun 28 15:01:10 UTC 2026
+========================================
+
+[ 1/5 ] Pulling latest code from GitHub...
+From https://github.com/aroragroupindiamart-gif/chatcart
+ * branch            main       -> FETCH_HEAD
+Already up to date.
+        Done.
+
+[ 2/5 ] Rebuilding API server...
+[+] Building 0.9s (22/22) FINISHED                                                                                
+ => [internal] load local bake definitions                                                                   0.0s
+ => => reading from stdin 468B                                                                               0.0s
+ => [internal] load build definition from Dockerfile                                                         0.0s
+ => => transferring dockerfile: 1.03kB                                                                       0.0s
+ => [internal] load metadata for docker.io/library/node:20-alpine                                            0.3s
+ => [internal] load .dockerignore                                                                            0.0s
+ => => transferring context: 2B                                                                              0.0s
+ => [internal] load build context                                                                            0.0s
+ => => transferring context: 11.85kB                                                                         0.0s
+ => [builder 1/9] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632  0.0s
+ => => resolve docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb83  0.0s
+ => CACHED [runner 2/7] RUN addgroup -S chatcart && adduser -S chatcart -G chatcart                          0.0s
+ => CACHED [runner 3/7] WORKDIR /app                                                                         0.0s
+ => CACHED [builder 2/9] RUN corepack enable && corepack prepare pnpm@10.26.1 --activate                     0.0s
+ => CACHED [builder 3/9] WORKDIR /app                                                                        0.0s
+ => CACHED [builder 4/9] COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json tsconfig.base.j  0.0s
+ => CACHED [builder 5/9] COPY lib/ ./lib/                                                                    0.0s
+ => CACHED [builder 6/9] COPY artifacts/api-server/ ./artifacts/api-server/                                  0.0s
+ => CACHED [builder 7/9] COPY scripts/package.json ./scripts/package.json                                    0.0s
+ => CACHED [builder 8/9] RUN pnpm install --frozen-lockfile                                                  0.0s
+ => CACHED [builder 9/9] RUN pnpm --filter @workspace/api-server run build                                   0.0s
+ => CACHED [runner 4/7] COPY --from=builder /app/node_modules ./node_modules                                 0.0s
+ => CACHED [runner 5/7] COPY --from=builder /app/artifacts/api-server/node_modules ./artifacts/api-server/n  0.0s
+ => CACHED [runner 6/7] COPY --from=builder /app/artifacts/api-server/dist ./artifacts/api-server/dist       0.0s
+ => CACHED [runner 7/7] RUN mkdir -p /data/wa-session && chown chatcart:chatcart /data/wa-session            0.0s
+ => exporting to image                                                                                       0.1s
+ => => exporting layers                                                                                      0.0s
+ => => exporting manifest sha256:b0abfb422e1bcf8e9ed7e6f3dde3d5462cf04506a19d4f7f09a23b0a0e8428f3            0.0s
+ => => exporting config sha256:56a5155984a1535d924d861efa85ea6229c44dc6baa76c4cfc843b6b748c4034              0.0s
+ => => exporting attestation manifest sha256:3b2c99cc93b5ce691b3eaf6f1626d10ff2179716120d0888bef4cea43835bd  0.0s
+ => => exporting manifest list sha256:4a62d3c883c5efec093680a427d74140a28b2164cadf347c018a4dd98e3db016       0.0s
+ => => naming to docker.io/library/chatcart-api:latest                                                       0.0s
+ => => unpacking to docker.io/library/chatcart-api:latest                                                    0.0s
+ => resolving provenance for metadata file                                                                   0.0s
+[+] build 1/1
+ ✔ Image chatcart-api Built                                                                                   1.1s
+        Done.
+
+[ 3/5 ] Restarting all services...
+[+] up 4/4
+ ✔ Container chatcart-backup-1   Running                                                                      0.0s
+ ✔ Container chatcart-nginx-1    Running                                                                      0.0s
+ ✔ Container chatcart-postgres-1 Healthy                                                                     11.1s
+ ✔ Container chatcart-api-1      Started                                                                     11.4s
+        Done.
+
+[ 4/5 ] Reloading nginx config...
+        Done.
+
+[ 5/5 ] Fixing WhatsApp session permissions...
+        Done.
+
+========================================
+  Deploy complete! Site is live.
+  https://chatcart.in
+==========================
