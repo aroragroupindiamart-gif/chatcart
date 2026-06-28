@@ -212,7 +212,31 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="max-w-4xl mx-auto overflow-x-auto rounded-xl border border-border shadow-sm">
+          {/* Mobile card layout — each feature is a card with WA vs Chatcart side-by-side */}
+          <div className="sm:hidden max-w-lg mx-auto space-y-3">
+            {comparisonRows.map((row, i) => (
+              <div key={i} className="border border-border rounded-xl overflow-hidden bg-card shadow-sm">
+                <div className="px-4 py-3 bg-muted/20 border-b border-border">
+                  <p className="text-sm font-semibold text-foreground">{row.feature}</p>
+                </div>
+                <div className="grid grid-cols-2 divide-x divide-border">
+                  <div className="px-3 py-3 flex flex-col items-center gap-1.5">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">WhatsApp</span>
+                    <X className="w-4 h-4 text-red-400 shrink-0" />
+                    <span className="text-[11px] text-muted-foreground leading-snug text-center">{row.whatsapp}</span>
+                  </div>
+                  <div className="px-3 py-3 flex flex-col items-center gap-1.5 bg-primary/5">
+                    <span className="text-[10px] font-semibold text-primary uppercase tracking-wide">Chatcart ✓</span>
+                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
+                    <span className="text-[11px] text-foreground font-medium leading-snug text-center">{row.chatcart}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop table layout */}
+          <div className="hidden sm:block max-w-4xl mx-auto overflow-x-auto rounded-xl border border-border shadow-sm">
             <table className="w-full min-w-[480px] border-collapse">
               <thead>
                 <tr className="border-b border-border">
