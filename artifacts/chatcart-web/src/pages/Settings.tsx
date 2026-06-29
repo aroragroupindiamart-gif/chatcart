@@ -575,7 +575,7 @@ function SettingsContent() {
             )}
           </div>
           <CardDescription>
-            Download a full JSON export of your products and orders.
+            Download a JSON backup of your product catalogue and order history.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -594,7 +594,7 @@ function SettingsContent() {
                   )}
                 </Button>
                 <p className="text-xs text-slate-500">
-                  Includes all active products, categories, images, variants, and full order history.
+                  Includes products, categories, variants, and full order history. Product photos are stored as image links — the actual image files are not bundled in this download. Your photos are backed up automatically every night alongside your database.
                 </p>
               </div>
               <div className="border-t pt-4">
@@ -634,7 +634,7 @@ function SettingsContent() {
             <div className="rounded-xl border-2 border-dashed border-purple-100 bg-purple-50/40 p-6 text-center">
               <Lock className="w-8 h-8 text-purple-300 mx-auto mb-3" />
               <p className="text-sm font-medium text-slate-700 mb-1">Data export is a Pro feature</p>
-              <p className="text-xs text-slate-500 mb-4">Upgrade to Pro to download your complete product and order data.</p>
+              <p className="text-xs text-slate-500 mb-4">Upgrade to Pro to download your product catalogue and full order history as a JSON file.</p>
               <Button size="sm" variant="outline" className="border-purple-300 text-purple-700 hover:bg-purple-50">
                 <Crown className="w-3.5 h-3.5 mr-1.5" />
                 Upgrade to Pro — ₹299/mo

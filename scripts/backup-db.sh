@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# backup-db.sh — nightly Postgres backup to DigitalOcean Spaces
+# backup-db.sh — nightly Postgres + image-file backup to DigitalOcean Spaces
 #
 # Runs inside the `backup` Docker service defined in docker-compose.yml.
 # Can also be executed manually from the Droplet:
@@ -10,8 +10,16 @@
 #   PGHOST, PGUSER, PGPASSWORD, PGDATABASE
 #   DO_SPACES_KEY, DO_SPACES_SECRET, DO_SPACES_REGION, DO_SPACES_BUCKET
 #
-# Backups land at:  s3://<bucket>/backups/chatcart-YYYYMMDD-HHMMSS.sql.gz
-# Retention:        last 7 days (older dumps are deleted automatically)
+# What this script backs up:
+#   1. Postgres database  → s3://<bucket>/backups/chatcart-YYYYMMDD-HHMMSS.sql.gz
+#                           Kept for RETAIN_DAYS days, older dumps deleted automatically.
+#   2. Image files        → s3://<bucket>/image-backup/  (rolling mirror, single copy)
+#                           A live sync of every uploaded file, excluding the backups/
+#                           and image-backup/ prefixes. --delete keeps it in sync with
+#                           object deletions. Protects against accidental object deletion.
+#                           NOTE: this is a same-bucket mirror — it does NOT protect
+#                           against full bucket deletion. For bucket-level protection,
+#                           enable DO Spaces versioning via the control panel.
 
 set -eu
 
@@ -64,10 +72,10 @@ aws s3 cp "${COMPRESSED_FILE}" "${S3_URI}" \
 
 echo "[backup] uploaded to ${S3_URI}"
 
-# ── 4. Prune backups older than RETAIN_DAYS days ────────────────────────────
+# ── 4. Prune DB backups older than RETAIN_DAYS days ─────────────────────────
 CUTOFF="$(date -u -d "${RETAIN_DAYS} days ago" '+%Y-%m-%dT%H:%M:%S')"
 
-echo "[backup] pruning backups older than ${RETAIN_DAYS} days (before ${CUTOFF} UTC)"
+echo "[backup] pruning DB backups older than ${RETAIN_DAYS} days (before ${CUTOFF} UTC)"
 
 aws s3 ls "s3://${DO_SPACES_BUCKET}/${S3_PREFIX}/" \
   --endpoint-url="${ENDPOINT_URL}" \
@@ -77,8 +85,27 @@ aws s3 ls "s3://${DO_SPACES_BUCKET}/${S3_PREFIX}/" \
       if [ -n "${FILE_NAME}" ] && [ "${FILE_DATE}" \< "${CUTOFF}" ]; then
         aws s3 rm "s3://${DO_SPACES_BUCKET}/${S3_PREFIX}/${FILE_NAME}" \
           --endpoint-url="${ENDPOINT_URL}"
-        echo "[backup] deleted old backup: ${FILE_NAME}"
+        echo "[backup] deleted old DB backup: ${FILE_NAME}"
       fi
     done
 
-echo "[backup] $(date -u '+%Y-%m-%d %H:%M:%S UTC') — done"
+echo "[backup] DB backup complete"
+
+# ── 5. Mirror image files into image-backup/ ─────────────────────────────────
+# Syncs all uploaded product images to a separate prefix in the same bucket.
+# --delete keeps the mirror consistent when images are deleted in the live store.
+# This is a rolling single-copy mirror (not versioned), so storage cost is
+# approximately 2x current image storage — not 30x.
+echo "[backup] syncing image files to image-backup/ mirror…"
+
+aws s3 sync \
+  "s3://${DO_SPACES_BUCKET}/" \
+  "s3://${DO_SPACES_BUCKET}/image-backup/" \
+  --endpoint-url="${ENDPOINT_URL}" \
+  --exclude "backups/*" \
+  --exclude "image-backup/*" \
+  --delete \
+  --no-progress
+
+echo "[backup] image mirror sync complete"
+echo "[backup] $(date -u '+%Y-%m-%d %H:%M:%S UTC') — all done"
