@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { randomInt } from "crypto";
 import { db } from "@workspace/db";
 import { sellersTable, otpCodesTable, otpRateLimitsTable } from "@workspace/db/schema";
 import { eq, and, gt, desc, sql } from "drizzle-orm";
@@ -105,8 +106,8 @@ async function recordSendOtp(phone: string): Promise<void> {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function generateOtp(): string {
-  // crypto.randomInt is cryptographically secure; range is [100000, 1000000)
-  return crypto.randomInt(100000, 1000000).toString();
+  // randomInt (from node:crypto) is cryptographically secure; range is [100000, 1000000)
+  return randomInt(100000, 1000000).toString();
 }
 
 function normalizePhone(phone: string): string {
