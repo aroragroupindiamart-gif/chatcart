@@ -1,4 +1,5 @@
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import { db } from "@workspace/db";
 import {
   sellersTable,
@@ -10,8 +11,29 @@ import {
   categoriesTable,
 } from "@workspace/db/schema";
 import { eq, and, ne, or, asc, inArray, count } from "drizzle-orm";
+import { logger } from "../lib/logger.js";
 
 const router = Router();
+
+// ── Order creation rate limit ─────────────────────────────────────────────────
+// Generous threshold for Indian mobile networks (CGNAT means many users share
+// one IP). Adjust ORDER_RATE_LIMIT_MAX / ORDER_RATE_LIMIT_WINDOW_MS if
+// real-world logs show this firing on legitimate customers.
+const ORDER_RATE_LIMIT_MAX = 30;
+const ORDER_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
+const orderRateLimit = rateLimit({
+  windowMs: ORDER_RATE_LIMIT_WINDOW_MS,
+  max: ORDER_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler(req, res) {
+    logger.warn({ ip: req.ip, path: req.path }, "[rate-limit] order creation limit reached");
+    res.status(429).json({
+      error: "Too many orders attempted from this connection. Please wait a few minutes and try again.",
+    });
+  },
+});
 
 function formatProduct(
   product: typeof productsTable.$inferSelect,
@@ -215,7 +237,7 @@ router.get("/public/sellers/:subdomain/products/:productId", async (req, res) =>
 });
 
 // POST /public/orders — create order from storefront (no seller auth — customer action)
-router.post("/public/orders", async (req, res) => {
+router.post("/public/orders", orderRateLimit, async (req, res) => {
   try {
     const body = req.body as {
       sellerId: number;

@@ -22,7 +22,7 @@ BACKUP_FILE="chatcart-${TIMESTAMP}.sql.gz"
 S3_PREFIX="backups"
 S3_URI="s3://${DO_SPACES_BUCKET}/${S3_PREFIX}/${BACKUP_FILE}"
 ENDPOINT_URL="https://${DO_SPACES_REGION}.digitaloceanspaces.com"
-RETAIN_DAYS=7
+RETAIN_DAYS=30
 
 echo "[backup] $(date -u '+%Y-%m-%d %H:%M:%S UTC') — starting backup"
 
