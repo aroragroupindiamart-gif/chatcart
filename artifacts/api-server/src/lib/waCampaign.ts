@@ -248,6 +248,7 @@ export async function processScheduledMessages(): Promise<void> {
         const isConnectionError =
           errorMessage?.includes("disconnected") ||
           errorMessage?.includes("connection") ||
+          errorMessage?.includes("not connected") ||
           errorMessage?.includes("timed out");
         if (isConnectionError) {
           await db
