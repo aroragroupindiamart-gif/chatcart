@@ -15,6 +15,7 @@ echo ""
 
 echo "[ 2/6 ] Building frontend assets..."
 docker run --rm \
+  -e CI=true \
   -v "$(pwd)":/workspace \
   -w /workspace \
   node:20-slim sh -c "
