@@ -49,14 +49,21 @@ async function getTodaySendCount(): Promise<number> {
 
 export async function processScheduledMessages(): Promise<void> {
   const waState = getWAState();
-  if (waState.status !== "connected") return;
+  if (waState.status !== "connected") {
+    console.log(`[WA-CAMPAIGN] Skipped tick — WA status="${waState.status}"`);
+    return;
+  }
 
   const [session] = await db.select().from(waSessionsTable).limit(1);
-  if (!session || session.isPaused) return;
+  if (!session) { console.log("[WA-CAMPAIGN] Skipped tick — no session row found"); return; }
+  if (session.isPaused) { console.log("[WA-CAMPAIGN] Skipped tick — campaign is paused"); return; }
 
   const dailyLimit = await getEffectiveDailyLimit(session);
   const todayCount = await getTodaySendCount();
-  if (todayCount >= dailyLimit) return;
+  if (todayCount >= dailyLimit) {
+    console.log(`[WA-CAMPAIGN] Skipped tick — daily limit reached (${todayCount}/${dailyLimit})`);
+    return;
+  }
 
   const remaining = dailyLimit - todayCount;
 
@@ -205,6 +212,7 @@ export async function processScheduledMessages(): Promise<void> {
       });
 
       if (sendStatus === "sent") {
+        console.log(`[WA-CAMPAIGN] Lead ${lead.id} step ${step.hourOffset}h sent OK to ${cleanPhone}`);
         // Look ahead to find the next step so we can compute its anchor time
         const [nextStep] = await db
           .select({ hourOffset: waSequenceStepsTable.hourOffset })
@@ -252,19 +260,29 @@ export async function processScheduledMessages(): Promise<void> {
         // "WhatsApp disconnected" means the socket dropped mid-send; retry quickly (60s)
         // without counting it as a failure. Real failures (spam block, invalid number, etc.)
         // count toward the 3-strike limit and use a 10-min backoff.
+        // Case-insensitive match — Baileys uses proper-case ("Connection Failure",
+        // "Connection Closed", "Stream Errored") which wouldn't match lowercase patterns.
+        const errLower = (errorMessage ?? "").toLowerCase();
         const isConnectionError =
-          errorMessage?.includes("disconnected") ||
-          errorMessage?.includes("connection") ||
-          errorMessage?.includes("not connected") ||
-          errorMessage?.includes("timed out");
+          errLower.includes("disconnected") ||
+          errLower.includes("connection") ||
+          errLower.includes("not connected") ||
+          errLower.includes("timed out") ||
+          errLower.includes("timeout") ||
+          errLower.includes("stream") ||
+          errLower.includes("socket") ||
+          errLower.includes("econnreset") ||
+          errLower.includes("econnrefused") ||
+          errLower.includes("epipe");
         if (isConnectionError) {
           await db
             .update(waCampaignLeadsTable)
             .set({ nextSendAt: new Date(Date.now() + 60_000) })
             .where(eq(waCampaignLeadsTable.id, lead.id));
-          console.log(`[WA-CAMPAIGN] Lead ${lead.id} connection error — retry in 60s`);
+          console.log(`[WA-CAMPAIGN] Lead ${lead.id} connection error (retry 60s): "${errorMessage}"`);
         } else {
           const newFailCount = (lead.sendFailureCount ?? 0) + 1;
+          console.warn(`[WA-CAMPAIGN] Lead ${lead.id} real failure #${newFailCount}: "${errorMessage}"`);
           if (newFailCount >= 3) {
             await db
               .update(waCampaignLeadsTable)
