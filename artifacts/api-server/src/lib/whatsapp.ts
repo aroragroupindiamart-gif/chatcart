@@ -1,7 +1,7 @@
 import type { ServerResponse } from "http";
 import { db } from "@workspace/db";
-import { waSessionsTable, waInboundLeadsTable, waInboundMessagesTable, sellersTable } from "@workspace/db/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { waSessionsTable, waInboundLeadsTable, waInboundMessagesTable, waCampaignLeadsTable, sellersTable } from "@workspace/db/schema";
+import { eq, desc, sql, and } from "drizzle-orm";
 import {
   uploadCredsToStorage,
   downloadSessionFromStorage,
@@ -496,6 +496,36 @@ async function handleInboundLead(fromPhone: string, displayName: string, message
       .returning({ id: waInboundLeadsTable.id });
     leadId = created.id;
     console.log(`[WA] New inbound lead +${fromPhone} (lead ${leadId}, seller=${matchedSellerId ?? "none"})`);
+
+    // Auto-enroll new inbound leads if configured
+    try {
+      const [session] = await db
+        .select({ autoEnrollSequenceId: waSessionsTable.autoEnrollSequenceId })
+        .from(waSessionsTable)
+        .limit(1);
+      if (session?.autoEnrollSequenceId) {
+        const [alreadyEnrolled] = await db
+          .select({ id: waCampaignLeadsTable.id })
+          .from(waCampaignLeadsTable)
+          .where(and(
+            eq(waCampaignLeadsTable.inboundLeadId, leadId),
+            eq(waCampaignLeadsTable.status, "active"),
+          ))
+          .limit(1);
+        if (!alreadyEnrolled) {
+          await db.insert(waCampaignLeadsTable).values({
+            sequenceId: session.autoEnrollSequenceId,
+            inboundLeadId: leadId,
+            phone: fromPhone,
+            currentHourOffset: -1,
+            nextSendAt: new Date(),
+          });
+          console.log(`[WA] Auto-enrolled new lead +${fromPhone} into sequence ${session.autoEnrollSequenceId}`);
+        }
+      }
+    } catch (e: any) {
+      console.error(`[WA] Auto-enroll failed for +${fromPhone}:`, e?.message);
+    }
   }
 
   if (messageText) {

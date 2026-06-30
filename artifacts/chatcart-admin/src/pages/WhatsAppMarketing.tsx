@@ -18,8 +18,9 @@ import {
   Plus, Trash2, Play, Pause, RefreshCw, CheckCircle2, XCircle,
   AlertTriangle, Clock, MessageSquare, TrendingUp, PhoneIncoming,
   ChevronDown, ChevronRight, Flame, Link2,
-  ArrowUp, ArrowDown, Upload, FileImage, FileVideo, FileText, X
+  ArrowUp, ArrowDown, Upload, FileImage, FileVideo, FileText, X, Pencil
 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,7 @@ interface WASettings {
   replyRateThreshold: number;
   isPaused: boolean;
   connectedAt: string | null;
+  autoEnrollSequenceId: number | null;
 }
 
 interface Sequence {
@@ -392,11 +394,18 @@ function SequencesTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<Sequence | null>(null);
 
   const { data: sequences = [], isLoading } = useQuery<Sequence[]>({
     queryKey: ['wa-sequences'],
     queryFn: () => adminFetch('/api/admin/wa/sequences'),
   });
+
+  const { data: waStatus } = useQuery<WAState>({
+    queryKey: ['wa-status'],
+    queryFn: () => adminFetch('/api/admin/wa/status'),
+  });
+  const autoEnrollSequenceId = waStatus?.settings?.autoEnrollSequenceId ?? null;
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => adminFetch(`/api/admin/wa/sequences/${id}`, { method: 'DELETE' }),
@@ -404,10 +413,52 @@ function SequencesTab() {
     onError: () => toast({ title: 'Error', description: 'Could not delete sequence', variant: 'destructive' }),
   });
 
+  const autoEnrollMut = useMutation({
+    mutationFn: (sequenceId: number | null) =>
+      adminFetch('/api/admin/wa/settings', { method: 'PATCH', body: JSON.stringify({ autoEnrollSequenceId: sequenceId }) }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['wa-status'] }); toast({ title: 'Auto-enroll updated' }); },
+    onError: () => toast({ title: 'Error', description: 'Failed to update auto-enroll', variant: 'destructive' }),
+  });
+
   if (isLoading) return <div className="flex items-center gap-2 py-8 text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /> Loading…</div>;
 
   return (
     <div className="space-y-6">
+      {/* Auto-enroll setting */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-medium">Auto-Enroll Inbound Leads</CardTitle>
+          <CardDescription>Automatically enroll every new WhatsApp contact into a drip sequence the moment they message you.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3">
+            <Switch
+              checked={autoEnrollSequenceId !== null}
+              onCheckedChange={(on) => autoEnrollMut.mutate(on ? (sequences[0]?.id ?? null) : null)}
+              disabled={autoEnrollMut.isPending || sequences.length === 0}
+            />
+            {autoEnrollSequenceId !== null && sequences.length > 0 && (
+              <select
+                className="h-8 text-sm border rounded-md px-2 bg-background"
+                value={autoEnrollSequenceId ?? ''}
+                onChange={(e) => autoEnrollMut.mutate(Number(e.target.value))}
+                disabled={autoEnrollMut.isPending}
+              >
+                {sequences.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            )}
+            {sequences.length === 0 && (
+              <span className="text-xs text-muted-foreground">Create a sequence first to enable auto-enroll.</span>
+            )}
+            {autoEnrollSequenceId !== null && (
+              <span className="text-xs text-muted-foreground">New contacts → enrolled instantly</span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold">Drip Sequences</h3>
@@ -443,6 +494,9 @@ function SequencesTab() {
                 <div className="flex items-center gap-2">
                   <Badge variant="outline">{seq.steps.length} step{seq.steps.length !== 1 ? 's' : ''}</Badge>
                   <Badge variant="secondary">{seq.leadCount} lead{seq.leadCount !== 1 ? 's' : ''}</Badge>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(seq)}>
+                    <Pencil className="w-4 h-4" />
+                  </Button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-8 w-8"><Trash2 className="w-4 h-4" /></Button>
@@ -486,6 +540,19 @@ function SequencesTab() {
           </Card>
         ))}
       </div>
+
+      {/* Edit sequence dialog */}
+      <Dialog open={editing !== null} onOpenChange={(o) => { if (!o) setEditing(null); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Edit Sequence</DialogTitle></DialogHeader>
+          {editing && (
+            <EditSequenceForm
+              sequence={editing}
+              onSuccess={() => { setEditing(null); qc.invalidateQueries({ queryKey: ['wa-sequences'] }); }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -792,6 +859,167 @@ function CreateSequenceForm({ onSuccess }: { onSuccess: () => void }) {
       <Button onClick={submit} disabled={createMut.isPending || hasOffsetError} className="w-full">
         {createMut.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
         Create Sequence
+      </Button>
+    </div>
+  );
+}
+
+function EditSequenceForm({ sequence, onSuccess }: { sequence: Sequence; onSuccess: () => void }) {
+  const { toast } = useToast();
+  const toStepDraft = (s: SequenceStep): StepDraft => ({
+    hourOffset: s.hourOffset,
+    message: s.message,
+    mediaUrl: s.mediaUrl ?? undefined,
+    mediaType: (s.mediaType as StepDraft['mediaType']) ?? undefined,
+    mediaFilename: s.mediaFilename ?? undefined,
+    _unit: s.hourOffset > 48 ? 'days' : 'hours',
+  });
+
+  const [name, setName] = useState(sequence.name);
+  const [description, setDescription] = useState(sequence.description ?? '');
+  const [steps, setSteps] = useState<StepDraft[]>(sequence.steps.map(toStepDraft));
+  const fileInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  const editMut = useMutation({
+    mutationFn: (data: { name: string; description?: string; steps: SequenceStep[] }) =>
+      adminFetch(`/api/admin/wa/sequences/${sequence.id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    onSuccess: () => { toast({ title: 'Sequence saved' }); onSuccess(); },
+    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+
+  const updateStep = (idx: number, patch: Partial<StepDraft>) =>
+    setSteps((s) => s.map((st, i) => i === idx ? { ...st, ...patch } : st));
+  const addStep = () => {
+    const lastOffset = steps[steps.length - 1]?.hourOffset ?? 0;
+    const nextOffset = lastOffset + 6;
+    setSteps((s) => [...s, { hourOffset: nextOffset, message: '', _unit: nextOffset > 48 ? 'days' : 'hours' }]);
+  };
+  const removeStep = (idx: number) => setSteps((s) => s.filter((_, i) => i !== idx));
+  const moveStep = (idx: number, dir: -1 | 1) => {
+    const next = idx + dir;
+    if (next < 0 || next >= steps.length) return;
+    setSteps((s) => {
+      const arr = [...s];
+      const tmpOffset = arr[idx].hourOffset; const tmpUnit = arr[idx]._unit;
+      arr[idx] = { ...arr[idx], hourOffset: arr[next].hourOffset, _unit: arr[next]._unit };
+      arr[next] = { ...arr[next], hourOffset: tmpOffset, _unit: tmpUnit };
+      return [...arr].sort((a, b) => a.hourOffset - b.hourOffset);
+    });
+  };
+  const effectiveUnit = (step: StepDraft): 'hours' | 'days' => step.hourOffset > 48 ? 'days' : step._unit;
+  const clearMedia = (idx: number) => {
+    updateStep(idx, { mediaUrl: undefined, mediaType: undefined, mediaFilename: undefined, _sizeWarning: undefined, _uploadError: undefined });
+    if (fileInputRefs.current[idx]) fileInputRefs.current[idx]!.value = '';
+  };
+  const handleFileSelect = async (idx: number, file: File) => {
+    const token = localStorage.getItem('chatcart_admin_token') ?? '';
+    updateStep(idx, { _uploading: true, _uploadError: undefined, _sizeWarning: undefined, mediaUrl: undefined, mediaType: undefined, mediaFilename: undefined });
+    try {
+      const res = await fetch('/api/admin/wa/media/request-upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error ?? 'Upload failed'); }
+      const { uploadURL, objectPath, mediaType, sizeWarning } = await res.json();
+      const putRes = await fetch(uploadURL, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
+      if (!putRes.ok) throw new Error('Failed to upload to storage');
+      updateStep(idx, { _uploading: false, _sizeWarning: sizeWarning ?? undefined, mediaUrl: objectPath, mediaType, mediaFilename: file.name });
+    } catch (e: any) {
+      updateStep(idx, { _uploading: false, _uploadError: e.message ?? 'Upload failed', mediaUrl: undefined, mediaType: undefined, mediaFilename: undefined });
+    }
+  };
+
+  const offsetErrors = steps.map((s, i) => i === 0 ? null : s.hourOffset <= steps[i - 1].hourOffset ? `Must be > ${steps[i - 1].hourOffset}h` : null);
+  const hasOffsetError = offsetErrors.some(Boolean);
+
+  const submit = () => {
+    if (!name.trim()) { toast({ title: 'Name required', variant: 'destructive' }); return; }
+    if (steps.some((s) => !s.message.trim())) { toast({ title: 'All steps need message text', variant: 'destructive' }); return; }
+    if (hasOffsetError) { toast({ title: 'Fix hour offset order', variant: 'destructive' }); return; }
+    if (steps.some((s) => s._uploading)) { toast({ title: 'Wait for uploads to finish', variant: 'destructive' }); return; }
+    editMut.mutate({
+      name: name.trim(),
+      description: description.trim() || undefined,
+      steps: steps.map((s) => ({ hourOffset: s.hourOffset, message: s.message, mediaUrl: s.mediaUrl ?? null, mediaType: s.mediaType ?? null, mediaFilename: s.mediaFilename ?? null })),
+    });
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="p-3 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-700 flex gap-2">
+        <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+        Editing steps replaces all existing steps. Active leads continue from their current position using the new step content.
+      </div>
+      <div className="space-y-2">
+        <Label>Sequence Name *</Label>
+        <Input value={name} onChange={(e) => setName(e.target.value)} />
+      </div>
+      <div className="space-y-2">
+        <Label>Description (optional)</Label>
+        <Input value={description} onChange={(e) => setDescription(e.target.value)} />
+      </div>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <Label>Message Steps</Label>
+          <span className="text-xs text-muted-foreground">Variables: {'{{name}}'}, {'{{storeName}}'}</span>
+        </div>
+        {steps.map((step, idx) => (
+          <div key={idx} className={`border rounded-lg p-4 space-y-3 ${offsetErrors[idx] ? 'border-destructive bg-destructive/5' : 'bg-muted/30'}`}>
+            <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-0.5">
+                <button type="button" disabled={idx === 0} onClick={() => moveStep(idx, -1)} className="p-0.5 rounded text-muted-foreground hover:text-foreground disabled:opacity-25"><ArrowUp className="w-3 h-3" /></button>
+                <button type="button" disabled={idx === steps.length - 1} onClick={() => moveStep(idx, 1)} className="p-0.5 rounded text-muted-foreground hover:text-foreground disabled:opacity-25"><ArrowDown className="w-3 h-3" /></button>
+              </div>
+              {(() => {
+                const unit = effectiveUnit(step);
+                return (
+                  <div className="flex items-center gap-1.5 flex-1 flex-wrap">
+                    <Label className="text-sm font-semibold shrink-0">Send after</Label>
+                    <Input type="number" min={unit === 'days' ? 1 : 0} max={unit === 'days' ? undefined : 48} className="w-20 h-8 text-sm"
+                      value={unit === 'days' ? Math.floor(step.hourOffset / 24) || 1 : step.hourOffset}
+                      onChange={(e) => { const raw = parseInt(e.target.value) || 0; updateStep(idx, { hourOffset: unit === 'days' ? Math.max(1, raw) * 24 : Math.min(48, Math.max(0, raw)) }); }} />
+                    <select className="h-8 text-sm border rounded-md px-2 bg-background" value={unit}
+                      onChange={(e) => { const u = e.target.value as 'hours' | 'days'; updateStep(idx, u === 'days' ? { _unit: 'days', hourOffset: Math.max(1, Math.floor(step.hourOffset / 24)) * 24 } : { _unit: 'hours', hourOffset: Math.min(48, step.hourOffset) }); }}>
+                      <option value="hours">Hours</option>
+                      <option value="days">Days</option>
+                    </select>
+                    {offsetErrors[idx] && <span className="text-xs text-destructive">{offsetErrors[idx]}</span>}
+                  </div>
+                );
+              })()}
+              {steps.length > 1 && <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive shrink-0" onClick={() => removeStep(idx)}><Trash2 className="w-3.5 h-3.5" /></Button>}
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">{step.mediaUrl ? 'Caption' : 'Message text'}</Label>
+              <Textarea rows={3} value={step.message} onChange={(e) => updateStep(idx, { message: e.target.value })} className="font-mono text-sm" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Media attachment (optional)</Label>
+              {step.mediaUrl ? (
+                <div className="flex items-center gap-2 p-2 bg-background border rounded-md text-sm">
+                  <MediaTypeIcon type={step.mediaType ?? 'document'} />
+                  <span className="flex-1 truncate font-medium">{step.mediaFilename}</span>
+                  <Badge variant="outline" className="text-xs">{step.mediaType}</Badge>
+                  <button type="button" onClick={() => clearMedia(idx)} className="text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
+                </div>
+              ) : (
+                <div>
+                  <input ref={(el) => { fileInputRefs.current[idx] = el; }} type="file" accept="image/*,video/*,.pdf,.doc,.docx" className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(idx, f); }} />
+                  <Button type="button" variant="outline" size="sm" className="h-8 text-xs" disabled={step._uploading} onClick={() => fileInputRefs.current[idx]?.click()}>
+                    {step._uploading ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Uploading…</> : <><Upload className="w-3.5 h-3.5 mr-1.5" />Attach media</>}
+                  </Button>
+                </div>
+              )}
+              {step._uploadError && <p className="text-xs text-destructive">{step._uploadError}</p>}
+            </div>
+          </div>
+        ))}
+        <Button variant="outline" onClick={addStep} className="w-full"><Plus className="w-4 h-4 mr-2" />Add Step</Button>
+      </div>
+      <Button onClick={submit} disabled={editMut.isPending || hasOffsetError} className="w-full">
+        {editMut.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}Save Changes
       </Button>
     </div>
   );

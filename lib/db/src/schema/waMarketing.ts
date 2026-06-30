@@ -11,6 +11,7 @@ export const waSessionsTable = pgTable("wa_sessions", {
   warmupDays: integer("warmup_days").notNull().default(14),
   replyRateThreshold: integer("reply_rate_threshold").notNull().default(10),
   isPaused: boolean("is_paused").notNull().default(false),
+  autoEnrollSequenceId: integer("auto_enroll_sequence_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

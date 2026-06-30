@@ -100,6 +100,7 @@ router.patch("/admin/wa/settings", requireAdminAuth, async (req, res) => {
     warmupDays: z.number().int().min(1).max(90).optional(),
     replyRateThreshold: z.number().int().min(0).max(100).optional(),
     isPaused: z.boolean().optional(),
+    autoEnrollSequenceId: z.number().int().nullable().optional(),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
@@ -240,6 +241,65 @@ router.post("/admin/wa/media/request-upload-url", requireAdminAuth, async (req, 
     res.json({ uploadURL, objectPath, mediaType, sizeWarning, filename: name });
   } catch (e: any) {
     res.status(500).json({ error: "Failed to generate upload URL" });
+  }
+});
+
+router.put("/admin/wa/sequences/:id", requireAdminAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+  const stepSchema = z.object({
+    hourOffset: z.number().int().min(0),
+    message: z.string().min(1),
+    mediaUrl: z.string().nullable().optional(),
+    mediaType: z.enum(["image", "video", "document"]).nullable().optional(),
+    mediaFilename: z.string().nullable().optional(),
+  });
+  const schema = z.object({
+    name: z.string().min(1),
+    description: z.string().optional(),
+    steps: z.array(stepSchema).min(1),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid data" });
+    return;
+  }
+  const offsets = parsed.data.steps.map((s) => s.hourOffset);
+  for (let i = 1; i < offsets.length; i++) {
+    if (offsets[i] <= offsets[i - 1]) {
+      res.status(400).json({ error: `Hour offsets must be strictly ascending.` });
+      return;
+    }
+  }
+  try {
+    const [seq] = await db.select().from(waSequencesTable).where(eq(waSequencesTable.id, id)).limit(1);
+    if (!seq) { res.status(404).json({ error: "Sequence not found" }); return; }
+
+    await db.update(waSequencesTable)
+      .set({ name: parsed.data.name, description: parsed.data.description ?? null, updatedAt: new Date() })
+      .where(eq(waSequencesTable.id, id));
+
+    await db.delete(waSequenceStepsTable).where(eq(waSequenceStepsTable.sequenceId, id));
+    if (parsed.data.steps.length > 0) {
+      await db.insert(waSequenceStepsTable).values(
+        parsed.data.steps.map((s) => ({
+          sequenceId: id,
+          hourOffset: s.hourOffset,
+          message: s.message,
+          mediaUrl: s.mediaUrl ?? null,
+          mediaType: s.mediaType ?? null,
+          mediaFilename: s.mediaFilename ?? null,
+        }))
+      );
+    }
+
+    const steps = await db.select().from(waSequenceStepsTable)
+      .where(eq(waSequenceStepsTable.sequenceId, id))
+      .orderBy(waSequenceStepsTable.hourOffset);
+    const [updated] = await db.select().from(waSequencesTable).where(eq(waSequencesTable.id, id));
+    res.json({ ...updated, steps });
+  } catch (e) {
+    res.status(500).json({ error: "Failed to update sequence" });
   }
 });
 

@@ -10,8 +10,15 @@ import {
 import { eq, and, count, gte, gt, asc, sql } from "drizzle-orm";
 import { sendWAMessage, sendWAMediaMessage, getWAState } from "./whatsapp.js";
 
+function normalizeBraces(str: string): string {
+  return str.replace(/[\uFF5B\u2774]/g, "{").replace(/[\uFF5D\u2775]/g, "}");
+}
+
 function interpolate(template: string, vars: Record<string, string>): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`);
+  return normalizeBraces(template).replace(/\{\{\s*(\w+)\s*\}\}/g, (_, key) => {
+    const val = vars[key] ?? vars[key.toLowerCase()];
+    return val !== undefined ? val : `{{${key}}}`;
+  });
 }
 
 function randomDelayMs(minMs: number, maxMs: number): Promise<void> {
