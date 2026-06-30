@@ -623,38 +623,21 @@ function CreateSequenceForm({ onSuccess }: { onSuccess: () => void }) {
 
   const handleFileSelect = async (idx: number, file: File) => {
     const token = localStorage.getItem('chatcart_admin_token') ?? '';
-
-    // Clear previous media state
     updateStep(idx, { _uploading: true, _uploadError: undefined, _sizeWarning: undefined, mediaUrl: undefined, mediaType: undefined, mediaFilename: undefined });
-
     try {
-      // Request presigned URL + get server-determined mediaType and any size warning
-      const res = await fetch('/api/admin/wa/media/request-upload-url', {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/admin/wa/media/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error ?? 'Upload failed');
       }
-      const { uploadURL, objectPath, mediaType, sizeWarning } = await res.json();
-
-      // PUT file directly to GCS presigned URL
-      const putRes = await fetch(uploadURL, {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type },
-        body: file,
-      });
-      if (!putRes.ok) throw new Error('Failed to upload to storage');
-
-      updateStep(idx, {
-        _uploading: false,
-        _sizeWarning: sizeWarning ?? undefined,
-        mediaUrl: objectPath,
-        mediaType,
-        mediaFilename: file.name,
-      });
+      const { objectPath, mediaType, sizeWarning } = await res.json();
+      updateStep(idx, { _uploading: false, _sizeWarning: sizeWarning ?? undefined, mediaUrl: objectPath, mediaType, mediaFilename: file.name });
     } catch (e: any) {
       updateStep(idx, { _uploading: false, _uploadError: e.message ?? 'Upload failed', mediaUrl: undefined, mediaType: undefined, mediaFilename: undefined });
     }
@@ -915,15 +898,15 @@ function EditSequenceForm({ sequence, onSuccess }: { sequence: Sequence; onSucce
     const token = localStorage.getItem('chatcart_admin_token') ?? '';
     updateStep(idx, { _uploading: true, _uploadError: undefined, _sizeWarning: undefined, mediaUrl: undefined, mediaType: undefined, mediaFilename: undefined });
     try {
-      const res = await fetch('/api/admin/wa/media/request-upload-url', {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/admin/wa/media/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
       });
       if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error ?? 'Upload failed'); }
-      const { uploadURL, objectPath, mediaType, sizeWarning } = await res.json();
-      const putRes = await fetch(uploadURL, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file });
-      if (!putRes.ok) throw new Error('Failed to upload to storage');
+      const { objectPath, mediaType, sizeWarning } = await res.json();
       updateStep(idx, { _uploading: false, _sizeWarning: sizeWarning ?? undefined, mediaUrl: objectPath, mediaType, mediaFilename: file.name });
     } catch (e: any) {
       updateStep(idx, { _uploading: false, _uploadError: e.message ?? 'Upload failed', mediaUrl: undefined, mediaType: undefined, mediaFilename: undefined });

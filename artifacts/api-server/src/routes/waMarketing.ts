@@ -1,4 +1,5 @@
 import { Router } from "express";
+import multer from "multer";
 import { requireAdminAuth, verifyAdminToken } from "../middleware/adminAuth.js";
 import { db } from "@workspace/db";
 import {
@@ -23,6 +24,8 @@ import {
 } from "../lib/whatsapp.js";
 import { ObjectStorageService } from "../lib/objectStorage.js";
 import { purgeStaleSessionFiles } from "../lib/waAuthState.js";
+
+const memUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
 
 const router = Router();
 
@@ -198,36 +201,30 @@ router.post("/admin/wa/sequences", requireAdminAuth, async (req, res) => {
 });
 
 // ── Media Upload ───────────────────────────────────────────────────────────────
+// Files are uploaded server-side to avoid CORS issues with direct browser→Spaces uploads.
 
-router.post("/admin/wa/media/request-upload-url", requireAdminAuth, async (req, res) => {
-  const schema = z.object({
-    name: z.string().min(1),
-    size: z.number().int().positive(),
-    contentType: z.string().min(1),
-  });
-  const parsed = schema.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: "Invalid request" }); return; }
+router.post("/admin/wa/media/upload", requireAdminAuth, memUpload.single("file"), async (req, res) => {
+  const file = req.file;
+  if (!file) { res.status(400).json({ error: "No file provided" }); return; }
 
-  const { name, size, contentType } = parsed.data;
-  const isImage = contentType.startsWith("image/");
-  const isVideo = contentType.startsWith("video/");
+  const { originalname, mimetype, size, buffer } = file;
+  const isImage = mimetype.startsWith("image/");
+  const isVideo = mimetype.startsWith("video/");
 
   const MAX_IMAGE = 5 * 1024 * 1024;
   const MAX_VIDEO_OR_DOC = 100 * 1024 * 1024;
 
   if (isImage && size > MAX_IMAGE) {
-    res.status(400).json({ error: `Image too large — maximum 5 MB.` }); return;
+    res.status(400).json({ error: "Image too large — maximum 5 MB." }); return;
   }
   if (!isImage && size > MAX_VIDEO_OR_DOC) {
-    res.status(400).json({ error: `File too large — maximum 100 MB.` }); return;
+    res.status(400).json({ error: "File too large — maximum 100 MB." }); return;
   }
 
   try {
     const storageService = new ObjectStorageService();
-    const uploadURL = await storageService.getObjectEntityUploadURL();
-    const objectPath = storageService.normalizeObjectEntityPath(uploadURL);
+    const objectPath = await storageService.uploadFileBuffer(buffer, mimetype);
 
-    // Determine effective media type (large videos are sent as documents)
     const VIDEO_INLINE_LIMIT = 16 * 1024 * 1024;
     let mediaType: "image" | "video" | "document";
     if (isImage) mediaType = "image";
@@ -235,12 +232,13 @@ router.post("/admin/wa/media/request-upload-url", requireAdminAuth, async (req, 
     else mediaType = "document";
 
     const sizeWarning = isVideo && size > VIDEO_INLINE_LIMIT && size <= MAX_VIDEO_OR_DOC
-      ? `Video is larger than 16 MB — it will be sent as a downloadable document rather than an inline video.`
+      ? "Video is larger than 16 MB — it will be sent as a downloadable document rather than an inline video."
       : null;
 
-    res.json({ uploadURL, objectPath, mediaType, sizeWarning, filename: name });
+    res.json({ objectPath, mediaType, mediaFilename: originalname, sizeWarning });
   } catch (e: any) {
-    res.status(500).json({ error: "Failed to generate upload URL" });
+    console.error("[WA] Media upload failed:", e?.message);
+    res.status(500).json({ error: "Failed to upload file" });
   }
 });
 
