@@ -384,12 +384,24 @@ export async function sendWAMediaMessage(
   const jid = `${phone}@s.whatsapp.net`;
 
   // Download media from object storage into a Buffer (avoids need for public URL)
-  const { ObjectStorageService } = await import("./objectStorage.js");
-  const storageService = new ObjectStorageService();
-  const file = await storageService.getObjectEntityFile(objectPath);
-  const [fileBuffer] = (await (file as any).download()) as [Buffer];
-  const [meta] = await (file as any).getMetadata();
-  const mimetype: string = (meta.contentType as string) || "application/octet-stream";
+  let fileBuffer: Buffer;
+  let mimetype = "application/octet-stream";
+
+  try {
+    const { ObjectStorageService } = await import("./objectStorage.js");
+    const storageService = new ObjectStorageService();
+    const file = await storageService.getObjectEntityFile(objectPath);
+    const [buf] = (await (file as any).download()) as [Buffer];
+    const [meta] = await (file as any).getMetadata();
+    fileBuffer = buf;
+    mimetype = (meta.contentType as string) || "application/octet-stream";
+  } catch (e: any) {
+    // Media not found in storage (deleted or uploaded in a different environment).
+    // Fall back to sending the caption as plain text so the lead still progresses.
+    console.warn(`[WA] Media not found (path="${objectPath}") — sending text-only fallback. Error: ${e?.message}`);
+    await sendWAMessage(phone, caption || "(media unavailable)");
+    return;
+  }
 
   // Simulate composing presence — extended delay accommodates realistic media typing time
   try {
@@ -404,12 +416,12 @@ export async function sendWAMediaMessage(
   }
 
   if (mediaType === "image") {
-    await localSock.sendMessage(jid, { image: fileBuffer, caption, mimetype });
+    await localSock.sendMessage(jid, { image: fileBuffer!, caption, mimetype });
   } else if (mediaType === "video") {
-    await localSock.sendMessage(jid, { video: fileBuffer, caption, mimetype });
+    await localSock.sendMessage(jid, { video: fileBuffer!, caption, mimetype });
   } else {
     await localSock.sendMessage(jid, {
-      document: fileBuffer,
+      document: fileBuffer!,
       mimetype,
       fileName: filename ?? "attachment",
       caption,
