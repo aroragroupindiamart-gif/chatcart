@@ -299,7 +299,7 @@ export default function StoreFront() {
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {filtered.map((p) => (
-              <ProductCard key={p.id} product={p} onClick={() => goToProduct(p.id)} />
+              <ProductCard key={p.id} product={p} layout={seller.productImageLayout ?? "square"} onClick={() => goToProduct(p.id)} />
             ))}
           </div>
         )}
@@ -334,9 +334,11 @@ export default function StoreFront() {
 
 function ProductCard({
   product,
+  layout,
   onClick,
 }: {
   product: Product;
+  layout: "square" | "portrait";
   onClick: () => void;
 }) {
   const primaryImage = product.images[0];
@@ -366,7 +368,7 @@ function ProductCard({
   return (
     <div className="group bg-card border border-card-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-lg transition-all duration-200 w-full">
       <button onClick={onClick} className="w-full text-left">
-        <div className="aspect-square bg-muted overflow-hidden relative">
+        <div className={`${layout === "portrait" ? "aspect-[3/4]" : "aspect-square"} bg-muted overflow-hidden relative`}>
           {primaryImage && !imageError ? (
             <img
               src={imgSrc(primaryImage.url)}

@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 
 export const subscriptionPlanEnum = pgEnum("subscription_plan", ["pending", "starter", "growth", "pro", "lifetime"]);
 export const subscriptionStatusEnum = pgEnum("subscription_status", ["active", "trial", "expired", "cancelled", "suspended"]);
+export const productImageLayoutEnum = pgEnum("product_image_layout", ["square", "portrait"]);
 
 export const sellersTable = pgTable("sellers", {
   id: serial("id").primaryKey(),
@@ -13,6 +14,7 @@ export const sellersTable = pgTable("sellers", {
   whatsappNumber: text("whatsapp_number").notNull(),
   bannerImageUrl: text("banner_image_url"),
   tagline: text("tagline"),
+  productImageLayout: productImageLayoutEnum("product_image_layout").default("square").notNull(),
   tokenVersion: integer("token_version").notNull().default(1),
   subscriptionPlan: subscriptionPlanEnum("subscription_plan").default("pending").notNull(),
   subscriptionStatus: subscriptionStatusEnum("subscription_status").default("trial").notNull(),

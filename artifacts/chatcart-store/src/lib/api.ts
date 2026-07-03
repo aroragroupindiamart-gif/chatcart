@@ -6,6 +6,7 @@ export interface Seller {
   bannerImageUrl: string | null;
   tagline: string | null;
   plan: string | null;
+  productImageLayout: "square" | "portrait" | null;
 }
 
 export interface ProductImage {

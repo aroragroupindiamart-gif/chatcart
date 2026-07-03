@@ -24,12 +24,13 @@ function validateSlug(slug: string): string | null {
 
 router.patch("/sellers/me", requireAuth, requireActiveSubscription, async (req, res) => {
   try {
-    const { storeName, whatsappNumber, bannerImageUrl, tagline, subdomain } = req.body as {
+    const { storeName, whatsappNumber, bannerImageUrl, tagline, subdomain, productImageLayout } = req.body as {
       storeName?: string;
       whatsappNumber?: string;
       bannerImageUrl?: string | null;
       tagline?: string | null;
       subdomain?: string;
+      productImageLayout?: "square" | "portrait";
     };
 
     const hasBrandingUpdate = bannerImageUrl !== undefined || tagline !== undefined;
@@ -51,6 +52,7 @@ router.patch("/sellers/me", requireAuth, requireActiveSubscription, async (req, 
     if (whatsappNumber !== undefined) updates.whatsappNumber = whatsappNumber;
     if (bannerImageUrl !== undefined) updates.bannerImageUrl = bannerImageUrl;
     if (tagline !== undefined) updates.tagline = tagline;
+    if (productImageLayout !== undefined) updates.productImageLayout = productImageLayout;
 
     if (subdomain !== undefined) {
       const err = validateSlug(subdomain);

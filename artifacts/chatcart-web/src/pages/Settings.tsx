@@ -94,6 +94,7 @@ function SettingsContent() {
   const [subdomain, setSubdomain] = useState("");
   const [bannerImageUrl, setBannerImageUrl] = useState<string | null>(null);
   const [tagline, setTagline] = useState("");
+  const [productImageLayout, setProductImageLayout] = useState<"square" | "portrait">("square");
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
@@ -124,6 +125,7 @@ function SettingsContent() {
       setSubdomain((seller as any).subdomain || "");
       setBannerImageUrl((seller as any).bannerImageUrl ?? null);
       setTagline((seller as any).tagline ?? "");
+      setProductImageLayout((seller as any).productImageLayout ?? "square");
     }
   }, [seller]);
 
@@ -141,7 +143,7 @@ function SettingsContent() {
     }
     try {
       await updateSeller.mutateAsync({
-        data: { storeName, whatsappNumber, subdomain } as any
+        data: { storeName, whatsappNumber, subdomain, productImageLayout } as any
       });
       toast({ title: "Store settings updated" });
     } catch (err: any) {
@@ -456,6 +458,32 @@ function SettingsContent() {
             ) : (
               <p className="text-xs text-slate-400">Choose a custom slug for your store link.</p>
             )}
+          </div>
+          <div className="space-y-2">
+            <Label>Product Image Layout</Label>
+            <p className="text-xs text-slate-500">
+              Controls how product photos appear in your customer-facing storefront. Square suits jewellery and accessories; Portrait suits clothing and fashion.
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setProductImageLayout("square")}
+                className={`flex-1 flex flex-col items-center gap-2 rounded-xl border-2 p-3 transition-all ${productImageLayout === "square" ? "border-primary bg-primary/5" : "border-slate-200 hover:border-slate-300"}`}
+              >
+                <div className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200" />
+                <span className={`text-xs font-semibold ${productImageLayout === "square" ? "text-primary" : "text-slate-600"}`}>Square (1:1)</span>
+                <span className="text-xs text-slate-400 text-center leading-tight">Jewellery, accessories, general</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setProductImageLayout("portrait")}
+                className={`flex-1 flex flex-col items-center gap-2 rounded-xl border-2 p-3 transition-all ${productImageLayout === "portrait" ? "border-primary bg-primary/5" : "border-slate-200 hover:border-slate-300"}`}
+              >
+                <div className="w-9 h-12 rounded-lg bg-slate-100 border border-slate-200" />
+                <span className={`text-xs font-semibold ${productImageLayout === "portrait" ? "text-primary" : "text-slate-600"}`}>Portrait (3:4)</span>
+                <span className="text-xs text-slate-400 text-center leading-tight">Clothing, sarees, fashion</span>
+              </button>
+            </div>
           </div>
           <Button onClick={handleSaveStore} disabled={updateSeller.isPending}>
             <Save className="w-4 h-4 mr-2" />
