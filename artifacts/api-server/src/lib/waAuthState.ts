@@ -25,11 +25,13 @@ function getS3Client(): S3Client {
       "Missing DO Spaces config: DO_SPACES_REGION, DO_SPACES_KEY, DO_SPACES_SECRET"
     );
   }
+  const endpoint = process.env.S3_ENDPOINT || `https://${region}.digitaloceanspaces.com`;
+  const forcePathStyle = process.env.S3_ENDPOINT ? true : false;
   return new S3Client({
     region,
-    endpoint: `https://${region}.digitaloceanspaces.com`,
+    endpoint,
     credentials: { accessKeyId: key, secretAccessKey: secret },
-    forcePathStyle: false,
+    forcePathStyle,
   });
 }
 

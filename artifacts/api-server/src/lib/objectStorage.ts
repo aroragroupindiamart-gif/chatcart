@@ -36,22 +36,24 @@ function getSpacesConfig(): {
         "DO_SPACES_KEY, and DO_SPACES_SECRET environment variables."
     );
   }
+  const endpoint = process.env.S3_ENDPOINT || `https://${region}.digitaloceanspaces.com`;
   return {
     region,
     bucket,
     key,
     secret,
-    endpoint: `https://${region}.digitaloceanspaces.com`,
+    endpoint,
   };
 }
 
 export function createS3Client(): S3Client {
   const { region, key, secret, endpoint } = getSpacesConfig();
+  const forcePathStyle = process.env.S3_ENDPOINT ? true : false;
   return new S3Client({
     region,
     endpoint,
     credentials: { accessKeyId: key, secretAccessKey: secret },
-    forcePathStyle: false,
+    forcePathStyle,
   });
 }
 
