@@ -1,13 +1,14 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { Readable } from "stream";
 import multer from "multer";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 import {
   RequestUploadUrlBody,
   RequestUploadUrlResponse,
   RequestLogoUploadUrlBody,
   RequestLogoUploadUrlResponse,
 } from "@workspace/api-zod";
-import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
+import { ObjectStorageService, ObjectNotFoundError, getS3Client, getS3BucketName } from "../lib/objectStorage";
 import { requireAuth } from "../middleware/auth.js";
 import { db } from "@workspace/db";
 import { productImagesTable, productsTable } from "@workspace/db/schema";
@@ -317,24 +318,39 @@ router.get("/public/img/*path", async (req: Request, res: Response) => {
   try {
     const raw = req.params.path;
     const filePath = Array.isArray(raw) ? raw.join("/") : raw;
-    const objectPath = `/objects/${filePath}`;
-    const objectFile = await objectStorageService.getObjectEntityFile(objectPath);
-    const response = await objectStorageService.downloadObject(objectFile, 86400);
+    const s3Key = filePath; // e.g. uploads/<uuid>
 
-    res.status(response.status);
-    response.headers.forEach((value, key) => res.setHeader(key, value));
-    // UUID-based filenames are immutable — cache aggressively in browsers and CDNs
+    const client = getS3Client();
+    const bucket = getS3BucketName();
+
+    // Directly fetch the object using GetObjectCommand in exactly 1 S3 API call
+    const resp = await client.send(
+      new GetObjectCommand({ Bucket: bucket, Key: s3Key })
+    );
+
+    res.setHeader("Content-Type", resp.ContentType || "image/jpeg");
+    if (resp.ContentLength !== undefined) {
+      res.setHeader("Content-Length", String(resp.ContentLength));
+    }
+    
+    // Explicitly allow public caching to let Nginx and browsers cache it aggressively
     res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
 
-    if (response.body) {
+    const body = resp.Body as any;
+    if (body) {
       const { Readable } = await import("stream");
-      const nodeStream = Readable.fromWeb(response.body as ReadableStream<Uint8Array>);
-      nodeStream.pipe(res);
+      if (body instanceof Readable) {
+        body.pipe(res);
+      } else if (body && typeof body[Symbol.asyncIterator] === "function") {
+        Readable.fromWeb(body).pipe(res);
+      } else {
+        res.end();
+      }
     } else {
       res.end();
     }
-  } catch (error) {
-    if (error instanceof ObjectNotFoundError) {
+  } catch (error: any) {
+    if (error.name === "NoSuchKey" || error.name === "NotFound") {
       res.status(404).json({ error: "Image not found" });
       return;
     }

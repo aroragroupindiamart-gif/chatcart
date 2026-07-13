@@ -63,7 +63,7 @@ export function getS3BucketName(): string {
 
 // Singleton client — created lazily so missing env vars only throw at call time.
 let _s3Client: S3Client | null = null;
-function getS3Client(): S3Client {
+export function getS3Client(): S3Client {
   if (!_s3Client) _s3Client = createS3Client();
   return _s3Client;
 }
