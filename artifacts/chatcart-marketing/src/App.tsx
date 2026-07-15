@@ -11,6 +11,7 @@ import Terms from "@/pages/Terms";
 import Privacy from "@/pages/Privacy";
 import Disclaimer from "@/pages/Disclaimer";
 import NotFound from "@/pages/not-found";
+import LandingPage from "@/pages/LandingPage";
 
 const queryClient = new QueryClient();
 
@@ -18,12 +19,25 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
-      <Route path="/about" component={About} />
-      <Route path="/contact" component={Contact} />
-      <Route path="/terms" component={Terms} />
-      <Route path="/privacy" component={Privacy} />
-      <Route path="/disclaimer" component={Disclaimer} />
-      <Route component={NotFound} />
+      <Route path="/lp" component={LandingPage} />
+      <Route path="/about">
+        <Layout><About /></Layout>
+      </Route>
+      <Route path="/contact">
+        <Layout><Contact /></Layout>
+      </Route>
+      <Route path="/terms">
+        <Layout><Terms /></Layout>
+      </Route>
+      <Route path="/privacy">
+        <Layout><Privacy /></Layout>
+      </Route>
+      <Route path="/disclaimer">
+        <Layout><Disclaimer /></Layout>
+      </Route>
+      <Route>
+        <Layout><NotFound /></Layout>
+      </Route>
     </Switch>
   );
 }
@@ -33,9 +47,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Layout>
-            <Router />
-          </Layout>
+          <Router />
         </WouterRouter>
         <Toaster />
       </TooltipProvider>

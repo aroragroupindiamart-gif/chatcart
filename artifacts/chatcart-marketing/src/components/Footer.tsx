@@ -6,11 +6,8 @@ export function Footer() {
       <div className="container mx-auto px-4 py-12 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           <div className="md:col-span-1">
-            <Link href="/" className="flex items-center gap-2 font-bold text-xl tracking-tight text-foreground mb-4">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <span className="text-primary-foreground text-lg leading-none font-bold">C</span>
-              </div>
-              Chatcart
+            <Link href="/" className="flex items-center gap-2 mb-4">
+              <img src="/logo.png" alt="Chatcart Logo" className="h-8 w-auto object-contain" />
             </Link>
             <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
               The catalog that never lets you down. Built by sellers, for sellers.

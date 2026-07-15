@@ -13,6 +13,7 @@ import adminRouter from "./admin";
 import exportRouter from "./export";
 import importCsvRouter from "./importCsv";
 import waMarketingRouter from "./waMarketing";
+import waImportRouter from "./waImport";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(adminRouter);
 router.use(exportRouter);
 router.use(importCsvRouter);
 router.use(waMarketingRouter);
+router.use(waImportRouter);
 
 export default router;

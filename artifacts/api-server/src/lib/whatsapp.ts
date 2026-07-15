@@ -33,6 +33,10 @@ let sock: any = null;
 let reconnectTimer: NodeJS.Timeout | null = null;
 let isLoggedOut = false;
 
+export function getWASocket(): any {
+  return sock;
+}
+
 // Hook called immediately after WA connects — used by the campaign scheduler
 // to flush any pending messages without waiting for the next 60s tick.
 let onConnectHook: (() => void) | null = null;

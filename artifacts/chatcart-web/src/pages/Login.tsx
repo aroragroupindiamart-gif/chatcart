@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useSendOtp, useVerifyOtp } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { setToken } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 export default function Login() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
@@ -41,6 +43,7 @@ export default function Login() {
     verifyOtp.mutate({ data: { phone, otp } }, {
       onSuccess: (data) => {
         setToken(data.token);
+        queryClient.clear();
         setLocation("/dashboard");
       },
       onError: (err) => {
@@ -53,9 +56,9 @@ export default function Login() {
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
         {/* Light-themed header with Chatcart C logo */}
-        <div className="bg-primary p-8 text-white text-center">
-          <div className="mx-auto bg-white/20 w-16 h-16 rounded-2xl flex items-center justify-center mb-6">
-            <span className="text-white text-3xl font-extrabold leading-none">C</span>
+        <div className="bg-primary p-8 text-white text-center flex flex-col items-center">
+          <div className="bg-white p-2 rounded-2xl shadow-sm mb-4">
+            <img src="/logo.png" alt="Chatcart Logo" className="h-12 w-auto object-contain" />
           </div>
           <h1 className="text-2xl font-bold mb-2">Welcome to Chatcart</h1>
           <p className="text-white/80">Manage your catalogue, your way</p>

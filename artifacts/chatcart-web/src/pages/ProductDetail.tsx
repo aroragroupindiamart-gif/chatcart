@@ -668,14 +668,16 @@ function ProductDetailContent() {
   return (
     <div className="space-y-6 max-w-3xl">
       {/* ── Header ── */}
-      <div className="flex items-center gap-4">
-        <Link href="/products" className="p-2 rounded-md hover:bg-slate-100 text-slate-500 transition-colors">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-          {isNew ? "New Product" : "Edit Product"}
-        </h1>
-        <div className="ml-auto flex items-center gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+        <div className="flex items-center gap-3">
+          <Link href="/products" className="p-2 rounded-md hover:bg-slate-100 text-slate-500 transition-colors">
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            {isNew ? "New Product" : "Edit Product"}
+          </h1>
+        </div>
+        <div className="flex items-center flex-wrap gap-2 w-full sm:w-auto justify-end">
           {!isNew && (
             <>
               <Button variant="outline" size="sm" onClick={handleShare}>
@@ -688,7 +690,7 @@ function ProductDetailContent() {
               </Button>
             </>
           )}
-          <Button onClick={handleSave} disabled={isSaving || isUploadingAfterCreate}>
+          <Button onClick={handleSave} disabled={isSaving || isUploadingAfterCreate} size="sm">
             {isUploadingAfterCreate ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />

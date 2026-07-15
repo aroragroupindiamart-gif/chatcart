@@ -3,6 +3,7 @@ import { Layout } from "@/components/Layout";
 import { useListOrders } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
+import { useState, useEffect } from "react";
 
 export default function Orders() {
   return (
@@ -16,6 +17,22 @@ export default function Orders() {
 
 function OrdersContent() {
   const { data, isLoading } = useListOrders();
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const ua = window.navigator?.userAgent || "";
+    const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+    return isMobileUA || window.innerWidth < 1024;
+  });
+
+  useEffect(() => {
+    const ua = window.navigator?.userAgent || "";
+    const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+    const checkMobile = () => {
+      setIsMobile(isMobileUA || window.innerWidth < 1024);
+    };
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -30,7 +47,14 @@ function OrdersContent() {
         ) : data?.orders && data.orders.length > 0 ? (
           <div className="divide-y divide-slate-100">
             {data.orders.map((order) => (
-              <div key={order.id} className="p-4 flex items-start justify-between gap-2 hover:bg-slate-50 transition-colors">
+              <div
+                key={order.id}
+                className="p-4 flex justify-between gap-3 hover:bg-slate-50 transition-colors"
+                style={{
+                  flexDirection: isMobile ? "column" : "row",
+                  alignItems: isMobile ? "stretch" : "flex-start",
+                }}
+              >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap mb-0.5">
                     <h3 className="font-bold text-slate-900 truncate max-w-[160px] sm:max-w-xs">{order.id}</h3>
@@ -47,14 +71,19 @@ function OrdersContent() {
                   </p>
                 </div>
 
-                <div className="flex items-center gap-3 shrink-0">
-                  <div className="text-right">
+                <div
+                  className="flex items-center gap-3 shrink-0"
+                  style={{
+                    width: isMobile ? "100%" : "auto",
+                    justifyContent: isMobile ? "space-between" : "flex-end",
+                  }}
+                >
+                  <div style={{ textAlign: isMobile ? "left" : "right" }}>
                     <p className="font-bold text-slate-900 text-sm">₹{order.totalAmount}</p>
                     <p className="text-xs text-slate-500">{order.itemCount} items</p>
                   </div>
                   <Link href={`/orders/${order.id}`} className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-9 px-3 py-2">
-                    <span className="sm:hidden">View</span>
-                    <span className="hidden sm:inline">View Details</span>
+                    {isMobile ? "View" : "View Details"}
                   </Link>
                 </div>
               </div>

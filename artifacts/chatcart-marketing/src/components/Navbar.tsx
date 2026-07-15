@@ -20,11 +20,8 @@ export function Navbar() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
           <div className="flex items-center gap-2">
-            <Link href="/" className="flex items-center gap-2 font-bold text-xl tracking-tight text-foreground">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <span className="text-primary-foreground text-lg leading-none font-bold">C</span>
-              </div>
-              Chatcart
+            <Link href="/" className="flex items-center gap-2">
+              <img src="/logo.png" alt="Chatcart Logo" className="h-8 w-auto object-contain" />
             </Link>
           </div>
 

@@ -538,4 +538,143 @@ router.delete(
   }
 );
 
+router.post(
+  "/products/bulk-category",
+  requireAuth,
+  requireActiveSubscription,
+  async (req, res) => {
+    try {
+      const { productIds, categoryId } = req.body as {
+        productIds: number[];
+        categoryId: number | null;
+      };
+
+      if (!Array.isArray(productIds) || productIds.length === 0) {
+        res.status(400).json({ error: "Product IDs array is required" });
+        return;
+      }
+
+      await db
+        .update(productsTable)
+        .set({ categoryId })
+        .where(
+          and(
+            eq(productsTable.sellerId, req.seller!.sellerId),
+            inArray(productsTable.id, productIds)
+          )
+        );
+
+      res.json({ success: true, count: productIds.length });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to update bulk categories" });
+    }
+  }
+);
+
+router.post(
+  "/products/bulk-status",
+  requireAuth,
+  requireActiveSubscription,
+  async (req, res) => {
+    try {
+      const { productIds, status } = req.body as {
+        productIds: number[];
+        status: "active" | "out_of_stock" | "hidden" | "deleted";
+      };
+
+      if (!Array.isArray(productIds) || productIds.length === 0) {
+        res.status(400).json({ error: "Product IDs array is required" });
+        return;
+      }
+
+      const validStatuses = ["active", "out_of_stock", "hidden", "deleted"];
+      if (!validStatuses.includes(status)) {
+        res.status(400).json({ error: "Invalid status value" });
+        return;
+      }
+
+      if (status === "active") {
+        const plan = await getSellerPlan(req.seller!.sellerId);
+        const limits = getPlanLimits(plan);
+        if (limits.maxActiveProducts !== null) {
+          const activeCount = await countActiveProducts(req.seller!.sellerId);
+          const productsToActivate = await db
+            .select({ id: productsTable.id })
+            .from(productsTable)
+            .where(
+              and(
+                eq(productsTable.sellerId, req.seller!.sellerId),
+                inArray(productsTable.id, productIds),
+                ne(productsTable.status, "active")
+              )
+            );
+          
+          if (activeCount + productsToActivate.length > limits.maxActiveProducts) {
+            res.status(403).json({
+              error: `Your plan allows up to ${limits.maxActiveProducts} active products. Activating these items exceeds your limit.`,
+              upgradeRequired: true,
+            });
+            return;
+          }
+        }
+      }
+
+      await db
+        .update(productsTable)
+        .set({ status })
+        .where(
+          and(
+            eq(productsTable.sellerId, req.seller!.sellerId),
+            inArray(productsTable.id, productIds)
+          )
+        );
+
+      res.json({ success: true, count: productIds.length });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to update bulk status" });
+    }
+  }
+);
+
+router.post(
+  "/products/bulk-stock",
+  requireAuth,
+  requireActiveSubscription,
+  async (req, res) => {
+    try {
+      const { productIds, stockCount } = req.body as {
+        productIds: number[];
+        stockCount: number;
+      };
+
+      if (!Array.isArray(productIds) || productIds.length === 0) {
+        res.status(400).json({ error: "Product IDs array is required" });
+        return;
+      }
+
+      if (typeof stockCount !== "number" || stockCount < 0) {
+        res.status(400).json({ error: "Invalid stock count value" });
+        return;
+      }
+
+      await db
+        .update(productsTable)
+        .set({ stockCount })
+        .where(
+          and(
+            eq(productsTable.sellerId, req.seller!.sellerId),
+            inArray(productsTable.id, productIds)
+          )
+        );
+
+      res.json({ success: true, count: productIds.length });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to update bulk stock" });
+    }
+  }
+);
+
 export default router;
