@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-cd /opt/chatcart
+cd "$(dirname "$0")"
 
 echo ""
 echo "========================================"
