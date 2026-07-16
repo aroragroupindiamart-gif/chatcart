@@ -44,7 +44,19 @@ docker compose exec -T nginx nginx -s reload 2>/dev/null || docker compose resta
 echo "        Done."
 echo ""
 
-echo "[ 6/6 ] Fixing WhatsApp session permissions..."
+echo "[ 6/7 ] Verifying live system health..."
+if ! node scripts/verify_system.mjs https://chatcart.in; then
+  echo "❌ LIVE SYSTEM VERIFICATION FAILED! Rolling back deployment immediately..."
+  git reset --hard HEAD@{1}
+  docker compose up -d
+  docker compose exec -T nginx nginx -s reload
+  echo "⏪ Rollback complete. Production has been restored to the previous version."
+  exit 1
+fi
+echo "        Done. All live checks passed."
+echo ""
+
+echo "[ 7/7 ] Fixing WhatsApp session permissions..."
 chmod -R 777 docker-data/wa-session 2>/dev/null || true
 echo "        Done."
 echo ""
