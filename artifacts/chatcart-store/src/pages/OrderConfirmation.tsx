@@ -169,6 +169,8 @@ export default function OrderConfirmation() {
     ? `https://wa.me/${phone}?text=${encodeURIComponent(waText)}`
     : null;
 
+  const totalItemsCount = order.items.reduce((sum, item) => sum + item.quantity, 0);
+
   return (
     <div className="min-h-screen bg-background">
       <header className="bg-card border-b border-border shadow-sm">
@@ -259,7 +261,9 @@ export default function OrderConfirmation() {
               </div>
             ))}
             <div className="px-4 py-3 flex justify-between bg-muted/30">
-              <span className="font-semibold">Total</span>
+              <span className="font-semibold">
+                Total ({totalItemsCount} {totalItemsCount === 1 ? "item" : "items"})
+              </span>
               <span className="font-bold text-primary">
                 {formatPrice(order.totalAmount)}
               </span>
