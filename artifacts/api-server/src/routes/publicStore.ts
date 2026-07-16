@@ -425,9 +425,13 @@ router.get("/public/storefront-html/:subdomain", async (req, res) => {
       
       let imgUrl = "https://chatcart.in/store/opengraph.jpg";
       if (seller.bannerImageUrl) {
-        imgUrl = seller.bannerImageUrl.startsWith("http")
-          ? seller.bannerImageUrl
-          : `https://chatcart.in${seller.bannerImageUrl.startsWith("/") ? "" : "/"}${seller.bannerImageUrl}`;
+        let cleanPath = seller.bannerImageUrl;
+        if (cleanPath.startsWith("/objects/")) {
+          cleanPath = `/api/public/img/${cleanPath.substring(9)}`;
+        }
+        imgUrl = cleanPath.startsWith("http")
+          ? cleanPath
+          : `https://chatcart.in${cleanPath.startsWith("/") ? "" : "/"}${cleanPath}`;
       }
 
       html = html

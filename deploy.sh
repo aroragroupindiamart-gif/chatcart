@@ -21,6 +21,7 @@ docker run --rm \
   node:20-slim sh -c "
     corepack enable && corepack prepare pnpm@10.26.1 --activate &&
     pnpm install --frozen-lockfile &&
+    pnpm --filter @workspace/api-server run build &&
     PORT=3000 BASE_PATH='/' NODE_ENV=production pnpm --filter @workspace/chatcart-marketing run build &&
     PORT=3001 BASE_PATH='/admin/' NODE_ENV=production pnpm --filter @workspace/chatcart-admin run build &&
     PORT=3002 BASE_PATH='/store/' NODE_ENV=production pnpm --filter @workspace/chatcart-store run build &&
