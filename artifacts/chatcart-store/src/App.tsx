@@ -3,9 +3,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { CartProvider } from "@/contexts/CartContext";
-import StoreFront from "@/pages/StoreFront";
-import ProductPage from "@/pages/ProductPage";
-import OrderConfirmation from "@/pages/OrderConfirmation";
+import { lazy, Suspense } from "react";
+
+const StoreFront = lazy(() => import("@/pages/StoreFront"));
+const ProductPage = lazy(() => import("@/pages/ProductPage"));
+const OrderConfirmation = lazy(() => import("@/pages/OrderConfirmation"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,15 +30,21 @@ function NotFound() {
 
 function Router() {
   return (
-    <Switch>
-      <Route path="/">
-        <Redirect to={`/${DEMO_SUBDOMAIN}`} />
-      </Route>
-      <Route path="/orders/:orderId" component={OrderConfirmation} />
-      <Route path="/:subdomain/p/:productId" component={ProductPage} />
-      <Route path="/:subdomain" component={StoreFront} />
-      <Route component={NotFound} />
-    </Switch>
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    }>
+      <Switch>
+        <Route path="/">
+          <Redirect to={`/${DEMO_SUBDOMAIN}`} />
+        </Route>
+        <Route path="/orders/:orderId" component={OrderConfirmation} />
+        <Route path="/:subdomain/p/:productId" component={ProductPage} />
+        <Route path="/:subdomain" component={StoreFront} />
+        <Route component={NotFound} />
+      </Switch>
+    </Suspense>
   );
 }
 
