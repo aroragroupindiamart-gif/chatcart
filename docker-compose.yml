@@ -29,6 +29,8 @@ services:
       WA_SESSION_DIR: /data/wa-session
     volumes:
       - ./docker-data/wa-session:/data/wa-session
+      - ./artifacts/chatcart-store/dist/public/index.html:/app/store-index.html:ro
+      - ./artifacts/api-server/dist:/app/artifacts/api-server/dist:ro
     ports:
       - "127.0.0.1:8080:8080"
     healthcheck:

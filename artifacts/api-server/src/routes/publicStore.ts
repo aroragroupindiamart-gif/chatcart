@@ -1,4 +1,6 @@
 import { Router } from "express";
+import { readFileSync } from "fs";
+import path from "path";
 import rateLimit from "express-rate-limit";
 import { db } from "@workspace/db";
 import {
@@ -393,6 +395,57 @@ router.get("/public/ltd-status", async (_req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch LTD status" });
+  }
+});
+
+router.get("/public/storefront-html/:subdomain", async (req, res) => {
+  try {
+    const { subdomain } = req.params;
+    const [seller] = await db
+      .select({
+        storeName: sellersTable.storeName,
+        tagline: sellersTable.tagline,
+        bannerImageUrl: sellersTable.bannerImageUrl,
+        subdomain: sellersTable.subdomain,
+      })
+      .from(sellersTable)
+      .where(eq(sellersTable.subdomain, subdomain))
+      .limit(1);
+
+    let htmlPath = "/app/store-index.html";
+    if (process.env.NODE_ENV !== "production") {
+      htmlPath = path.resolve(process.cwd(), "artifacts/chatcart-store/dist/public/index.html");
+    }
+
+    let html = readFileSync(htmlPath, "utf-8");
+
+    if (seller) {
+      const title = `${seller.storeName || seller.subdomain} | WhatsApp Catalog`;
+      const desc = seller.tagline || "Browse our products and place orders directly on WhatsApp.";
+      
+      let imgUrl = "https://chatcart.in/store/opengraph.jpg";
+      if (seller.bannerImageUrl) {
+        imgUrl = seller.bannerImageUrl.startsWith("http")
+          ? seller.bannerImageUrl
+          : `https://chatcart.in${seller.bannerImageUrl.startsWith("/") ? "" : "/"}${seller.bannerImageUrl}`;
+      }
+
+      html = html
+        .replace(/<title>[^<]+<\/title>/g, `<title>${title}</title>`)
+        .replace(/<meta property="og:title" content="[^"]+" \/>/g, `<meta property="og:title" content="${title}" />`)
+        .replace(/<meta name="twitter:title" content="[^"]+" \/>/g, `<meta name="twitter:title" content="${title}" />`)
+        .replace(/<meta name="description" content="[^"]+" \/>/g, `<meta name="description" content="${desc}" />`)
+        .replace(/<meta property="og:description" content="[^"]+" \/>/g, `<meta property="og:description" content="${desc}" />`)
+        .replace(/<meta name="twitter:description" content="[^"]+" \/>/g, `<meta name="twitter:description" content="${desc}" />`)
+        .replace(/<meta property="og:image" content="[^"]+" \/>/g, `<meta property="og:image" content="${imgUrl}" />`)
+        .replace(/<meta name="twitter:image" content="[^"]+" \/>/g, `<meta name="twitter:image" content="${imgUrl}" />`);
+    }
+
+    res.setHeader("Content-Type", "text/html");
+    res.send(html);
+  } catch (err) {
+    console.error("[Storefront HTML Generator] Error:", err);
+    res.status(500).send("Error loading storefront");
   }
 });
 
