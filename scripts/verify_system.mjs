@@ -7,6 +7,18 @@ console.log(`\x1b[36m[Verification Agent] Testing target: ${target}\x1b[0m\n`);
 async function assertUrl(url, options = {}) {
   const start = performance.now();
   try {
+    const urlObj = new URL(url);
+    if (urlObj.username || urlObj.password) {
+      const creds = Buffer.from(`${decodeURIComponent(urlObj.username)}:${decodeURIComponent(urlObj.password)}`).toString("base64");
+      options.headers = {
+        ...options.headers,
+        "Authorization": `Basic ${creds}`,
+      };
+      urlObj.username = "";
+      urlObj.password = "";
+      url = urlObj.toString();
+    }
+    
     const res = await fetch(url, options);
     const duration = performance.now() - start;
     
