@@ -45,11 +45,11 @@ function keyPrefix(): string {
   return `${WA_SESSION_PREFIX}/`;
 }
 
-// Upload creds.json + lid-mapping-*.json files to DO Spaces.
-// lid-mapping files are small and essential for resolving @lid JIDs to phone
-// numbers across container restarts. All other signal keys (pre-key, session,
-// sender-key) are ephemeral and regenerated automatically by Baileys.
-export async function uploadCredsToStorage(localDir: string): Promise<void> {
+const uploadedLidFiles = new Set<string>();
+let uploadTimeout: NodeJS.Timeout | null = null;
+
+// Raw S3 upload function (non-debounced)
+async function doUploadCredsToStorage(localDir: string): Promise<void> {
   try {
     const { readdir } = await import("fs/promises");
     const client = getS3Client();
@@ -58,8 +58,10 @@ export async function uploadCredsToStorage(localDir: string): Promise<void> {
 
     const allFiles = await readdir(localDir);
     const filesToUpload = allFiles.filter(
-      (f) => f === CREDS_FILENAME || f.startsWith("lid-mapping-")
+      (f) => f === CREDS_FILENAME || (f.startsWith("lid-mapping-") && !uploadedLidFiles.has(f))
     );
+
+    if (filesToUpload.length === 0) return;
 
     for (const filename of filesToUpload) {
       const localPath = path.join(localDir, filename);
@@ -74,6 +76,9 @@ export async function uploadCredsToStorage(localDir: string): Promise<void> {
             ContentType: "application/json",
           })
         );
+        if (filename.startsWith("lid-mapping-")) {
+          uploadedLidFiles.add(filename);
+        }
       } catch (e) {
         console.error(`[WA-AUTH] Failed to upload ${filename}:`, e);
       }
@@ -85,6 +90,21 @@ export async function uploadCredsToStorage(localDir: string): Promise<void> {
   } catch (e) {
     console.error("[WA-AUTH] Failed to upload session files to storage:", e);
   }
+}
+
+// Debounced wrapper to prevent CPU/network thrashing during high-activity syncs
+export async function uploadCredsToStorage(localDir: string): Promise<void> {
+  if (uploadTimeout) {
+    clearTimeout(uploadTimeout);
+  }
+
+  return new Promise((resolve) => {
+    uploadTimeout = setTimeout(async () => {
+      uploadTimeout = null;
+      await doUploadCredsToStorage(localDir);
+      resolve();
+    }, 10000); // 10-second debounce
+  });
 }
 
 export async function downloadSessionFromStorage(): Promise<boolean> {
