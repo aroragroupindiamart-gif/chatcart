@@ -29,7 +29,7 @@ COMPRESSED_FILE="${DUMP_FILE}.gz"
 BACKUP_FILE="chatcart-${TIMESTAMP}.sql.gz"
 S3_PREFIX="backups"
 S3_URI="s3://${DO_SPACES_BUCKET}/${S3_PREFIX}/${BACKUP_FILE}"
-ENDPOINT_URL="https://${DO_SPACES_REGION}.digitaloceanspaces.com"
+ENDPOINT_URL="${S3_ENDPOINT:-https://${DO_SPACES_REGION}.digitaloceanspaces.com}"
 RETAIN_DAYS=30
 
 echo "[backup] $(date -u '+%Y-%m-%d %H:%M:%S UTC') — starting backup"
@@ -73,7 +73,10 @@ aws s3 cp "${COMPRESSED_FILE}" "${S3_URI}" \
 echo "[backup] uploaded to ${S3_URI}"
 
 # ── 4. Prune DB backups older than RETAIN_DAYS days ─────────────────────────
-CUTOFF="$(date -u -d "${RETAIN_DAYS} days ago" '+%Y-%m-%dT%H:%M:%S')"
+SECONDS_IN_DAY=86400
+CUTOFF_SECONDS=$(( RETAIN_DAYS * SECONDS_IN_DAY ))
+CUTOFF_EPOCH=$(( $(date +%s) - CUTOFF_SECONDS ))
+CUTOFF="$(date -u -d "@${CUTOFF_EPOCH}" '+%Y-%m-%dT%H:%M:%S')"
 
 echo "[backup] pruning DB backups older than ${RETAIN_DAYS} days (before ${CUTOFF} UTC)"
 
@@ -91,21 +94,11 @@ aws s3 ls "s3://${DO_SPACES_BUCKET}/${S3_PREFIX}/" \
 
 echo "[backup] DB backup complete"
 
-# ── 5. Mirror image files into image-backup/ ─────────────────────────────────
-# Syncs all uploaded product images to a separate prefix in the same bucket.
-# --delete keeps the mirror consistent when images are deleted in the live store.
-# This is a rolling single-copy mirror (not versioned), so storage cost is
-# approximately 2x current image storage — not 30x.
-echo "[backup] syncing image files to image-backup/ mirror…"
-
-aws s3 sync \
-  "s3://${DO_SPACES_BUCKET}/" \
-  "s3://${DO_SPACES_BUCKET}/image-backup/" \
-  --endpoint-url="${ENDPOINT_URL}" \
-  --exclude "backups/*" \
-  --exclude "image-backup/*" \
-  --delete \
-  --no-progress
-
-echo "[backup] image mirror sync complete"
+# ── 5. Mirror image files into image-backup/ (Deactivated for Cloudflare R2) ──
+# S3-to-S3 copying inside Cloudflare R2 via AWS CLI fails because R2 does not
+# implement GetObjectTagging or x-amz-tagging-directive.
+# For image protection, enable native R2 Bucket Versioning in the Cloudflare
+# Dashboard. This is more efficient, has zero server CPU overhead, and keeps
+# previous/deleted versions automatically.
+echo "[backup] Note: Image mirror sync skipped. Use native R2 bucket versioning for image protection."
 echo "[backup] $(date -u '+%Y-%m-%d %H:%M:%S UTC') — all done"
