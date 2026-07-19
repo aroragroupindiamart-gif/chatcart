@@ -46,7 +46,7 @@ echo "        Done."
 echo ""
 
 echo "[ 6/7 ] Verifying live system health..."
-if ! node scripts/verify_system.mjs https://chatcart.in; then
+if ! docker run --rm --net=host -v "$(pwd)":/workspace -w /workspace node:20-slim node scripts/verify_system.mjs https://chatcart.in; then
   echo "❌ LIVE SYSTEM VERIFICATION FAILED! Rolling back deployment immediately..."
   git reset --hard HEAD@{1}
   docker compose up -d
