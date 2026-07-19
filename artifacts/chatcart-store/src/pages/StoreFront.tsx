@@ -166,7 +166,7 @@ export default function StoreFront() {
           >
             {seller.bannerImageUrl ? (
               <img
-                src={imgSrc(seller.bannerImageUrl)}
+                src={imgSrc(seller.bannerImageUrl) + "?w=100"}
                 alt={seller.storeName ?? ""}
                 className="w-7 h-7 rounded-full object-cover shrink-0 border border-border/40"
               />
@@ -200,7 +200,7 @@ export default function StoreFront() {
           <div className="max-w-3xl mx-auto px-4 py-5 flex items-center gap-4">
             {seller.bannerImageUrl && (
               <img
-                src={imgSrc(seller.bannerImageUrl)}
+                src={imgSrc(seller.bannerImageUrl) + "?w=200"}
                 alt={seller.storeName ?? ""}
                 className="w-14 h-14 rounded-xl object-cover border border-border shrink-0"
               />
@@ -371,7 +371,7 @@ function ProductCard({
         <div className={`${layout === "portrait" ? "aspect-[3/4]" : "aspect-square"} bg-muted overflow-hidden relative`}>
           {primaryImage && !imageError ? (
             <img
-              src={imgSrc(primaryImage.url)}
+              src={imgSrc(primaryImage.url) + "?w=400"}
               alt={product.name}
               loading="lazy"
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"

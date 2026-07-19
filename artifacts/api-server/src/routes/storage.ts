@@ -13,6 +13,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { db } from "@workspace/db";
 import { productImagesTable, productsTable } from "@workspace/db/schema";
 import { eq, and, count } from "drizzle-orm";
+import sharp from "sharp";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -329,20 +330,39 @@ router.get("/public/img/*path", async (req: Request, res: Response) => {
     );
 
     res.setHeader("Content-Type", resp.ContentType || "image/jpeg");
-    if (resp.ContentLength !== undefined) {
-      res.setHeader("Content-Length", String(resp.ContentLength));
-    }
     
     // Explicitly allow public caching to let Nginx and browsers cache it aggressively
     res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
 
+    const width = req.query.w ? parseInt(req.query.w as string, 10) : null;
+
     const body = resp.Body as any;
     if (body) {
       const { Readable } = await import("stream");
+      let stream: any;
       if (body instanceof Readable) {
-        body.pipe(res);
+        stream = body;
       } else if (body && typeof body[Symbol.asyncIterator] === "function") {
-        Readable.fromWeb(body).pipe(res);
+        stream = Readable.fromWeb(body);
+      }
+
+      if (stream && width && width > 0 && width < 1200) {
+        const chunks: any[] = [];
+        for await (const chunk of stream) {
+          chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+        }
+        const buffer = Buffer.concat(chunks);
+        const resizedBuffer = await sharp(buffer)
+          .resize(width, null, { fit: "inside", withoutEnlargement: true })
+          .toBuffer();
+
+        res.setHeader("Content-Length", String(resizedBuffer.length));
+        res.end(resizedBuffer);
+      } else if (stream) {
+        if (resp.ContentLength !== undefined) {
+          res.setHeader("Content-Length", String(resp.ContentLength));
+        }
+        stream.pipe(res);
       } else {
         res.end();
       }

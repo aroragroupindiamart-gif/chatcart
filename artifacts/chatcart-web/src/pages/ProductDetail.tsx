@@ -264,6 +264,9 @@ function ProductDetailContent() {
   const { data: meData } = useGetMe();
   const { data: categories } = useListCategories();
 
+  const plan = meData?.subscriptionPlan ?? "starter";
+  const hasVariantsAccess = plan === "growth" || plan === "pro" || plan === "lifetime";
+
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
@@ -297,6 +300,7 @@ function ProductDetailContent() {
   const [categoryId, setCategoryId] = useState<string>("");
   const [status, setStatus] = useState<string>("active");
   const [showWhenOutOfStock, setShowWhenOutOfStock] = useState(false);
+  const [variants, setVariants] = useState<Array<{ id?: number; variantType: string; options: string[] }>>([]);
 
   useEffect(() => {
     if (product && !isNew) {
@@ -308,6 +312,13 @@ function ProductDetailContent() {
       setCategoryId(product.categoryId?.toString() || "");
       setStatus(product.status);
       setShowWhenOutOfStock(product.showWhenOutOfStock);
+      setVariants(
+        (product.variants || []).map((v: any) => ({
+          id: v.id,
+          variantType: v.label || v.variantType,
+          options: v.options || [],
+        }))
+      );
     }
   }, [product, isNew]);
 
@@ -486,6 +497,22 @@ function ProductDetailContent() {
 
         const newId = newProduct.id;
 
+        // Save product variants
+        if (variants.length > 0) {
+          for (const v of variants) {
+            if (v.options.length > 0 && v.variantType.trim()) {
+              await fetch(`/api/products/${newId}/variants`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${localStorage.getItem("chatcart_token")}`,
+                },
+                body: JSON.stringify({ variantType: v.variantType, options: v.options }),
+              });
+            }
+          }
+        }
+
         if (pendingFiles.length > 0) {
           setIsUploadingAfterCreate(true);
           const snapshot = [...pendingFiles];
@@ -525,6 +552,32 @@ function ProductDetailContent() {
             showWhenOutOfStock,
           },
         });
+
+        // Sync product variants (delete old, insert new)
+        if (product?.variants && product.variants.length > 0) {
+          for (const orig of product.variants) {
+            await fetch(`/api/products/${productId}/variants/${orig.id}`, {
+              method: "DELETE",
+              headers: {
+                "Authorization": `Bearer ${localStorage.getItem("chatcart_token")}`,
+              },
+            });
+          }
+        }
+
+        for (const v of variants) {
+          if (v.options.length > 0 && v.variantType.trim()) {
+            await fetch(`/api/products/${productId}/variants`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${localStorage.getItem("chatcart_token")}`,
+              },
+              body: JSON.stringify({ variantType: v.variantType, options: v.options }),
+            });
+          }
+        }
+
         queryClient.invalidateQueries({ queryKey: getGetProductQueryKey(productId) });
         toast({ title: "Product updated successfully" });
         setLocation("/products");
@@ -1020,6 +1073,159 @@ function ProductDetailContent() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* ── Product Variants ── */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-6">
+        <div>
+          <h2 className="text-base font-semibold text-slate-900">Product Variants</h2>
+          <p className="text-sm text-slate-500">Enable size, color, or custom attributes for this product</p>
+        </div>
+
+        {/* Plan Upgrade Warning */}
+        {!hasVariantsAccess ? (
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 text-sm text-purple-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold">Variants are locked on the Starter plan</p>
+              <p className="text-xs text-purple-700 mt-0.5">Upgrade to the Growth or Pro plan to configure size, color, or custom variants for your products.</p>
+            </div>
+            <Link href="/settings">
+              <Button size="sm" className="bg-purple-600 hover:bg-purple-700 text-white shrink-0">Upgrade Plan</Button>
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Quick pre-built toggles */}
+            <div className="flex flex-wrap gap-6 pt-2">
+              <div className="flex items-center space-x-3">
+                <Switch
+                  id="variant-size"
+                  checked={variants.some(v => v.variantType.toLowerCase() === "size")}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setVariants(prev => [...prev, { variantType: "Size", options: [] }]);
+                    } else {
+                      setVariants(prev => prev.filter(v => v.variantType.toLowerCase() !== "size"));
+                    }
+                  }}
+                />
+                <Label htmlFor="variant-size" className="font-medium cursor-pointer">Size Options</Label>
+              </div>
+
+              <div className="flex items-center space-x-3">
+                <Switch
+                  id="variant-color"
+                  checked={variants.some(v => v.variantType.toLowerCase() === "color")}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      setVariants(prev => [...prev, { variantType: "Color", options: [] }]);
+                    } else {
+                      setVariants(prev => prev.filter(v => v.variantType.toLowerCase() !== "color"));
+                    }
+                  }}
+                />
+                <Label htmlFor="variant-color" className="font-medium cursor-pointer">Color Options</Label>
+              </div>
+            </div>
+
+            {/* List of active variants */}
+            {variants.length > 0 && (
+              <div className="space-y-4 pt-4 border-t border-slate-100">
+                {variants.map((v, vIndex) => {
+                  const isPrebuilt = v.variantType.toLowerCase() === "size" || v.variantType.toLowerCase() === "color";
+                  return (
+                    <div key={vIndex} className="bg-slate-50 rounded-lg p-4 border border-slate-100 relative space-y-3">
+                      <div className="flex items-center justify-between">
+                        {isPrebuilt ? (
+                          <span className="text-sm font-semibold text-slate-800">{v.variantType}</span>
+                        ) : (
+                          <div className="flex items-center gap-2 max-w-xs">
+                            <Label className="text-xs text-slate-500 shrink-0">Variant Name:</Label>
+                            <Input
+                              size={20}
+                              value={v.variantType}
+                              placeholder="e.g. Material"
+                              className="h-8 py-1 text-sm bg-white"
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setVariants(prev => prev.map((item, idx) => idx === vIndex ? { ...item, variantType: val } : item));
+                              }}
+                            />
+                          </div>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-slate-400 hover:text-red-500 absolute top-2 right-2"
+                          onClick={() => {
+                            setVariants(prev => prev.filter((_, idx) => idx !== vIndex));
+                          }}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+
+                      {/* Options tags editor */}
+                      <div className="space-y-2">
+                        <Label className="text-xs text-slate-500">Options:</Label>
+                        <div className="flex flex-wrap gap-1.5 min-h-8 p-2 rounded-md bg-white border border-slate-200">
+                          {v.options.map((opt, oIdx) => (
+                            <div key={opt} className="inline-flex items-center gap-1 bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs px-2 py-0.5 rounded-full font-medium">
+                              <span>{opt}</span>
+                              <button
+                                type="button"
+                                className="text-indigo-400 hover:text-indigo-600 focus:outline-none"
+                                onClick={() => {
+                                  setVariants(prev => prev.map((item, idx) => idx === vIndex ? { ...item, options: item.options.filter((_, o) => o !== oIdx) } : item));
+                                }}
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ))}
+                          <input
+                            type="text"
+                            placeholder={v.options.length === 0 ? "Type option and press Enter (e.g. S, M, L)" : "Add option..."}
+                            className="flex-1 min-w-[120px] outline-none text-xs text-slate-800 bg-transparent"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                const val = e.currentTarget.value.trim();
+                                if (val && !v.options.includes(val)) {
+                                  setVariants(prev => prev.map((item, idx) => idx === vIndex ? { ...item, options: [...item.options, val] } : item));
+                                  e.currentTarget.value = "";
+                                }
+                              }
+                            }}
+                            onBlur={(e) => {
+                              const val = e.target.value.trim();
+                              if (val && !v.options.includes(val)) {
+                                setVariants(prev => prev.map((item, idx) => idx === vIndex ? { ...item, options: [...item.options, val] } : item));
+                                e.target.value = "";
+                              }
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="border-dashed"
+              onClick={() => {
+                setVariants(prev => [...prev, { variantType: "", options: [] }]);
+              }}
+            >
+              Add Custom Variant
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

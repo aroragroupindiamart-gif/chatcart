@@ -16,7 +16,10 @@ function formatProduct(product: typeof productsTable.$inferSelect, images: typeo
     ...product,
     price: product.price != null ? parseFloat(product.price as unknown as string) : null,
     images: images.filter((i) => i.productId === product.id),
-    variants: variants.filter((v) => v.productId === product.id),
+    variants: variants.filter((v) => v.productId === product.id).map(v => ({
+      ...v,
+      label: v.variantType,
+    })),
   };
 }
 
