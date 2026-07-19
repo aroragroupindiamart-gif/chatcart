@@ -127,8 +127,21 @@ router.post("/import-json", requireAuth, requireActiveSubscription, async (req, 
     if (Array.isArray(importCategories)) {
       for (const cat of importCategories) {
         if (cat.id == null || !cat.name) continue;
-        const existingId = catByName.get(String(cat.name).toLowerCase());
-        if (existingId != null) catIdMap.set(Number(cat.id), existingId);
+        let existingId = catByName.get(String(cat.name).toLowerCase());
+        if (existingId == null) {
+          const [newCat] = await db
+            .insert(categoriesTable)
+            .values({
+              sellerId,
+              name: String(cat.name),
+              dozenDiscountPercent: cat.dozenDiscountPercent != null ? String(cat.dozenDiscountPercent) : null,
+              bulkDiscountMinQty: cat.bulkDiscountMinQty != null ? Number(cat.bulkDiscountMinQty) : null,
+            })
+            .returning({ id: categoriesTable.id });
+          existingId = newCat.id;
+          catByName.set(String(cat.name).toLowerCase(), existingId);
+        }
+        catIdMap.set(Number(cat.id), existingId);
       }
     }
 
@@ -170,6 +183,8 @@ router.post("/import-json", requireAuth, requireActiveSubscription, async (req, 
           status: validStatuses.includes(p.status) ? p.status : "active",
           categoryId: newCategoryId,
           sortOrder: Number(p.sortOrder ?? 0),
+          stockCount: p.stockCount != null ? Number(p.stockCount) : 1,
+          showWhenOutOfStock: p.showWhenOutOfStock != null ? Boolean(p.showWhenOutOfStock) : false,
         })
         .returning({ id: productsTable.id });
 
@@ -185,9 +200,10 @@ router.post("/import-json", requireAuth, requireActiveSubscription, async (req, 
 
       if (Array.isArray(p.variants) && p.variants.length > 0) {
         await db.insert(productVariantsTable).values(
-          p.variants.map((v: { variantType: string }) => ({
+          p.variants.map((v: { variantType: string; options?: string[] }) => ({
             productId: newProduct.id,
             variantType: v.variantType,
+            options: Array.isArray(v.options) ? v.options : [],
           }))
         );
       }
