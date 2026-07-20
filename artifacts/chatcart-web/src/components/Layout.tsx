@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useLogout, useGetMe } from "@workspace/api-client-react";
 import { removeToken } from "@/lib/auth";
@@ -10,13 +11,36 @@ import {
   Settings,
   LogOut,
   Store,
+  AlertTriangle,
+  MessageCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const { data: seller } = useGetMe();
   const logout = useLogout();
+
+  const daysLeft = seller?.subscriptionPlan !== "lifetime" && seller?.subscriptionPlan !== "pending"
+    ? (() => {
+        if (!seller?.subscriptionEndDate) return null;
+        const endDate = new Date(seller.subscriptionEndDate);
+        const diffTime = endDate.getTime() - Date.now();
+        if (diffTime <= 0) return 0;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays;
+      })()
+    : null;
+
+  const [showWarning, setShowWarning] = useState(() => {
+    return sessionStorage.getItem("dismissed_expiry_warning") !== "true";
+  });
+
+  const handleDismissWarning = () => {
+    setShowWarning(false);
+    sessionStorage.setItem("dismissed_expiry_warning", "true");
+  };
 
   const handleLogout = () => {
     if (!window.confirm("Log out of your store dashboard?")) return;
@@ -140,6 +164,47 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* PWA install prompt (Android & iOS) */}
       <InstallPrompt />
+
+      {daysLeft !== null && daysLeft > 0 && daysLeft <= 3 && showWarning && (
+        <Dialog open={true} onOpenChange={(open) => { if (!open) handleDismissWarning(); }}>
+          <DialogContent className="sm:max-w-md p-6">
+            <DialogHeader className="space-y-3">
+              <div className="mx-auto w-12 h-12 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center">
+                <AlertTriangle className="w-6 h-6 text-amber-500" />
+              </div>
+              <DialogTitle className="text-center text-lg font-bold text-slate-900">
+                Subscription Renewal Notice
+              </DialogTitle>
+              <DialogDescription className="text-center text-slate-500 text-sm leading-relaxed">
+                Your subscription expires in <span className="font-semibold text-slate-900">{daysLeft} day{daysLeft > 1 ? 's' : ''}</span>. 
+                Renew now to keep your store active and avoid interruption to your customers.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-3 mt-4">
+              <a
+                href={`https://wa.me/919319724678?text=${encodeURIComponent(
+                  `Hi, I'd like to renew my Chatcart subscription — my store is ${seller?.storeName || 'My Store'}`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full"
+              >
+                <Button className="w-full bg-[#25D366] hover:bg-[#22c55e] text-white gap-2">
+                  <MessageCircle className="w-4 h-4" />
+                  Renew Now
+                </Button>
+              </a>
+              <Button
+                variant="ghost"
+                className="w-full text-slate-500 hover:text-slate-700"
+                onClick={handleDismissWarning}
+              >
+                Dismiss
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { api, imgSrc, formatPrice, type Seller, type Product } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import CartSheet from "@/components/CartSheet";
+import { StoreUnavailable } from "@/components/StoreUnavailable";
 
 function normalizeWhatsApp(raw: string | null): string {
   if (!raw) return "";
@@ -98,6 +99,10 @@ export default function ProductPage() {
         </div>
       </div>
     );
+  }
+
+  if (seller.plan === "pending") {
+    return <StoreUnavailable storeName={seller.storeName ?? subdomain} />;
   }
 
   const outOfStock = product.status === "out_of_stock";

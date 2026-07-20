@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { initWA, setOnConnectHook } from "./lib/whatsapp.js";
 import { startCampaignScheduler, processScheduledMessages } from "./lib/waCampaign.js";
+import { startSubscriptionScheduler } from "./lib/subscriptionScheduler.js";
 
 const rawPort = process.env["PORT"];
 
@@ -31,4 +32,5 @@ app.listen(port, (err) => {
   });
   initWA().catch((e) => logger.error({ err: e }, "[WA] Init error"));
   startCampaignScheduler();
+  startSubscriptionScheduler();
 });

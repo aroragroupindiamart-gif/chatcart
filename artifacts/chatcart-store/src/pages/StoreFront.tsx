@@ -6,6 +6,7 @@ import { api, imgSrc, formatPrice, type Seller, type Product, type Category } fr
 import { Input } from "@/components/ui/input";
 import CartSheet from "@/components/CartSheet";
 import { usePageMeta, absImgUrl } from "@/lib/usePageMeta";
+import { StoreUnavailable } from "@/components/StoreUnavailable";
 
 export default function StoreFront() {
   const { subdomain } = useParams<{ subdomain: string }>();
@@ -151,6 +152,10 @@ export default function StoreFront() {
         </div>
       </div>
     );
+  }
+
+  if (seller.plan === "pending") {
+    return <StoreUnavailable storeName={seller.storeName ?? subdomain} />;
   }
 
   const hasBanner = !!(seller.bannerImageUrl || seller.tagline);

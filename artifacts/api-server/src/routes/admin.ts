@@ -175,9 +175,15 @@ router.post("/admin/sellers/bulk-activate", requireAdminAuth, async (req, res) =
   if (!parsed.success) { res.status(400).json({ error: "Invalid body" }); return; }
 
   const { sellerIds, plan, status } = parsed.data;
+  const endDate = plan === "lifetime" ? null : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
   await db
     .update(sellersTable)
-    .set({ subscriptionPlan: plan as never, subscriptionStatus: status as never, subscriptionStartDate: new Date() })
+    .set({
+      subscriptionPlan: plan as never,
+      subscriptionStatus: status as never,
+      subscriptionStartDate: new Date(),
+      subscriptionEndDate: endDate,
+    })
     .where(inArray(sellersTable.id, sellerIds));
 
   await audit(req.admin!.adminId, "bulk_activate_sellers", req.ip ?? "unknown", {
