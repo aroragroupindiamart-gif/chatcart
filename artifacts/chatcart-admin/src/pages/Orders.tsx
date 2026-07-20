@@ -7,10 +7,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { ShoppingCart } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 
 export default function Orders() {
   const [status, setStatus] = useState<string>('all');
+  const [, setLocation] = useLocation();
   
   const { data: orders, isLoading } = useOrders({
     status: status !== 'all' ? status : undefined,
@@ -75,7 +76,11 @@ export default function Orders() {
                     </tr>
                   ) : (
                     orders?.map((item) => (
-                      <tr key={item.order.id} className="hover:bg-muted/30">
+                      <tr
+                        key={item.order.id}
+                        className="hover:bg-muted/30 cursor-pointer transition-colors"
+                        onClick={() => setLocation(`/orders/${item.order.id}`)}
+                      >
                         <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                           {item.order.id}
                         </td>
@@ -88,7 +93,7 @@ export default function Orders() {
                           <div className="text-xs text-muted-foreground">{item.order.customerPhone}</div>
                         </td>
                         <td className="px-4 py-3">
-                          ₹{item.order.total} <span className="text-xs text-muted-foreground">({item.order.itemsCount} items)</span>
+                          ₹{(item.order.total ?? 0).toFixed(2)} <span className="text-xs text-muted-foreground">({item.order.itemsCount ?? 0} items)</span>
                         </td>
                         <td className="px-4 py-3">
                           <Badge variant="outline" className="capitalize">{item.order.status}</Badge>

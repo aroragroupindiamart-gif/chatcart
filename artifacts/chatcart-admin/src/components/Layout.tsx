@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'wouter';
 import { useAdminAuth } from '@/lib/adminAuth';
-import { LayoutDashboard, Users, ShoppingCart, Activity, Mail, LogOut, Menu, MessageCircle, WifiOff } from 'lucide-react';
+import { LayoutDashboard, Users, ShoppingCart, Activity, Mail, LogOut, Menu, MessageCircle, WifiOff, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useQuery } from '@tanstack/react-query';
@@ -31,6 +31,7 @@ const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/sellers', label: 'Sellers', icon: Users },
   { href: '/orders', label: 'Orders', icon: ShoppingCart },
+  { href: '/analytics', label: 'Analytics', icon: TrendingUp },
   { href: '/audit-log', label: 'Audit Log', icon: Activity },
   { href: '/contact-submissions', label: 'Contact', icon: Mail },
   { href: '/wa-marketing', label: 'WA Marketing', icon: MessageCircle },

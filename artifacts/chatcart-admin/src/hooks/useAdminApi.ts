@@ -266,3 +266,110 @@ export const useBulkActivateSellers = () => {
     },
   });
 };
+
+// --- New Types & Hooks for Orders and Analytics ---
+
+export interface OrderDetailItem {
+  id: number;
+  orderId: string;
+  productNameSnapshot: string;
+  priceSnapshot: number;
+  variantSnapshot: string | null;
+  productImageSnapshot: string | null;
+  quantity: number;
+  createdAt: string;
+}
+
+export interface AdminOrderDetail {
+  id: string;
+  sellerId: number;
+  customerContact: string | null;
+  status: string;
+  totalAmount: string;
+  createdAt: string;
+  updatedAt: string;
+  storeName: string;
+  storePhone: string;
+  items: OrderDetailItem[];
+  customerName: string;
+  customerPhone: string;
+}
+
+export interface BestSellerProduct {
+  name: string;
+  image: string | null;
+  quantity: number;
+  revenue: number;
+}
+
+export interface CategoryPerformance {
+  name: string;
+  revenue: number;
+  quantity: number;
+}
+
+export interface TrendDataPoint {
+  date: string;
+  revenue: number;
+  orders: number;
+}
+
+export interface SellerAnalytics {
+  summary: {
+    totalRevenue: number;
+    totalOrders: number;
+  };
+  bestSellers: BestSellerProduct[];
+  categoryPerformance: CategoryPerformance[];
+  trends: TrendDataPoint[];
+}
+
+export interface PlatformTopSeller {
+  sellerId: number;
+  storeName: string;
+  phone: string;
+  subdomain: string | null;
+  revenue: number;
+  ordersCount: number;
+}
+
+export interface PlatformAnalytics {
+  summary: {
+    totalRevenue: number;
+    totalOrders: number;
+    totalSellers: number;
+  };
+  breakdowns: {
+    week: number;
+    month: number;
+    year: number;
+    all: number;
+  };
+  topSellers: PlatformTopSeller[];
+  bestSellers: BestSellerProduct[];
+  categoryPerformance: CategoryPerformance[];
+  trends: TrendDataPoint[];
+}
+
+export const useAdminOrder = (id: string) => {
+  return useQuery<AdminOrderDetail>({
+    queryKey: ['admin', 'order', id],
+    queryFn: () => adminFetch<AdminOrderDetail>(`/api/admin/orders/${id}`),
+    enabled: !!id,
+  });
+};
+
+export const useSellerAnalytics = (id: string, range: string) => {
+  return useQuery<SellerAnalytics>({
+    queryKey: ['admin', 'seller-analytics', id, range],
+    queryFn: () => adminFetch<SellerAnalytics>(`/api/admin/sellers/${id}/analytics?range=${range}`),
+    enabled: !!id,
+  });
+};
+
+export const usePlatformAnalytics = (range: string) => {
+  return useQuery<PlatformAnalytics>({
+    queryKey: ['admin', 'platform-analytics', range],
+    queryFn: () => adminFetch<PlatformAnalytics>(`/api/admin/analytics/platform?range=${range}`),
+  });
+};

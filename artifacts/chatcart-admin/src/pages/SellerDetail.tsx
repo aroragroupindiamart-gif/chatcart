@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useRoute } from 'wouter';
 import { Layout } from '@/components/Layout';
-import { useSeller, useSellerProducts, useSellerOrders, useUpdateSubscription, useSuspendSeller, useReactivateSeller, useWALeadsBySeller, useRemoveFromWASequence } from '@/hooks/useAdminApi';
+import { useSeller, useSellerProducts, useSellerOrders, useUpdateSubscription, useSuspendSeller, useReactivateSeller, useWALeadsBySeller, useRemoveFromWASequence, useSellerAnalytics } from '@/hooks/useAdminApi';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,10 +11,11 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { AlertTriangle, Store, Package, ShoppingCart, Calendar, Phone, Globe, CreditCard, MessageCircle, CheckCircle2, PauseCircle, Clock, Trash2 } from 'lucide-react';
+import { AlertTriangle, Store, Package, ShoppingCart, Calendar, Phone, Globe, CreditCard, MessageCircle, CheckCircle2, PauseCircle, Clock, Trash2, TrendingUp, BarChart3, Percent } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { EnrollInSequenceModal } from '@/components/EnrollInSequenceModal';
 import { formatOffset } from '@/lib/waOffset';
+import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 function WALeadStatusBadge({ status }: { status: string }) {
   if (status === 'active') return <Badge className="bg-green-100 text-green-800 border border-green-200 hover:bg-green-100 gap-1 text-xs"><CheckCircle2 className="w-3 h-3" />Active</Badge>;
@@ -35,6 +36,8 @@ export default function SellerDetail() {
   const { data: products, isLoading: productsLoading } = useSellerProducts(id);
   const { data: orders, isLoading: ordersLoading } = useSellerOrders(id);
   const { data: waLeads, isLoading: waLeadsLoading } = useWALeadsBySeller(id);
+  const [analyticsRange, setAnalyticsRange] = useState('all');
+  const { data: analytics, isLoading: analyticsLoading } = useSellerAnalytics(id, analyticsRange);
 
   const updateSub = useUpdateSubscription();
   const suspendSeller = useSuspendSeller();
@@ -190,12 +193,12 @@ export default function SellerDetail() {
             </div>
           </div>
         )}
-
         <Tabs defaultValue="overview" className="w-full">
           <TabsList className="mb-4">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="products">Products ({seller.productCount || 0})</TabsTrigger>
             <TabsTrigger value="orders">Orders ({seller.orderCount || 0})</TabsTrigger>
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -448,6 +451,243 @@ export default function SellerDetail() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="analytics" className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-medium">Sales & Performance Analytics</h3>
+                <p className="text-xs text-muted-foreground">Detailed metrics for this store.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Time Range:</span>
+                <Select value={analyticsRange} onValueChange={setAnalyticsRange}>
+                  <SelectTrigger className="w-[150px] bg-card">
+                    <SelectValue placeholder="Select Range" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="week">This Week</SelectItem>
+                    <SelectItem value="month">This Month</SelectItem>
+                    <SelectItem value="year">This Year</SelectItem>
+                    <SelectItem value="all">All-Time</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {analyticsLoading ? (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Skeleton className="h-28 w-full" />
+                  <Skeleton className="h-28 w-full" />
+                </div>
+                <Skeleton className="h-80 w-full" />
+              </div>
+            ) : !analytics ? (
+              <div className="text-center py-12 text-muted-foreground border rounded-lg bg-card">No analytics data available.</div>
+            ) : (
+              <>
+                {/* Summary Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground flex items-center justify-between">
+                        Total Revenue
+                        <BarChart3 className="w-4 h-4 text-primary" />
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-extrabold text-primary">
+                        ₹{analytics.summary.totalRevenue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">Earnings across selected period</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground flex items-center justify-between">
+                        Total Orders
+                        <ShoppingCart className="w-4 h-4 text-amber-500" />
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-extrabold">
+                        {analytics.summary.totalOrders}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">Orders placed in selected period</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Trend Chart */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base font-semibold flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-primary" />
+                      Sales & Orders Trend
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {analytics.trends.length === 0 ? (
+                      <div className="h-[250px] flex items-center justify-center text-sm text-muted-foreground">
+                        No transactions recorded for this period.
+                      </div>
+                    ) : (
+                      <div className="h-[300px] w-full mt-4">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <ComposedChart data={analytics.trends}>
+                            <defs>
+                              <linearGradient id="sellerColorRev" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.4}/>
+                                <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                            <XAxis 
+                              dataKey="date" 
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+                            />
+                            <YAxis 
+                              yAxisId="left"
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+                              tickFormatter={(v) => `₹${v}`}
+                            />
+                            <YAxis 
+                              yAxisId="right"
+                              orientation="right"
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
+                            />
+                            <Tooltip 
+                              contentStyle={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', borderRadius: 'var(--radius)' }}
+                              itemStyle={{ color: 'var(--foreground)' }}
+                              formatter={(value, name) => {
+                                if (name === 'revenue') return [`₹${Number(value).toFixed(2)}`, 'Revenue'];
+                                return [value, 'Orders'];
+                              }}
+                            />
+                            <Area 
+                              yAxisId="left"
+                              type="monotone" 
+                              dataKey="revenue" 
+                              name="revenue" 
+                              stroke="hsl(var(--primary))" 
+                              strokeWidth={2}
+                              fillOpacity={1}
+                              fill="url(#sellerColorRev)" 
+                            />
+                            <Line 
+                              yAxisId="right"
+                              type="monotone" 
+                              dataKey="orders" 
+                              name="orders" 
+                              stroke="hsl(var(--warning))" 
+                              strokeWidth={2}
+                              dot={{ r: 3 }}
+                            />
+                          </ComposedChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Best Sellers and Categories Side-by-Side */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Best Selling Products */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base font-semibold">Best-Selling Products</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                          <thead className="text-xs text-muted-foreground bg-muted/50 border-b">
+                            <tr>
+                              <th className="px-4 py-3 font-medium">Product</th>
+                              <th className="px-4 py-3 font-medium text-right">Units Sold</th>
+                              <th className="px-4 py-3 font-medium text-right">Revenue</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {analytics.bestSellers.length === 0 ? (
+                              <tr>
+                                <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">
+                                  No items sold yet.
+                                </td>
+                              </tr>
+                            ) : (
+                              analytics.bestSellers.map((item, idx) => (
+                                <tr key={idx} className="hover:bg-muted/30">
+                                  <td className="px-4 py-3 font-medium flex items-center gap-3">
+                                    {item.image ? (
+                                      <img 
+                                        src={imgSrc(item.image)} 
+                                        alt={item.name} 
+                                        className="w-10 h-10 rounded object-cover border border-border"
+                                      />
+                                    ) : (
+                                      <div className="w-10 h-10 rounded border border-border bg-muted flex items-center justify-center">
+                                        <Package className="w-5 h-5 text-muted-foreground/40" />
+                                      </div>
+                                    )}
+                                    <span className="truncate max-w-[180px]" title={item.name}>{item.name}</span>
+                                  </td>
+                                  <td className="px-4 py-3 text-right font-mono">{item.quantity}</td>
+                                  <td className="px-4 py-3 text-right font-semibold">₹{item.revenue.toFixed(2)}</td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Category Performance */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base font-semibold">Category Performance</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {analytics.categoryPerformance.length === 0 ? (
+                        <div className="text-center py-8 text-sm text-muted-foreground">
+                          No category data available.
+                        </div>
+                      ) : (
+                        analytics.categoryPerformance.map((cat, idx) => {
+                          const percentage = analytics.summary.totalRevenue > 0 
+                            ? (cat.revenue / analytics.summary.totalRevenue) * 100 
+                            : 0;
+                          return (
+                            <div key={idx} className="space-y-1.5">
+                              <div className="flex justify-between text-sm">
+                                <span className="font-medium">{cat.name}</span>
+                                <span className="text-muted-foreground font-mono">
+                                  ₹{cat.revenue.toFixed(2)} ({cat.quantity} sold)
+                                </span>
+                              </div>
+                              <div className="w-full bg-muted rounded-full h-2">
+                                <div 
+                                  className="bg-primary h-2 rounded-full transition-all" 
+                                  style={{ width: `${percentage}%` }} 
+                                />
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              </>
+            )}
           </TabsContent>
         </Tabs>
       </div>

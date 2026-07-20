@@ -8,6 +8,7 @@ import {
   ordersTable,
   orderItemsTable,
   contactSubmissions,
+  categoriesTable,
 } from "@workspace/db/schema";
 import { eq, desc, and, gte, lte, ilike, or, count, sql, inArray } from "drizzle-orm";
 import bcrypt from "bcrypt";
@@ -256,8 +257,506 @@ router.get("/admin/orders", requireAdminAuth, async (req, res) => {
 
   const orders = await q.orderBy(desc(ordersTable.createdAt)).limit(Number(limit)).offset(offset);
 
+  // Fetch itemsCount and format for each order
+  const ordersWithDetails = await Promise.all(
+    orders.map(async (item) => {
+      const items = await db
+        .select()
+        .from(orderItemsTable)
+        .where(eq(orderItemsTable.orderId, item.order.id));
+
+      let customerName = "Guest";
+      let customerPhone = "-";
+      if (item.order.customerContact) {
+        const nameMatch = item.order.customerContact.match(/Name:\s*([^,]+)/i);
+        const phoneMatch = item.order.customerContact.match(/Phone:\s*(.+)/i);
+        customerName = nameMatch ? nameMatch[1].trim() : item.order.customerContact;
+        customerPhone = phoneMatch ? phoneMatch[1].trim() : "-";
+      }
+
+      const itemsCount = items.reduce((sum, i) => sum + i.quantity, 0);
+
+      return {
+        order: {
+          ...item.order,
+          total: parseFloat(item.order.totalAmount),
+          itemsCount,
+          customerName,
+          customerPhone,
+        },
+        storeName: item.storeName || "Unnamed Store",
+        phone: item.phone,
+      };
+    })
+  );
+
   await audit(req.admin!.adminId, "viewed_platform_orders", req.ip ?? "unknown");
-  res.json(orders);
+  res.json(ordersWithDetails);
+});
+
+// ── Single order details ─────────────────────────────────────────────────────
+
+router.get("/admin/orders/:id", requireAdminAuth, async (req, res) => {
+  try {
+    const orderId = req.params.id;
+
+    const [row] = await db
+      .select({
+        order: ordersTable,
+        storeName: sellersTable.storeName,
+        phone: sellersTable.phone,
+      })
+      .from(ordersTable)
+      .leftJoin(sellersTable, eq(ordersTable.sellerId, sellersTable.id))
+      .where(eq(ordersTable.id, orderId))
+      .limit(1);
+
+    if (!row) {
+      res.status(404).json({ error: "Order not found" });
+      return;
+    }
+
+    const items = await db
+      .select()
+      .from(orderItemsTable)
+      .where(eq(orderItemsTable.orderId, orderId));
+
+    let customerName = "Guest";
+    let customerPhone = "-";
+    if (row.order.customerContact) {
+      const nameMatch = row.order.customerContact.match(/Name:\s*([^,]+)/i);
+      const phoneMatch = row.order.customerContact.match(/Phone:\s*(.+)/i);
+      customerName = nameMatch ? nameMatch[1].trim() : row.order.customerContact;
+      customerPhone = phoneMatch ? phoneMatch[1].trim() : "-";
+    }
+
+    const itemsCount = items.reduce((sum, i) => sum + i.quantity, 0);
+
+    // Audit log specific order access
+    await audit(req.admin!.adminId, "view_order", req.ip ?? "unknown", {
+      targetOrderId: orderId,
+      targetSellerId: row.order.sellerId,
+    });
+
+    res.json({
+      ...row.order,
+      total: parseFloat(row.order.totalAmount),
+      itemsCount,
+      customerName,
+      customerPhone,
+      storeName: row.storeName || "Unnamed Store",
+      storePhone: row.phone,
+      items: items.map((item) => ({
+        ...item,
+        priceSnapshot: parseFloat(item.priceSnapshot),
+      })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to get order details" });
+  }
+});
+
+// ── Seller-wise analytics ─────────────────────────────────────────────────────
+
+router.get("/admin/sellers/:id/analytics", requireAdminAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { range = "all" } = req.query as Record<string, string>;
+
+    const [seller] = await db
+      .select()
+      .from(sellersTable)
+      .where(eq(sellersTable.id, id))
+      .limit(1);
+
+    if (!seller) {
+      res.status(404).json({ error: "Seller not found" });
+      return;
+    }
+
+    const now = new Date();
+    let startDate: Date | null = null;
+    if (range === "week") {
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    } else if (range === "month") {
+      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    } else if (range === "year") {
+      startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+    }
+
+    const orderConditions = [eq(ordersTable.sellerId, id)];
+    if (startDate) {
+      orderConditions.push(gte(ordersTable.createdAt, startDate));
+    }
+
+    const orders = await db
+      .select()
+      .from(ordersTable)
+      .where(and(...orderConditions))
+      .orderBy(asc(ordersTable.createdAt));
+
+    const orderIds = orders.map((o) => o.id);
+
+    const items = orderIds.length > 0
+      ? await db
+          .select({
+            orderId: orderItemsTable.orderId,
+            productName: orderItemsTable.productNameSnapshot,
+            price: orderItemsTable.priceSnapshot,
+            quantity: orderItemsTable.quantity,
+            image: orderItemsTable.productImageSnapshot,
+            categoryName: categoriesTable.name,
+            createdAt: orderItemsTable.createdAt,
+          })
+          .from(orderItemsTable)
+          .leftJoin(productsTable, and(
+            eq(orderItemsTable.productNameSnapshot, productsTable.name),
+            eq(productsTable.sellerId, id)
+          ))
+          .leftJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id))
+          .where(inArray(orderItemsTable.orderId, orderIds))
+      : [];
+
+    const totalRevenue = orders.reduce((sum, o) => sum + parseFloat(o.totalAmount), 0);
+    const totalOrders = orders.length;
+
+    const productMap = new Map<string, { name: string; image: string | null; quantity: number; revenue: number }>();
+    for (const item of items) {
+      const key = item.productName;
+      const price = parseFloat(item.price as string);
+      const rev = price * item.quantity;
+      if (productMap.has(key)) {
+        const existing = productMap.get(key)!;
+        existing.quantity += item.quantity;
+        existing.revenue += rev;
+      } else {
+        productMap.set(key, {
+          name: item.productName,
+          image: item.image ?? null,
+          quantity: item.quantity,
+          revenue: rev,
+        });
+      }
+    }
+    const bestSellers = Array.from(productMap.values())
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10);
+
+    const categoryMap = new Map<string, { name: string; revenue: number; quantity: number }>();
+    for (const item of items) {
+      const catName = item.categoryName || "Uncategorized";
+      const price = parseFloat(item.price as string);
+      const rev = price * item.quantity;
+      if (categoryMap.has(catName)) {
+        const existing = categoryMap.get(catName)!;
+        existing.quantity += item.quantity;
+        existing.revenue += rev;
+      } else {
+        categoryMap.set(catName, {
+          name: catName,
+          revenue: rev,
+          quantity: item.quantity,
+        });
+      }
+    }
+    const categoryPerformance = Array.from(categoryMap.values())
+      .sort((a, b) => b.revenue - a.revenue);
+
+    const trendPlaceholder: { [key: string]: { date: string; revenue: number; orders: number } } = {};
+    if (range === "week") {
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+        const label = d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+        trendPlaceholder[label] = { date: label, revenue: 0, orders: 0 };
+      }
+    } else if (range === "month") {
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+        const label = d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+        trendPlaceholder[label] = { date: label, revenue: 0, orders: 0 };
+      }
+    } else if (range === "year") {
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const label = d.toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
+        trendPlaceholder[label] = { date: label, revenue: 0, orders: 0 };
+      }
+    } else if (range === "all") {
+      let oldestDate = now;
+      if (orders.length > 0) {
+        oldestDate = orders[0].createdAt;
+      }
+      let current = new Date(oldestDate.getFullYear(), oldestDate.getMonth(), 1);
+      while (current <= now) {
+        const label = current.toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+        trendPlaceholder[label] = { date: label, revenue: 0, orders: 0 };
+        current.setMonth(current.getMonth() + 1);
+      }
+    }
+
+    const getLabel = (date: Date) => {
+      if (range === "week") {
+        return date.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+      } else if (range === "month") {
+        return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+      } else if (range === "year") {
+        return date.toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
+      } else {
+        return date.toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+      }
+    };
+
+    for (const o of orders) {
+      const label = getLabel(o.createdAt);
+      const val = parseFloat(o.totalAmount);
+      if (!trendPlaceholder[label]) {
+        trendPlaceholder[label] = { date: label, revenue: 0, orders: 0 };
+      }
+      trendPlaceholder[label].revenue += val;
+      trendPlaceholder[label].orders += 1;
+    }
+
+    const trends = Object.values(trendPlaceholder);
+
+    await audit(req.admin!.adminId, "viewed_seller_analytics", req.ip ?? "unknown", {
+      targetSellerId: id,
+    });
+
+    res.json({
+      summary: {
+        totalRevenue,
+        totalOrders,
+      },
+      bestSellers,
+      categoryPerformance,
+      trends,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to get seller analytics" });
+  }
+});
+
+// ── Platform-wide analytics ───────────────────────────────────────────────────
+
+router.get("/admin/analytics/platform", requireAdminAuth, async (req, res) => {
+  try {
+    const { range = "month" } = req.query as Record<string, string>;
+
+    const now = new Date();
+    let startDate: Date | null = null;
+    if (range === "week") {
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    } else if (range === "month") {
+      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    } else if (range === "year") {
+      startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+    }
+
+    const sellers = await db.select().from(sellersTable);
+    const sellerMap = new Map(sellers.map((s) => [s.id, s]));
+
+    const orderConditions = [];
+    if (startDate) {
+      orderConditions.push(gte(ordersTable.createdAt, startDate));
+    }
+
+    const orders = await db
+      .select()
+      .from(ordersTable)
+      .where(orderConditions.length > 0 ? and(...orderConditions) : undefined)
+      .orderBy(asc(ordersTable.createdAt));
+
+    const orderIds = orders.map((o) => o.id);
+
+    const items = orderIds.length > 0
+      ? await db
+          .select({
+            orderId: orderItemsTable.orderId,
+            sellerId: ordersTable.sellerId,
+            productName: orderItemsTable.productNameSnapshot,
+            price: orderItemsTable.priceSnapshot,
+            quantity: orderItemsTable.quantity,
+            image: orderItemsTable.productImageSnapshot,
+            categoryName: categoriesTable.name,
+          })
+          .from(orderItemsTable)
+          .innerJoin(ordersTable, eq(orderItemsTable.orderId, ordersTable.id))
+          .leftJoin(productsTable, and(
+            eq(orderItemsTable.productNameSnapshot, productsTable.name),
+            eq(productsTable.sellerId, ordersTable.sellerId)
+          ))
+          .leftJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id))
+          .where(inArray(orderItemsTable.orderId, orderIds))
+      : [];
+
+    const totalRevenue = orders.reduce((sum, o) => sum + parseFloat(o.totalAmount), 0);
+    const totalOrders = orders.length;
+
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+
+    let revWeek = 0;
+    let revMonth = 0;
+    let revYear = 0;
+    let revAll = 0;
+
+    const allOrders = await db.select().from(ordersTable);
+    for (const o of allOrders) {
+      const val = parseFloat(o.totalAmount);
+      revAll += val;
+      if (o.createdAt >= oneWeekAgo) revWeek += val;
+      if (o.createdAt >= oneMonthAgo) revMonth += val;
+      if (o.createdAt >= oneYearAgo) revYear += val;
+    }
+
+    const sellerStatsMap = new Map<number, { sellerId: number; storeName: string; phone: string; subdomain: string | null; revenue: number; ordersCount: number }>();
+    for (const o of orders) {
+      const sId = o.sellerId;
+      const val = parseFloat(o.totalAmount);
+      const sellerInfo = sellerMap.get(sId);
+      if (!sellerInfo) continue;
+
+      if (sellerStatsMap.has(sId)) {
+        const existing = sellerStatsMap.get(sId)!;
+        existing.revenue += val;
+        existing.ordersCount += 1;
+      } else {
+        sellerStatsMap.set(sId, {
+          sellerId: sId,
+          storeName: sellerInfo.storeName || "Unnamed Store",
+          phone: sellerInfo.phone,
+          subdomain: sellerInfo.subdomain,
+          revenue: val,
+          ordersCount: 1,
+        });
+      }
+    }
+    const topSellers = Array.from(sellerStatsMap.values())
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10);
+
+    const productMap = new Map<string, { name: string; image: string | null; quantity: number; revenue: number }>();
+    for (const item of items) {
+      const key = item.productName;
+      const price = parseFloat(item.price as string);
+      const rev = price * item.quantity;
+      if (productMap.has(key)) {
+        const existing = productMap.get(key)!;
+        existing.quantity += item.quantity;
+        existing.revenue += rev;
+      } else {
+        productMap.set(key, {
+          name: item.productName,
+          image: item.image ?? null,
+          quantity: item.quantity,
+          revenue: rev,
+        });
+      }
+    }
+    const bestSellers = Array.from(productMap.values())
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10);
+
+    const categoryMap = new Map<string, { name: string; revenue: number; quantity: number }>();
+    for (const item of items) {
+      const catName = item.categoryName || "Uncategorized";
+      const price = parseFloat(item.price as string);
+      const rev = price * item.quantity;
+      if (categoryMap.has(catName)) {
+        const existing = categoryMap.get(catName)!;
+        existing.quantity += item.quantity;
+        existing.revenue += rev;
+      } else {
+        categoryMap.set(catName, {
+          name: catName,
+          revenue: rev,
+          quantity: item.quantity,
+        });
+      }
+    }
+    const categoryPerformance = Array.from(categoryMap.values())
+      .sort((a, b) => b.revenue - a.revenue);
+
+    const trendPlaceholder: { [key: string]: { date: string; revenue: number; orders: number } } = {};
+    if (range === "week") {
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+        const label = d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+        trendPlaceholder[label] = { date: label, revenue: 0, orders: 0 };
+      }
+    } else if (range === "month") {
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+        const label = d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+        trendPlaceholder[label] = { date: label, revenue: 0, orders: 0 };
+      }
+    } else if (range === "year") {
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const label = d.toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
+        trendPlaceholder[label] = { date: label, revenue: 0, orders: 0 };
+      }
+    } else if (range === "all") {
+      let oldestDate = now;
+      if (orders.length > 0) {
+        oldestDate = orders[0].createdAt;
+      }
+      let current = new Date(oldestDate.getFullYear(), oldestDate.getMonth(), 1);
+      while (current <= now) {
+        const label = current.toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+        trendPlaceholder[label] = { date: label, revenue: 0, orders: 0 };
+        current.setMonth(current.getMonth() + 1);
+      }
+    }
+
+    const getLabel = (date: Date) => {
+      if (range === "week") {
+        return date.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+      } else if (range === "month") {
+        return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+      } else if (range === "year") {
+        return date.toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
+      } else {
+        return date.toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+      }
+    };
+
+    for (const o of orders) {
+      const label = getLabel(o.createdAt);
+      const val = parseFloat(o.totalAmount);
+      if (!trendPlaceholder[label]) {
+        trendPlaceholder[label] = { date: label, revenue: 0, orders: 0 };
+      }
+      trendPlaceholder[label].revenue += val;
+      trendPlaceholder[label].orders += 1;
+    }
+
+    const trends = Object.values(trendPlaceholder);
+
+    res.json({
+      summary: {
+        totalRevenue,
+        totalOrders,
+        totalSellers: sellers.length,
+      },
+      breakdowns: {
+        week: revWeek,
+        month: revMonth,
+        year: revYear,
+        all: revAll,
+      },
+      topSellers,
+      bestSellers,
+      categoryPerformance,
+      trends,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to get platform analytics" });
+  }
 });
 
 // ── Platform health ───────────────────────────────────────────────────────────

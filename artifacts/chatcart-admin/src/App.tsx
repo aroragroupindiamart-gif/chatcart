@@ -12,9 +12,11 @@ import Dashboard from "@/pages/Dashboard";
 import Sellers from "@/pages/Sellers";
 import SellerDetail from "@/pages/SellerDetail";
 import Orders from "@/pages/Orders";
+import OrderDetail from "@/pages/OrderDetail";
 import AuditLog from "@/pages/AuditLog";
 import ContactSubmissions from "@/pages/ContactSubmissions";
 import WhatsAppMarketing from "@/pages/WhatsAppMarketing";
+import Analytics from "@/pages/Analytics";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,6 +44,10 @@ function Router() {
         <ProtectedRoute><SellerDetail /></ProtectedRoute>
       </Route>
       
+      <Route path="/orders/:id">
+        <ProtectedRoute><OrderDetail /></ProtectedRoute>
+      </Route>
+      
       <Route path="/orders">
         <ProtectedRoute><Orders /></ProtectedRoute>
       </Route>
@@ -56,6 +62,10 @@ function Router() {
 
       <Route path="/wa-marketing">
         <ProtectedRoute><WhatsAppMarketing /></ProtectedRoute>
+      </Route>
+
+      <Route path="/analytics">
+        <ProtectedRoute><Analytics /></ProtectedRoute>
       </Route>
 
       <Route path="/">
