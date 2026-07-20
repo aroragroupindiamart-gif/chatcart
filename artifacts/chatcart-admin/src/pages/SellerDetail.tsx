@@ -17,6 +17,10 @@ import { EnrollInSequenceModal } from '@/components/EnrollInSequenceModal';
 import { formatOffset } from '@/lib/waOffset';
 import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
+function imgSrc(url: string): string {
+  return url.replace(/^\/objects\//, "/api/public/img/");
+}
+
 function WALeadStatusBadge({ status }: { status: string }) {
   if (status === 'active') return <Badge className="bg-green-100 text-green-800 border border-green-200 hover:bg-green-100 gap-1 text-xs"><CheckCircle2 className="w-3 h-3" />Active</Badge>;
   if (status === 'paused_no_reply') return <Badge className="bg-amber-100 text-amber-800 border border-amber-200 hover:bg-amber-100 gap-1 text-xs"><PauseCircle className="w-3 h-3" />Paused (no reply)</Badge>;
