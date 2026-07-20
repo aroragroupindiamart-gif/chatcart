@@ -45,6 +45,9 @@ docker compose exec -T nginx nginx -s reload 2>/dev/null || docker compose resta
 echo "        Done."
 echo ""
 
+echo "Sleeping for 8 seconds to allow containers to boot up..."
+sleep 8
+
 echo "[ 6/7 ] Verifying live system health..."
 if ! docker run --rm --net=host -v "$(pwd)":/workspace -w /workspace node:20-slim node scripts/verify_system.mjs https://chatcart.in; then
   echo "❌ LIVE SYSTEM VERIFICATION FAILED! Rolling back deployment immediately..."
