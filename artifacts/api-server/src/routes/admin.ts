@@ -10,7 +10,7 @@ import {
   contactSubmissions,
   categoriesTable,
 } from "@workspace/db/schema";
-import { eq, desc, and, gte, lte, ilike, or, count, sql, inArray } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, ilike, or, count, sql, inArray } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import { signAdminToken, requireAdminAuth, type AdminJwtPayload } from "../middleware/adminAuth.js";
 import { z } from "zod";
