@@ -84,7 +84,7 @@ export default function AuditLog() {
                         <td className="px-4 py-3">
                           {item.log.targetSellerId ? (
                             <Link href={`/sellers/${item.log.targetSellerId}`} className="text-primary hover:underline font-mono text-xs">
-                              seller_{item.log.targetSellerId.substring(0, 6)}...
+                              seller_{item.log.targetSellerId}
                             </Link>
                           ) : (
                             <span className="text-muted-foreground">-</span>
