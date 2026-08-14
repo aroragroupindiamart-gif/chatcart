@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "wouter";
-import { CheckCircle, MessageCircle, Store, Loader2, X } from "lucide-react";
+import { CheckCircle, MessageCircle, Store, Loader2, X, AlertTriangle } from "lucide-react";
 import { api, formatPrice, imgSrc, type Order } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { usePageMeta, absImgUrl } from "@/lib/usePageMeta";
@@ -51,6 +51,7 @@ function normalizePhone(phone: string | null): string | null {
 }
 
 function buildWhatsAppText(order: Order, orderUrl: string): string {
+  const payableTotal = order.payableTotalAmount ?? order.totalAmount;
   const lines: string[] = [
     `Hi! I'd like to confirm my order 🛍️`,
     ``,
@@ -60,15 +61,28 @@ function buildWhatsAppText(order: Order, orderUrl: string): string {
     `*Items:*`,
   ];
 
-  for (const item of order.items) {
+  const maxItems = 5;
+  const itemsToShow = order.items.slice(0, maxItems);
+
+  for (const item of itemsToShow) {
     const variant = item.variantSnapshot ? ` (${item.variantSnapshot})` : "";
-    lines.push(
-      `• ${item.quantity}× ${item.productNameSnapshot}${variant} — ${formatPrice(item.priceSnapshot * item.quantity)}`
-    );
+    if (item.isSoldOut) {
+      lines.push(
+        `• ${item.quantity}× ${item.productNameSnapshot}${variant} (Sold Out) — ₹0.00`
+      );
+    } else {
+      lines.push(
+        `• ${item.quantity}× ${item.productNameSnapshot}${variant} (${formatPrice(item.priceSnapshot)} each) — ${formatPrice(item.priceSnapshot * item.quantity)}`
+      );
+    }
+  }
+
+  if (order.items.length > maxItems) {
+    lines.push(`• ... and ${order.items.length - maxItems} more items`);
   }
 
   lines.push(``);
-  lines.push(`*Total: ${formatPrice(order.totalAmount)}*`);
+  lines.push(`*Payable Balance: ${formatPrice(payableTotal)}*`);
 
   if (order.customerContact) {
     lines.push(``);
@@ -169,6 +183,9 @@ export default function OrderConfirmation() {
     ? `https://wa.me/${phone}?text=${encodeURIComponent(waText)}`
     : null;
 
+  const payableTotal = order.payableTotalAmount ?? order.totalAmount;
+  const inStockItems = order.items.filter((i) => !i.isSoldOut);
+  const inStockItemsCount = inStockItems.reduce((sum, item) => sum + item.quantity, 0);
   const totalItemsCount = order.items.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
@@ -219,7 +236,7 @@ export default function OrderConfirmation() {
       <main className="max-w-lg mx-auto px-4 py-8 space-y-6">
         <div className="text-center space-y-2">
           <CheckCircle className="w-14 h-14 text-green-500 mx-auto" />
-          <h1 className="text-2xl font-bold">Order placed!</h1>
+          <h1 className="text-2xl font-bold">Order details</h1>
           <p className="text-sm text-muted-foreground">
             Order ID:{" "}
             <span className="font-mono font-semibold text-foreground">
@@ -229,45 +246,105 @@ export default function OrderConfirmation() {
         </div>
 
         <div className="bg-card rounded-xl border border-border overflow-hidden">
-          <div className="px-4 py-3 border-b border-border bg-muted/30">
-            <h2 className="font-semibold text-sm">Order details</h2>
+          <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-center justify-between">
+            <h2 className="font-semibold text-sm">Order items</h2>
+            {order.hasSoldOutItems && (
+              <span className="text-[11px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3 text-amber-600" />
+                Contains Sold Out Items
+              </span>
+            )}
           </div>
+
+          {order.hasSoldOutItems && (
+            <div className="p-3 bg-amber-50 border-b border-amber-200 text-amber-800 text-xs flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-amber-900">Some items are currently Sold Out</p>
+                <p className="mt-0.5 text-amber-700 leading-snug">
+                  Items marked <strong className="text-red-700">(Sold Out)</strong> are out of stock. Your payable balance below has been updated to reflect only available in-stock items.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="divide-y divide-border">
             {order.items.map((item) => (
               <div
                 key={item.id}
-                className="px-4 py-3 flex gap-3 items-start"
+                className={`px-4 py-3 flex gap-3 items-start ${item.isSoldOut ? "bg-red-50/50" : ""}`}
               >
                 {item.productImageSnapshot && (
                   <TappableImage
                     src={imgSrc(item.productImageSnapshot)}
                     alt={item.productNameSnapshot}
-                    className="w-12 h-12 rounded-lg object-cover shrink-0 border border-border/40"
+                    className={`w-12 h-12 rounded-lg object-cover shrink-0 border border-border/40 ${item.isSoldOut ? "opacity-50 grayscale" : ""}`}
                   />
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">
-                    {item.quantity}× {item.productNameSnapshot}
+                  <p className="text-sm font-medium flex items-center gap-1.5 flex-wrap">
+                    <span className={item.isSoldOut ? "line-through text-muted-foreground" : ""}>
+                      {item.quantity}× {item.productNameSnapshot}
+                    </span>
+                    {item.isSoldOut && (
+                      <span className="font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded text-[11px]">
+                        (Sold Out)
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {formatPrice(item.priceSnapshot)} each
                   </p>
                   {item.variantSnapshot && (
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       {item.variantSnapshot}
                     </p>
                   )}
                 </div>
-                <span className="text-sm font-semibold shrink-0">
-                  {formatPrice(item.priceSnapshot * item.quantity)}
-                </span>
+                <div className="text-right shrink-0">
+                  {item.isSoldOut ? (
+                    <div>
+                      <span className="text-xs text-red-600 font-semibold line-through block">
+                        {formatPrice(item.priceSnapshot * item.quantity)}
+                      </span>
+                      <span className="text-[10px] text-red-700 font-bold block mt-0.5">
+                        ₹0.00
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-sm font-semibold">
+                      {formatPrice(item.priceSnapshot * item.quantity)}
+                    </span>
+                  )}
+                </div>
               </div>
             ))}
-            <div className="px-4 py-3 flex justify-between bg-muted/30">
-              <span className="font-semibold">
-                Total ({totalItemsCount} {totalItemsCount === 1 ? "item" : "items"})
-              </span>
-              <span className="font-bold text-primary">
-                {formatPrice(order.totalAmount)}
-              </span>
-            </div>
+
+            {order.hasSoldOutItems ? (
+              <div className="px-4 py-3 bg-muted/30 space-y-1.5">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Original Total ({totalItemsCount} {totalItemsCount === 1 ? "item" : "items"})</span>
+                  <span className="line-through">{formatPrice(order.totalAmount)}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm pt-1 border-t border-border/60">
+                  <span className="font-bold text-foreground">
+                    Payable Balance ({inStockItemsCount} in-stock {inStockItemsCount === 1 ? "item" : "items"})
+                  </span>
+                  <span className="font-extrabold text-primary text-base">
+                    {formatPrice(payableTotal)}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="px-4 py-3 flex justify-between bg-muted/30">
+                <span className="font-semibold">
+                  Total ({totalItemsCount} {totalItemsCount === 1 ? "item" : "items"})
+                </span>
+                <span className="font-bold text-primary">
+                  {formatPrice(order.totalAmount)}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

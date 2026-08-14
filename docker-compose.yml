@@ -55,6 +55,7 @@ services:
       NODE_ENV: production
       PORT: "8082"
       WA_SESSION_DIR: /data/wa-session-staging
+      DISABLE_WHATSAPP_AUTOCONNECT: "true"
     volumes:
       - ./docker-data/wa-session-staging:/data/wa-session-staging
       - ./artifacts/chatcart-store/dist/public/index.html:/app/store-index.html:ro

@@ -18,7 +18,8 @@ import {
   Plus, Trash2, Play, Pause, RefreshCw, CheckCircle2, XCircle,
   AlertTriangle, Clock, MessageSquare, TrendingUp, PhoneIncoming,
   ChevronDown, ChevronRight, Flame, Link2,
-  ArrowUp, ArrowDown, Upload, FileImage, FileVideo, FileText, X, Pencil
+  ArrowUp, ArrowDown, Upload, FileImage, FileVideo, FileText, X, Pencil,
+  Send, Search, CheckCheck, Store, MoreVertical, Smile, Mic, Phone, Video, Megaphone, Ban
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 
@@ -142,18 +143,44 @@ interface SendLog {
 
 function fmtDate(d: string | null) {
   if (!d) return '—';
-  return new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  try {
+    const isoStr = typeof d === 'string' ? d.replace(' ', 'T') : d;
+    const dateObj = new Date(isoStr);
+    if (isNaN(dateObj.getTime())) return '—';
+    return dateObj.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '—';
+  }
 }
 
 function fmtRelative(d: string | null) {
   if (!d) return '—';
-  const ms = Date.now() - new Date(d).getTime();
-  const mins = Math.floor(ms / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return fmtDate(d);
+  try {
+    const isoStr = typeof d === 'string' ? d.replace(' ', 'T') : d;
+    const dateObj = new Date(isoStr);
+    if (isNaN(dateObj.getTime())) return '—';
+    const ms = Date.now() - dateObj.getTime();
+    const mins = Math.floor(ms / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return fmtDate(d);
+  } catch {
+    return '—';
+  }
+}
+
+function safeFmtTime(d: string | null) {
+  if (!d) return '';
+  try {
+    const isoStr = typeof d === 'string' ? d.replace(' ', 'T') : d;
+    const dateObj = new Date(isoStr);
+    if (isNaN(dateObj.getTime())) return '';
+    return dateObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '';
+  }
 }
 
 function StatusBadge({ status }: { status: CampaignLead['status'] }) {
@@ -169,6 +196,388 @@ function StatusBadge({ status }: { status: CampaignLead['status'] }) {
   return <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${color}`}>{label}</span>;
 }
 
+// ── Live Chat Tab (Official WhatsApp Web UI Clone) ──────────────────────────
+
+interface ChatLead {
+  id: number;
+  phone: string;
+  displayName: string | null;
+  lastMessage: string | null;
+  lastMessageAt: string;
+  unreadCount: number;
+  matchedSellerId: number | null;
+  sellerStoreName: string | null;
+}
+
+interface ChatMessage {
+  id: number;
+  inboundLeadId: number;
+  message: string;
+  direction: 'inbound' | 'outbound';
+  fromMe: boolean;
+  receivedAt: string;
+}
+
+function LiveChatTab() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [selectedChatId, setSelectedChatId] = useState<number | null>(null);
+  const [search, setSearch] = useState('');
+  const [replyText, setReplyText] = useState('');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'unread' | 'sellers'>('all');
+  const [showPromo, setShowPromo] = useState(true);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  const { data: rawChats = [], isLoading: loadingChats } = useQuery<any>({
+    queryKey: ['wa-chats', search],
+    queryFn: () => adminFetch(`/api/admin/wa/chats${search ? `?q=${encodeURIComponent(search)}` : ''}`),
+    refetchInterval: 4000,
+  });
+
+  const chats: ChatLead[] = Array.isArray(rawChats) ? rawChats : [];
+
+  const filteredChats = chats.filter((c) => {
+    if (activeFilter === 'unread') return c.unreadCount > 0;
+    if (activeFilter === 'sellers') return !!c.matchedSellerId;
+    return true;
+  });
+
+  const activeChat =
+    (selectedChatId != null ? chats.find((c) => String(c.id) === String(selectedChatId)) : null) ||
+    filteredChats[0] ||
+    chats[0] ||
+    null;
+
+  useEffect(() => {
+    if (selectedChatId == null && chats.length > 0) {
+      setSelectedChatId(chats[0].id);
+    }
+  }, [chats, selectedChatId]);
+
+  const activeLeadId = activeChat?.id ?? null;
+
+  const { data: rawMessages = [], isLoading: loadingMessages } = useQuery<any>({
+    queryKey: ['wa-chat-messages', activeLeadId],
+    queryFn: () => (activeLeadId ? adminFetch(`/api/admin/wa/chats/${activeLeadId}/messages`) : Promise.resolve([])),
+    enabled: activeLeadId !== null,
+    refetchInterval: 3000,
+  });
+
+  const messages: ChatMessage[] = Array.isArray(rawMessages) ? rawMessages : [];
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const sendReplyMut = useMutation({
+    mutationFn: (msg: string) => adminFetch(`/api/admin/wa/chats/${activeLeadId}/reply`, { method: 'POST', body: JSON.stringify({ message: msg }) }),
+    onSuccess: () => {
+      setReplyText('');
+      qc.invalidateQueries({ queryKey: ['wa-chat-messages', activeLeadId] });
+      qc.invalidateQueries({ queryKey: ['wa-chats'] });
+    },
+    onError: (err: any) => {
+      toast({ title: 'Send Failed', description: err?.message || 'Could not send WhatsApp reply', variant: 'destructive' });
+    },
+  });
+
+  const handleSend = () => {
+    if (!replyText.trim() || !activeLeadId) return;
+    sendReplyMut.mutate(replyText.trim());
+  };
+
+  const unreadTotal = chats.reduce((acc, c) => acc + (c.unreadCount > 0 ? 1 : 0), 0);
+
+  return (
+    <div className="bg-[#ffffff] border border-[#e9edef] rounded-2xl shadow-md overflow-hidden grid grid-cols-1 md:grid-cols-12 h-[calc(100vh-210px)] min-h-[520px] max-h-[780px] font-sans">
+      {/* ── Left Sidebar (WhatsApp Web Style) ── */}
+      <div className="md:col-span-5 lg:col-span-4 border-r border-[#e9edef] flex flex-col h-full bg-white">
+        {/* Top Header */}
+        <div className="px-4 py-3 bg-[#ffffff] flex items-center justify-between border-b border-[#f0f2f5]">
+          <h2 className="text-xl font-bold text-[#111b21] tracking-tight flex items-center gap-2">
+            WhatsApp
+          </h2>
+          <div className="flex items-center gap-1 text-[#54656f]">
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-[#54656f] hover:bg-[#f0f2f5] rounded-full">
+              <Plus className="w-5 h-5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-[#54656f] hover:bg-[#f0f2f5] rounded-full">
+              <MoreVertical className="w-5 h-5" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Search Bar */}
+        <div className="p-2.5 bg-white space-y-2.5">
+          <div className="relative">
+            <Search className="w-4 h-4 absolute left-3 top-2.5 text-[#667781]" />
+            <Input
+              placeholder="Search or start a new chat"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 h-9 text-xs bg-[#f0f2f5] border-none rounded-lg focus-visible:ring-1 focus-visible:ring-[#00a884] placeholder:text-[#667781]"
+            />
+          </div>
+
+          {/* Filter Chips */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none text-xs font-medium">
+            <button
+              onClick={() => setActiveFilter('all')}
+              className={`px-3 py-1 rounded-full text-xs transition-colors ${
+                activeFilter === 'all'
+                  ? 'bg-[#e7fce3] text-[#008069] font-bold'
+                  : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
+              }`}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setActiveFilter('unread')}
+              className={`px-3 py-1 rounded-full text-xs transition-colors flex items-center gap-1 ${
+                activeFilter === 'unread'
+                  ? 'bg-[#e7fce3] text-[#008069] font-bold'
+                  : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
+              }`}
+            >
+              Unread {unreadTotal > 0 && <span className="text-[10px] font-bold">{unreadTotal}</span>}
+            </button>
+            <button
+              onClick={() => setActiveFilter('sellers')}
+              className={`px-3 py-1 rounded-full text-xs transition-colors ${
+                activeFilter === 'sellers'
+                  ? 'bg-[#e7fce3] text-[#008069] font-bold'
+                  : 'bg-[#f0f2f5] text-[#54656f] hover:bg-[#e9edef]'
+              }`}
+            >
+              Sellers
+            </button>
+          </div>
+        </div>
+
+        {/* Promo Card (Optional WhatsApp Ad Banner Style) */}
+        {showPromo && (
+          <div className="mx-2.5 my-1 p-3 rounded-xl bg-[#f0f2f5] flex items-start justify-between gap-2.5 relative border border-slate-200/50">
+            <div className="w-8 h-8 rounded-full bg-[#00a884] text-white flex items-center justify-center shrink-0 mt-0.5">
+              <Megaphone className="w-4 h-4" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-[#111b21] leading-tight">Reach new customers</p>
+              <p className="text-[11px] text-[#667781] leading-snug mt-0.5">
+                Manage all your store WhatsApp conversations directly in one live inbox.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowPromo(false)}
+              className="text-[#667781] hover:text-[#111b21] p-0.5 rounded-full hover:bg-slate-200 transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Chats List */}
+        <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-[#f5f6f6]">
+          {loadingChats ? (
+            <div className="p-6 text-center text-xs text-[#667781] flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-[#00a884]" /> Loading WhatsApp chats...
+            </div>
+          ) : filteredChats.length === 0 ? (
+            <div className="p-8 text-center text-xs text-[#667781]">
+              No chats found
+            </div>
+          ) : (
+            filteredChats.map((chat) => {
+              const isSelected = activeChat ? String(chat.id) === String(activeChat.id) : false;
+              const title = String(chat.displayName || chat.sellerStoreName || chat.phone || 'Unknown Contact');
+              return (
+                <button
+                  key={chat.id}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedChatId(chat.id);
+                  }}
+                  className={`w-full text-left px-3.5 py-3 flex items-center gap-3 transition-colors cursor-pointer ${
+                    isSelected ? 'bg-[#f0f2f5] font-bold border-l-4 border-l-[#00a884]' : 'hover:bg-[#f5f6f6]'
+                  }`}
+                >
+                  <div className="w-12 h-12 rounded-full bg-[#e9edef] text-[#54656f] font-semibold text-base flex items-center justify-center shrink-0 shadow-2xs">
+                    {title.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1 mb-0.5">
+                      <span className="font-semibold text-xs text-[#111b21] truncate">
+                        {title}
+                      </span>
+                      <span className="text-[11px] text-[#667781] whitespace-nowrap">
+                        {fmtRelative(chat.lastMessageAt)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-1">
+                      <p className="text-xs text-[#667781] truncate">
+                        {chat.lastMessage || 'No message content'}
+                      </p>
+                      {chat.unreadCount > 0 && (
+                        <span className="bg-[#25d366] text-white rounded-full text-[11px] font-bold min-w-[20px] h-[20px] flex items-center justify-center px-1 shrink-0">
+                          {chat.unreadCount}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* ── Right Chat Area (WhatsApp Doodle Wallpaper Style) ── */}
+      <div className="md:col-span-7 lg:col-span-8 flex flex-col h-full min-h-0 bg-[#efeae2] relative overflow-hidden">
+        {activeChat ? (
+          <>
+            {/* Top Header */}
+            <div className="px-4 py-2.5 bg-[#f0f2f5] border-b border-[#e9edef] flex items-center justify-between shadow-2xs shrink-0 z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-[#00a884] text-white font-bold flex items-center justify-center text-base shadow-2xs">
+                  {String(activeChat.displayName || activeChat.sellerStoreName || activeChat.phone || 'U').charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-[#111b21] leading-tight">
+                    {String(activeChat.displayName || activeChat.sellerStoreName || activeChat.phone || 'Unknown Contact')}
+                  </h4>
+                  <p className="text-xs text-[#667781] flex items-center gap-2">
+                    <span>{String(activeChat.phone ?? '')}</span>
+                    {activeChat.sellerStoreName && (
+                      <span className="text-purple-700 font-semibold">· Store: {activeChat.sellerStoreName}</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 text-[#54656f]">
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-[#54656f] hover:bg-slate-200 rounded-full">
+                  <Video className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-[#54656f] hover:bg-slate-200 rounded-full">
+                  <Phone className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-[#54656f] hover:bg-slate-200 rounded-full">
+                  <Search className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-[#54656f] hover:bg-slate-200 rounded-full">
+                  <MoreVertical className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Message Stream */}
+            <div className="flex-1 min-h-0 p-4 overflow-y-auto space-y-2.5 bg-[#efeae2]">
+              {loadingMessages ? (
+                <div className="p-8 text-center text-xs text-[#667781] flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-[#00a884]" /> Loading message history...
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="p-8 text-center text-xs text-[#667781] bg-white/70 rounded-xl max-w-md mx-auto my-auto shadow-2xs">
+                  No message history. Send a reply below to start chatting with {String(activeChat.displayName || activeChat.phone || 'this contact')}.
+                </div>
+              ) : (
+                messages.map((m, idx) => {
+                  const isOutbound = m.direction === 'outbound' || m.fromMe;
+                  const isDeleted = m.message?.startsWith('[DELETED]');
+                  const showUnreadDivider = idx === messages.length - (activeChat.unreadCount || 0) && activeChat.unreadCount > 0;
+
+                  return (
+                    <React.Fragment key={m.id}>
+                      {showUnreadDivider && (
+                        <div className="flex justify-center my-3">
+                          <span className="bg-white text-[#667781] text-[11px] font-medium shadow-2xs px-3 py-1 rounded-md border border-[#e9edef]">
+                            {activeChat.unreadCount} unread message{activeChat.unreadCount > 1 ? 's' : ''}
+                          </span>
+                        </div>
+                      )}
+                      <div className={`flex ${isOutbound ? 'justify-end' : 'justify-start'}`}>
+                        <div
+                          className={`max-w-[70%] rounded-lg px-3 py-2 text-xs shadow-2xs leading-relaxed ${
+                            isOutbound
+                              ? 'bg-[#dcf8c6] text-[#111b21] rounded-tr-none'
+                              : 'bg-white text-[#111b21] rounded-tl-none border border-slate-200/60'
+                          }`}
+                        >
+                          {isDeleted ? (
+                            <p className="italic text-[#667781] flex items-center gap-1.5">
+                              <Ban className="w-3.5 h-3.5 text-slate-400" />
+                              This message was deleted
+                            </p>
+                          ) : (
+                            <p className="whitespace-pre-wrap">{m.message}</p>
+                          )}
+                          <div className={`flex items-center justify-end gap-1 mt-1 text-[10px] ${isOutbound ? 'text-[#667781]' : 'text-[#667781]'}`}>
+                            <span>
+                              {safeFmtTime(m.receivedAt)}
+                            </span>
+                            {isOutbound && <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" />}
+                          </div>
+                        </div>
+                      </div>
+                    </React.Fragment>
+                  );
+                })
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Bottom Composer Bar (WhatsApp Web Bar Style) */}
+            <div className="p-3 bg-[#f0f2f5] border-t border-[#e9edef] flex items-center gap-2">
+              <Button variant="ghost" size="icon" className="h-9 w-9 text-[#54656f] hover:bg-slate-200 rounded-full shrink-0">
+                <Plus className="w-5 h-5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-9 w-9 text-[#54656f] hover:bg-slate-200 rounded-full shrink-0">
+                <Smile className="w-5 h-5" />
+              </Button>
+              <Input
+                placeholder="Type a message"
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                className="bg-white text-xs h-10 rounded-full border-none px-4 focus-visible:ring-0 shadow-2xs text-[#111b21] placeholder:text-[#667781]"
+              />
+              {replyText.trim() ? (
+                <Button
+                  onClick={handleSend}
+                  disabled={sendReplyMut.isPending}
+                  className="bg-[#00a884] hover:bg-[#008069] text-white rounded-full h-10 w-10 p-0 flex items-center justify-center shrink-0 shadow-2xs"
+                >
+                  {sendReplyMut.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4 ml-0.5" />
+                  )}
+                </Button>
+              ) : (
+                <Button variant="ghost" size="icon" className="h-9 w-9 text-[#54656f] hover:bg-slate-200 rounded-full shrink-0">
+                  <Mic className="w-5 h-5" />
+                </Button>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full p-8 text-center text-[#667781] bg-[#f0f2f5]">
+            <MessageSquare className="w-14 h-14 text-[#00a884] mb-3" />
+            <h4 className="font-bold text-[#111b21] text-lg mb-1">WhatsApp Web for Admin</h4>
+            <p className="text-xs max-w-sm text-[#667781]">
+              Send and receive WhatsApp messages directly from the admin dashboard without taking out your phone.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Connection Tab ─────────────────────────────────────────────────────────────
 
 function ConnectionTab() {
@@ -181,7 +590,10 @@ function ConnectionTab() {
   const { data: initialStatus } = useQuery<WAState>({
     queryKey: ['wa-status'],
     queryFn: () => adminFetch('/api/admin/wa/status'),
-    refetchInterval: false,
+    refetchInterval: (query) => {
+      const st = query.state.data?.status;
+      return st === 'connected' ? 8000 : 2000;
+    },
   });
 
   useEffect(() => {
@@ -202,7 +614,7 @@ function ConnectionTab() {
         if (data.type === 'state') {
           setWaState((prev) => ({ ...(prev ?? {} as any), ...data }));
         } else if (data.type === 'qr') {
-          setWaState((prev) => prev ? { ...prev, qr: data.qr } : null);
+          setWaState((prev) => prev ? { ...prev, qr: data.qr, status: 'connecting' } : null);
         } else if (data.type === 'inbound_lead') {
           qc.invalidateQueries({ queryKey: ['wa-inbound-leads'] });
         }
@@ -216,7 +628,11 @@ function ConnectionTab() {
 
   const connectMut = useMutation({
     mutationFn: () => adminFetch('/api/admin/wa/connect', { method: 'POST' }),
-    onSuccess: () => toast({ title: 'Connecting…', description: 'Scan the QR code with your WhatsApp' }),
+    onSuccess: () => {
+      toast({ title: 'Generating QR Code…', description: 'Please wait a moment for the QR code to appear.' });
+      setWaState((prev) => prev ? { ...prev, status: 'connecting', qr: null } : null);
+      qc.invalidateQueries({ queryKey: ['wa-status'] });
+    },
     onError: () => toast({ title: 'Error', description: 'Could not start connection', variant: 'destructive' }),
   });
 
@@ -283,15 +699,22 @@ function ConnectionTab() {
           )}
           {status === 'connecting' && !qr && (
             <div className="flex items-center gap-3 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-              <Loader2 className="w-5 h-5 animate-spin text-yellow-600" />
-              <span className="text-yellow-800">Initialising connection…</span>
+              <Loader2 className="w-5 h-5 animate-spin text-yellow-600 shrink-0" />
+              <div className="text-xs text-yellow-800">
+                <div className="font-bold text-sm">Initialising WhatsApp Connection…</div>
+                <div>Generating fresh QR code. If it takes a few seconds, click <strong>Generate Fresh QR Code</strong> below.</div>
+              </div>
             </div>
           )}
           <div className="flex gap-3">
-            {status === 'disconnected' && (
-              <Button onClick={() => connectMut.mutate()} disabled={connectMut.isPending}>
-                {connectMut.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Wifi className="w-4 h-4 mr-2" />}
-                Connect WhatsApp
+            {status !== 'connected' && (
+              <Button
+                onClick={() => connectMut.mutate()}
+                disabled={connectMut.isPending}
+                className="bg-[#00a884] hover:bg-[#008069] text-white font-semibold"
+              >
+                {connectMut.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <QrCode className="w-4 h-4 mr-2" />}
+                {status === 'connecting' ? 'Generate Fresh QR Code' : 'Connect WhatsApp'}
               </Button>
             )}
             {status !== 'disconnected' && (
@@ -1778,8 +2201,11 @@ export default function WhatsAppMarketing() {
           </p>
         </div>
 
-        <Tabs defaultValue="connection">
-          <TabsList className="grid w-full grid-cols-5">
+        <Tabs defaultValue="live-chat">
+          <TabsList className="grid w-full grid-cols-6">
+            <TabsTrigger value="live-chat" className="flex items-center gap-1">
+              <MessageSquare className="w-3.5 h-3.5" />Live Chat
+            </TabsTrigger>
             <TabsTrigger value="connection">Connection</TabsTrigger>
             <TabsTrigger value="sequences">Sequences</TabsTrigger>
             <TabsTrigger value="leads">Leads</TabsTrigger>
@@ -1789,6 +2215,7 @@ export default function WhatsAppMarketing() {
             <TabsTrigger value="health">Health</TabsTrigger>
           </TabsList>
 
+          <TabsContent value="live-chat" className="mt-6"><LiveChatTab /></TabsContent>
           <TabsContent value="connection" className="mt-6"><ConnectionTab /></TabsContent>
           <TabsContent value="sequences" className="mt-6"><SequencesTab /></TabsContent>
           <TabsContent value="leads" className="mt-6"><LeadsTab /></TabsContent>

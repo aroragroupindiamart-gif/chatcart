@@ -884,6 +884,8 @@ components:
         - trial
         - basic
         - business
+        - lifetime
+        - pending
 
     Seller:
       type: object
@@ -906,6 +908,10 @@ components:
           $ref: "#/components/schemas/SubscriptionPlan"
         subscriptionStatus:
           type: string
+        subscriptionEndDate:
+          type: string
+          format: date-time
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -998,6 +1004,9 @@ components:
           type: integer
         name:
           type: string
+        sku:
+          type: string
+          nullable: true
         description:
           type: string
         price:
@@ -1005,6 +1014,10 @@ components:
           description: Price in INR
         categoryId:
           type: integer
+        categoryIds:
+          type: array
+          items:
+            type: integer
         categoryName:
           type: string
         status:
@@ -1053,6 +1066,10 @@ components:
           type: number
         categoryId:
           type: integer
+        categoryIds:
+          type: array
+          items:
+            type: integer
         stockCount:
           type: integer
           default: 1
@@ -1071,6 +1088,10 @@ components:
           type: number
         categoryId:
           type: integer
+        categoryIds:
+          type: array
+          items:
+            type: integer
         stockCount:
           type: integer
         status:

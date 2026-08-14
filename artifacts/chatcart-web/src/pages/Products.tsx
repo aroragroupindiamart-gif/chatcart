@@ -7,11 +7,11 @@ import {
   getListProductsQueryKey,
   type ListProductsParams,
 } from "@workspace/api-client-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
-import { Plus, Search, Package, Trash2, ArrowUp, QrCode, Loader2 } from "lucide-react";
+import { Plus, Search, Package, Trash2, ArrowUp, QrCode, Loader2, Folder, Filter, Layers } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -293,6 +293,95 @@ function ProductsContent() {
 
   const deleteProduct = useDeleteProduct();
   const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [groupByCategory, setGroupByCategory] = useState<boolean>(true);
+
+  const getProductCategoryName = (p: any): string => {
+    if (p.categoryName) return p.categoryName;
+    if (!categories || categories.length === 0) return "Uncategorized";
+
+    if (p.categoryId) {
+      const found = categories.find((c) => c.id === p.categoryId);
+      if (found) return found.name;
+    }
+
+    if (p.categoryIds && Array.isArray(p.categoryIds) && p.categoryIds.length > 0) {
+      const found = categories.find((c) => p.categoryIds.includes(c.id));
+      if (found) return found.name;
+    }
+
+    return "Uncategorized";
+  };
+
+  // Calculate category breakdown from current products list
+  const categoryBreakdown = useMemo(() => {
+    if (!products) return [];
+    const map = new Map<
+      string,
+      { id: number | null; name: string; total: number; active: number; outOfStock: number; hidden: number }
+    >();
+
+    products.forEach((p) => {
+      const name = getProductCategoryName(p);
+      const existing = map.get(name) || {
+        id: p.categoryId ?? null,
+        name,
+        total: 0,
+        active: 0,
+        outOfStock: 0,
+        hidden: 0,
+      };
+      existing.total += 1;
+      if (p.status === "active") existing.active += 1;
+      else if (p.status === "out_of_stock") existing.outOfStock += 1;
+      else if (p.status === "hidden") existing.hidden += 1;
+      map.set(name, existing);
+    });
+
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.name === "Uncategorized") return 1;
+      if (b.name === "Uncategorized") return -1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [products, categories]);
+
+  // Filter products by selected category
+  const filteredProducts = useMemo(() => {
+    if (!products) return [];
+    if (selectedCategory === "all") return products;
+    return products.filter(
+      (p) => getProductCategoryName(p) === selectedCategory
+    );
+  }, [products, selectedCategory, categories]);
+
+  // Group products by category
+  const groupedProducts = useMemo(() => {
+    const map = new Map<string, typeof products>();
+
+    filteredProducts.forEach((p) => {
+      const cat = getProductCategoryName(p);
+      if (!map.has(cat)) {
+        map.set(cat, []);
+      }
+      map.get(cat)!.push(p);
+    });
+
+    const keys = Array.from(map.keys()).sort((a, b) => {
+      if (a === "Uncategorized") return 1;
+      if (b === "Uncategorized") return -1;
+      return a.localeCompare(b);
+    });
+
+    return keys.map((key) => ({
+      name: key,
+      items: map.get(key)!,
+      activeCount: map.get(key)!.filter((p) => p.status === "active").length,
+      outOfStockCount: map.get(key)!.filter((p) => p.status === "out_of_stock").length,
+      hiddenCount: map.get(key)!.filter((p) => p.status === "hidden").length,
+    }));
+  }, [filteredProducts, categories]);
+
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -335,15 +424,108 @@ function ProductsContent() {
     }
   };
 
-  return (
-    <div className="space-y-6">
+  const renderProductRow = (product: NonNullable<typeof products>[number]) => (
+    <div
+      key={product.id}
+      className="p-4 flex hover:bg-slate-50 transition-colors gap-3"
+      style={{
+        flexDirection: isMobile ? "column" : "row",
+        alignItems: isMobile ? "stretch" : "center",
+        justifyContent: "between",
+      }}
+    >
+      <div className="flex items-center gap-4 min-w-0">
+        <input
+          type="checkbox"
+          checked={selectedIds.includes(product.id)}
+          onChange={(e) => toggleSelectOne(product.id, e.target.checked)}
+          className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary shrink-0 cursor-pointer"
+        />
+        <div className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
+          {product.images?.[0] ? (
+            <ProductThumb url={product.images[0].url} name={product.name} />
+          ) : (
+            <Package className="w-5 h-5 text-slate-300" />
+          )}
+        </div>
+        <div className="min-w-0">
+          <h3 className="font-medium text-slate-900 truncate">
+            {product.name}
+          </h3>
+          {product.sku && (
+            <p className="text-xs text-slate-400 truncate mt-0.5">
+              SKU: {product.sku}
+            </p>
+          )}
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            <span className="font-bold text-slate-900 text-sm">
+              ₹{product.price}
+            </span>
+            {product.categoryName && (
+              <span className="text-xs text-slate-500 px-2 py-0.5 bg-slate-100 rounded-full">
+                {product.categoryName}
+              </span>
+            )}
+            <span
+              className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                product.status === "active"
+                  ? "bg-green-100 text-green-700"
+                  : product.status === "out_of_stock"
+                    ? "bg-amber-100 text-amber-700"
+                    : "bg-slate-100 text-slate-500"
+              }`}
+            >
+              {product.status === "active"
+                ? "Active"
+                : product.status === "out_of_stock"
+                  ? "Out of Stock"
+                  : "Hidden"}
+            </span>
+            {isMobile && (
+              <span className="text-xs text-slate-500">
+                • {product.stockCount === 0 ? "Unlimited" : `${product.stockCount} stock`}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div
-        className="flex justify-between gap-4"
+        className="flex items-center gap-2 shrink-0 pl-8 lg:pl-0"
         style={{
-          flexDirection: isMobile ? "column" : "row",
-          alignItems: isMobile ? "stretch" : "center",
+          width: isMobile ? "100%" : "auto",
+          justifyContent: isMobile ? "space-between" : "flex-end",
         }}
       >
+        {!isMobile && (
+          <span className="text-sm text-slate-500">
+            {product.stockCount === 0 ? "Unlimited" : `${product.stockCount} in stock`}
+          </span>
+        )}
+        <div className="flex items-center gap-2 ml-auto lg:ml-0">
+          <Link
+            href={`/products/${product.id}`}
+            className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-xs lg:text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-7 lg:h-8 px-2.5 lg:px-3"
+          >
+            Edit
+          </Link>
+          <button
+            onClick={() => handleDelete(product.id, product.name)}
+            disabled={deletingId === product.id}
+            className="inline-flex items-center justify-center rounded-md text-sm transition-colors focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 text-slate-400 hover:text-red-600 hover:bg-red-50 h-7 w-7 lg:h-8 lg:w-8"
+            aria-label="Delete product"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-slate-900">
             Products
@@ -352,23 +534,18 @@ function ProductsContent() {
             Manage your catalogue and inventory
           </p>
         </div>
-        <div
-          className="flex items-center flex-wrap gap-2"
-          style={{ width: isMobile ? "100%" : "auto" }}
-        >
+        <div className="flex items-center gap-2">
           <Button
             onClick={startImport}
             variant="outline"
-            className="flex-1 justify-center h-9 text-xs sm:text-sm px-3 py-2 border-slate-200 text-slate-700 hover:text-slate-900 font-medium"
-            style={{ flexGrow: isMobile ? 1 : 0 }}
+            className="h-9 text-xs sm:text-sm px-3 py-2 border-slate-200 text-slate-700 hover:text-slate-900 font-medium whitespace-nowrap"
           >
             <QrCode className="w-4 h-4 mr-2 text-emerald-500 shrink-0" />
             Import from WhatsApp
           </Button>
           <Link
             href="/products/new"
-            className="flex-1 inline-flex items-center justify-center whitespace-nowrap rounded-md text-xs sm:text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground shadow hover:bg-primary/90 h-9 px-3 py-2"
-            style={{ flexGrow: isMobile ? 1 : 0 }}
+            className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-xs sm:text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground shadow hover:bg-primary/90 h-9 px-4 py-2 font-semibold"
           >
             <Plus className="w-4 h-4 mr-2 shrink-0" />
             Add Product
@@ -376,156 +553,70 @@ function ProductsContent() {
         </div>
       </div>
 
-      <div
-        className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm overflow-hidden flex justify-between gap-4"
-        style={{
-          flexDirection: isMobile ? "column" : "row",
-          alignItems: isMobile ? "stretch" : "center",
-        }}
-      >
+      {/* Filter Bar */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <Tabs
           value={statusTab}
           onValueChange={setStatusTab}
           className="overflow-hidden"
-          style={{ width: isMobile ? "100%" : "auto" }}
         >
-          <div className="overflow-x-auto pb-1 -mb-1 w-full no-scrollbar">
-            <TabsList className="bg-slate-100/50 p-1 inline-flex min-w-full lg:min-w-0">
-              <TabsTrigger value="all" className="whitespace-nowrap">All</TabsTrigger>
-              <TabsTrigger value="active" className="whitespace-nowrap">Active</TabsTrigger>
-              <TabsTrigger value="out_of_stock" className="whitespace-nowrap">Out of Stock</TabsTrigger>
-              <TabsTrigger value="hidden" className="whitespace-nowrap">Hidden</TabsTrigger>
-            </TabsList>
-          </div>
+          <TabsList className="bg-slate-100/50 p-1 inline-flex">
+            <TabsTrigger value="all" className="whitespace-nowrap">All</TabsTrigger>
+            <TabsTrigger value="active" className="whitespace-nowrap">Active</TabsTrigger>
+            <TabsTrigger value="out_of_stock" className="whitespace-nowrap">Out of Stock</TabsTrigger>
+            <TabsTrigger value="hidden" className="whitespace-nowrap">Hidden</TabsTrigger>
+          </TabsList>
         </Tabs>
 
-        <div
-          className="relative"
-          style={{ width: isMobile ? "100%" : "18rem" }}
-        >
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <Input
-            placeholder="Search products..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 bg-slate-50 border-slate-200"
-          />
+        <div className="flex items-center gap-2 flex-wrap">
+          {categoryBreakdown.length > 0 && (
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="h-9 rounded-md border border-slate-200 bg-slate-50 text-slate-700 px-3 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+            >
+              <option value="all">All Categories ({products?.length || 0})</option>
+              {categoryBreakdown.map((cat) => (
+                <option key={cat.name} value={cat.name}>
+                  {cat.name} ({cat.total})
+                </option>
+              ))}
+            </select>
+          )}
+
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Input
+              placeholder="Search products..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 bg-slate-50 border-slate-200"
+            />
+          </div>
         </div>
       </div>
 
+      {/* Product List */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         {isLoading ? (
           <div className="p-8 text-center text-slate-500">
             Loading products...
           </div>
-        ) : products && products.length > 0 ? (
+        ) : filteredProducts && filteredProducts.length > 0 ? (
           <div className="divide-y divide-slate-100">
-            <div className="flex items-center gap-4 px-4 py-2.5 bg-slate-50/85 border-b border-slate-100 text-xs font-semibold text-slate-500">
-              <input
-                type="checkbox"
-                checked={selectedIds.length === products.length && products.length > 0}
-                onChange={(e) => toggleSelectAll(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary cursor-pointer shrink-0"
-              />
-              <span>Select All Products ({products.length})</span>
-            </div>
-            {products.map((product) => (
-              <div
-                key={product.id}
-                className="p-4 flex hover:bg-slate-50 transition-colors gap-3"
-                style={{
-                  flexDirection: isMobile ? "column" : "row",
-                  alignItems: isMobile ? "stretch" : "center",
-                  justifyContent: "between",
-                }}
-              >
-                <div className="flex items-center gap-4 min-w-0">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.includes(product.id)}
-                    onChange={(e) => toggleSelectOne(product.id, e.target.checked)}
-                    className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary shrink-0 cursor-pointer"
-                  />
-                  <div className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
-                    {product.images?.[0] ? (
-                      <ProductThumb url={product.images[0].url} name={product.name} />
-                    ) : (
-                      <Package className="w-5 h-5 text-slate-300" />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="font-medium text-slate-900 truncate">
-                      {product.name}
-                    </h3>
-                    {product.sku && (
-                      <p className="text-xs text-slate-400 truncate mt-0.5">
-                        SKU: {product.sku}
-                      </p>
-                    )}
-                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      <span className="font-bold text-slate-900 text-sm">
-                        ₹{product.price}
-                      </span>
-                      {product.categoryName && (
-                        <span className="text-xs text-slate-500 px-2 py-0.5 bg-slate-100 rounded-full">
-                          {product.categoryName}
-                        </span>
-                      )}
-                      <span
-                        className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                          product.status === "active"
-                            ? "bg-green-100 text-green-700"
-                            : product.status === "out_of_stock"
-                              ? "bg-amber-100 text-amber-700"
-                              : "bg-slate-100 text-slate-500"
-                        }`}
-                      >
-                        {product.status === "active"
-                          ? "Active"
-                          : product.status === "out_of_stock"
-                            ? "Out of Stock"
-                            : "Hidden"}
-                      </span>
-                      {isMobile && (
-                        <span className="text-xs text-slate-500">
-                          • {product.stockCount === 0 ? "Unlimited" : `${product.stockCount} stock`}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div
-                  className="flex items-center gap-2 shrink-0 pl-8 lg:pl-0"
-                  style={{
-                    width: isMobile ? "100%" : "auto",
-                    justifyContent: isMobile ? "space-between" : "flex-end",
-                  }}
-                >
-                  {!isMobile && (
-                    <span className="text-sm text-slate-500">
-                      {product.stockCount === 0 ? "Unlimited" : `${product.stockCount} in stock`}
-                    </span>
-                  )}
-                  <div className="flex items-center gap-2 ml-auto lg:ml-0">
-                    <Link
-                      href={`/products/${product.id}`}
-                      className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-xs lg:text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-7 lg:h-8 px-2.5 lg:px-3"
-                    >
-                      Edit
-                    </Link>
-                    <button
-                      onClick={() => handleDelete(product.id, product.name)}
-                      disabled={deletingId === product.id}
-                      className="inline-flex items-center justify-center rounded-md text-sm transition-colors focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 text-slate-400 hover:text-red-600 hover:bg-red-50 h-7 w-7 lg:h-8 lg:w-8"
-                      aria-label="Delete product"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
+            <div className="flex items-center justify-between gap-4 px-4 py-2.5 bg-slate-50/85 border-b border-slate-200 text-xs font-semibold text-slate-500">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.length === filteredProducts.length && filteredProducts.length > 0}
+                  onChange={(e) => toggleSelectAll(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary cursor-pointer shrink-0"
+                />
+                <span>Select All ({filteredProducts.length})</span>
               </div>
-            ))}
+            </div>
+
+            {filteredProducts.map((product) => renderProductRow(product))}
           </div>
         ) : (
           <div className="p-12 text-center">

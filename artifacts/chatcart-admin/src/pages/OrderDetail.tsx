@@ -136,7 +136,7 @@ export default function OrderDetail() {
           <div className="md:col-span-2 space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Items Ordered ({order.itemsCount})</CardTitle>
+                <CardTitle>Items Ordered ({order.items?.length || 0})</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="divide-y divide-border">
@@ -175,7 +175,7 @@ export default function OrderDetail() {
                   ))}
                   <div className="pt-4 flex justify-between items-center text-lg font-bold">
                     <span>Total Amount</span>
-                    <span className="text-primary text-xl">₹{order.total}</span>
+                    <span className="text-primary text-xl">₹{order.totalAmount}</span>
                   </div>
                 </div>
               </CardContent>

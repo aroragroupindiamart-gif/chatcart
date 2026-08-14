@@ -27,7 +27,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
         if (!seller?.subscriptionEndDate) return null;
         const endDate = new Date(seller.subscriptionEndDate);
         const diffTime = endDate.getTime() - Date.now();
-        if (diffTime <= 0) return 0;
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         return diffDays;
       })()
@@ -136,6 +135,33 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <main className="flex-1 md:ml-64 min-h-screen pt-14 md:pt-0 pb-20 md:pb-0">
         <div className="p-4 md:p-8 max-w-7xl mx-auto">
           <LtdBanner />
+          {daysLeft !== null && daysLeft <= 3 && (
+            <div className="mb-4 p-3.5 rounded-xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs sm:text-sm text-amber-900 shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>
+                  {daysLeft <= 0 ? (
+                    <strong className="text-red-700 font-bold">Your subscription has expired! Renew now to keep your store active.</strong>
+                  ) : (
+                    <span>
+                      Your subscription expires in <strong>{daysLeft} day{daysLeft > 1 ? "s" : ""}</strong>. Renew to avoid disruption.
+                    </span>
+                  )}
+                </span>
+              </div>
+              <a
+                href={`https://wa.me/919319724678?text=${encodeURIComponent(
+                  `Hi, I'd like to renew my Chatcart subscription — my store is ${seller?.storeName || 'My Store'}`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3.5 py-1.5 bg-[#25D366] hover:bg-[#22c55e] text-white font-semibold rounded-lg whitespace-nowrap text-xs transition-colors shrink-0 flex items-center justify-center gap-1.5 shadow-xs"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                Renew Now
+              </a>
+            </div>
+          )}
           {children}
         </div>
       </main>
@@ -165,7 +191,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* PWA install prompt (Android & iOS) */}
       <InstallPrompt />
 
-      {daysLeft !== null && daysLeft > 0 && daysLeft <= 3 && showWarning && (
+      {daysLeft !== null && daysLeft <= 3 && showWarning && (
         <Dialog open={true} onOpenChange={(open) => { if (!open) handleDismissWarning(); }}>
           <DialogContent className="sm:max-w-md p-6">
             <DialogHeader className="space-y-3">
@@ -176,8 +202,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 Subscription Renewal Notice
               </DialogTitle>
               <DialogDescription className="text-center text-slate-500 text-sm leading-relaxed">
-                Your subscription expires in <span className="font-semibold text-slate-900">{daysLeft} day{daysLeft > 1 ? 's' : ''}</span>. 
-                Renew now to keep your store active and avoid interruption to your customers.
+                {daysLeft <= 0 ? (
+                  <span>Your subscription has <span className="font-semibold text-red-600">expired</span>. Renew now to keep your store active.</span>
+                ) : (
+                  <span>Your subscription expires in <span className="font-semibold text-slate-900">{daysLeft} day{daysLeft > 1 ? 's' : ''}</span>. Renew now to keep your store active and avoid interruption to your customers.</span>
+                )}
               </DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-3 mt-4">
@@ -199,7 +228,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 className="w-full text-slate-500 hover:text-slate-700"
                 onClick={handleDismissWarning}
               >
-                Dismiss
+                Remind Me Later
               </Button>
             </div>
           </DialogContent>

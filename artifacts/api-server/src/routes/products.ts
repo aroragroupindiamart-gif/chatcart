@@ -4,6 +4,8 @@ import {
   productsTable,
   productImagesTable,
   productVariantsTable,
+  productCategoriesTable,
+  categoriesTable,
 } from "@workspace/db/schema";
 import { eq, and, ne, asc, desc, ilike, inArray, count, or } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
@@ -11,7 +13,12 @@ import { getSellerPlan, getPlanLimits, getPlanDisplayName, requireActiveSubscrip
 
 const router = Router();
 
-function formatProduct(product: typeof productsTable.$inferSelect, images: typeof productImagesTable.$inferSelect[], variants: typeof productVariantsTable.$inferSelect[]) {
+function formatProduct(
+  product: typeof productsTable.$inferSelect,
+  images: typeof productImagesTable.$inferSelect[],
+  variants: typeof productVariantsTable.$inferSelect[],
+  categoryIds: number[] = []
+) {
   return {
     ...product,
     price: product.price != null ? parseFloat(product.price as unknown as string) : null,
@@ -20,6 +27,7 @@ function formatProduct(product: typeof productsTable.$inferSelect, images: typeo
       ...v,
       label: v.variantType,
     })),
+    categoryIds,
   };
 }
 
@@ -61,7 +69,17 @@ router.get("/products", requireAuth, requireActiveSubscription, async (req, res)
       ne(productsTable.status, "deleted"),
     ];
     if (categoryId) {
-      conditions.push(eq(productsTable.categoryId, parseInt(categoryId)));
+      const targetCatId = parseInt(categoryId);
+      const subquery = db
+        .select({ productId: productCategoriesTable.productId })
+        .from(productCategoriesTable)
+        .where(eq(productCategoriesTable.categoryId, targetCatId));
+      conditions.push(
+        or(
+          eq(productsTable.categoryId, targetCatId),
+          inArray(productsTable.id, subquery)
+        )!
+      );
     }
     if (status) {
       conditions.push(eq(productsTable.status, status as "active" | "out_of_stock" | "hidden"));
@@ -87,7 +105,7 @@ router.get("/products", requireAuth, requireActiveSubscription, async (req, res)
       return;
     }
 
-    const [images, variants] = await Promise.all([
+    const [images, variants, categoryMappings, sellerCategories] = await Promise.all([
       db
         .select()
         .from(productImagesTable)
@@ -97,9 +115,31 @@ router.get("/products", requireAuth, requireActiveSubscription, async (req, res)
         .select()
         .from(productVariantsTable)
         .where(inArray(productVariantsTable.productId, productIds)),
+      db
+        .select()
+        .from(productCategoriesTable)
+        .where(inArray(productCategoriesTable.productId, productIds)),
+      db
+        .select()
+        .from(categoriesTable)
+        .where(eq(categoriesTable.sellerId, req.seller!.sellerId)),
     ]);
 
-    res.json(products.map((p) => formatProduct(p, images, variants)));
+    const catNameMap = new Map(sellerCategories.map((c) => [c.id, c.name]));
+
+    res.json(
+      products.map((p) => {
+        const pCats = categoryMappings
+          .filter((cm) => cm.productId === p.id)
+          .map((cm) => cm.categoryId);
+        const primaryCatId = p.categoryId || pCats[0] || null;
+        const categoryName = primaryCatId ? catNameMap.get(primaryCatId) || null : null;
+        return {
+          ...formatProduct(p, images, variants, pCats),
+          categoryName,
+        };
+      })
+    );
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to list products" });
@@ -114,6 +154,7 @@ router.post("/products", requireAuth, requireActiveSubscription, async (req, res
       description?: string;
       price: number;
       categoryId?: number;
+      categoryIds?: number[];
       status?: "active" | "out_of_stock" | "hidden";
       stockCount?: number;
       showWhenOutOfStock?: boolean;
@@ -139,6 +180,10 @@ router.post("/products", requireAuth, requireActiveSubscription, async (req, res
       }
     }
 
+    const resolvedCategoryId = body.categoryIds && body.categoryIds.length > 0
+      ? body.categoryIds[0]
+      : (body.categoryId ?? null);
+
     const [product] = await db
       .insert(productsTable)
       .values({
@@ -147,13 +192,25 @@ router.post("/products", requireAuth, requireActiveSubscription, async (req, res
         sku: body.sku?.trim() || null,
         description: body.description,
         price: body.price != null ? String(body.price) : undefined,
-        categoryId: body.categoryId ?? null,
+        categoryId: resolvedCategoryId,
         status: requestedStatus,
         stockCount: body.stockCount ?? 1,
         showWhenOutOfStock: body.showWhenOutOfStock ?? false,
       })
       .returning();
-    res.status(201).json(formatProduct(product, [], []));
+
+    const finalCategoryIds = body.categoryIds || (resolvedCategoryId ? [resolvedCategoryId] : []);
+    const validCategoryIds = finalCategoryIds.filter((id) => typeof id === "number");
+    if (validCategoryIds.length > 0) {
+      await db.insert(productCategoriesTable).values(
+        validCategoryIds.map((catId) => ({
+          productId: product.id,
+          categoryId: catId,
+        }))
+      );
+    }
+
+    res.status(201).json(formatProduct(product, [], [], validCategoryIds));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to create product" });
@@ -209,7 +266,7 @@ router.get("/products/:productId", requireAuth, requireActiveSubscription, async
       res.status(404).json({ error: "Product not found" });
       return;
     }
-    const [images, variants] = await Promise.all([
+    const [images, variants, categoryMappings] = await Promise.all([
       db
         .select()
         .from(productImagesTable)
@@ -219,8 +276,12 @@ router.get("/products/:productId", requireAuth, requireActiveSubscription, async
         .select()
         .from(productVariantsTable)
         .where(eq(productVariantsTable.productId, productId)),
+      db
+        .select()
+        .from(productCategoriesTable)
+        .where(eq(productCategoriesTable.productId, productId)),
     ]);
-    res.json(formatProduct(product, images, variants));
+    res.json(formatProduct(product, images, variants, categoryMappings.map(cm => cm.categoryId)));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to get product" });
@@ -236,6 +297,7 @@ router.patch("/products/:productId", requireAuth, requireActiveSubscription, asy
       description?: string;
       price?: number;
       categoryId?: number | null;
+      categoryIds?: number[];
       status?: "active" | "out_of_stock" | "hidden";
       stockCount?: number;
       showWhenOutOfStock?: boolean;
@@ -264,7 +326,17 @@ router.patch("/products/:productId", requireAuth, requireActiveSubscription, asy
     if (body.sku !== undefined) updates.sku = body.sku.trim() || null;
     if (body.description !== undefined) updates.description = body.description;
     if (body.price !== undefined) updates.price = String(body.price);
-    if (body.categoryId !== undefined) updates.categoryId = body.categoryId;
+    
+    let resolvedCategoryId: number | null | undefined = undefined;
+    if (body.categoryIds !== undefined) {
+      resolvedCategoryId = body.categoryIds.length > 0 ? body.categoryIds[0] : null;
+    } else if (body.categoryId !== undefined) {
+      resolvedCategoryId = body.categoryId;
+    }
+    if (resolvedCategoryId !== undefined) {
+      updates.categoryId = resolvedCategoryId;
+    }
+
     if (body.status !== undefined) updates.status = body.status;
     if (body.stockCount !== undefined) updates.stockCount = body.stockCount;
     if (body.showWhenOutOfStock !== undefined)
@@ -285,7 +357,25 @@ router.patch("/products/:productId", requireAuth, requireActiveSubscription, asy
       res.status(404).json({ error: "Product not found" });
       return;
     }
-    const [images, variants] = await Promise.all([
+
+    // Sync productCategoriesTable if categoryIds is provided
+    if (body.categoryIds !== undefined) {
+      await db
+        .delete(productCategoriesTable)
+        .where(eq(productCategoriesTable.productId, productId));
+      
+      const validCategoryIds = body.categoryIds.filter((id) => typeof id === "number");
+      if (validCategoryIds.length > 0) {
+        await db.insert(productCategoriesTable).values(
+          validCategoryIds.map((catId) => ({
+            productId: productId,
+            categoryId: catId,
+          }))
+        );
+      }
+    }
+
+    const [images, variants, categoryMappings] = await Promise.all([
       db
         .select()
         .from(productImagesTable)
@@ -295,8 +385,12 @@ router.patch("/products/:productId", requireAuth, requireActiveSubscription, asy
         .select()
         .from(productVariantsTable)
         .where(eq(productVariantsTable.productId, productId)),
+      db
+        .select()
+        .from(productCategoriesTable)
+        .where(eq(productCategoriesTable.productId, productId)),
     ]);
-    res.json(formatProduct(updated, images, variants));
+    res.json(formatProduct(updated, images, variants, categoryMappings.map(cm => cm.categoryId)));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to update product" });
@@ -566,6 +660,19 @@ router.post(
             inArray(productsTable.id, productIds)
           )
         );
+
+      await db
+        .delete(productCategoriesTable)
+        .where(inArray(productCategoriesTable.productId, productIds));
+
+      if (categoryId !== null) {
+        await db.insert(productCategoriesTable).values(
+          productIds.map((pId) => ({
+            productId: pId,
+            categoryId: categoryId,
+          }))
+        );
+      }
 
       res.json({ success: true, count: productIds.length });
     } catch (err) {

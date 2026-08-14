@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
-import { ShoppingCart, Store, Search, X, ArrowUp } from "lucide-react";
+import { ShoppingCart, Store, Search, X, ArrowUp, LayoutGrid, ZoomIn } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
 import { api, imgSrc, formatPrice, type Seller, type Product, type Category } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import CartSheet from "@/components/CartSheet";
+import ImageLightboxModal from "@/components/ImageLightboxModal";
 import { usePageMeta, absImgUrl } from "@/lib/usePageMeta";
 import { StoreUnavailable } from "@/components/StoreUnavailable";
 
@@ -20,6 +21,9 @@ export default function StoreFront() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [cartOpen, setCartOpen] = useState(false);
+  const [lightboxImages, setLightboxImages] = useState<{ url: string; id?: number }[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(() => {
     const params = new URLSearchParams(window.location.search);
     const cat = params.get("category");
@@ -27,6 +31,52 @@ export default function StoreFront() {
   });
 
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [allCategoriesOpen, setAllCategoriesOpen] = useState(false);
+
+  // Save scroll position on scroll
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 0 && subdomain) {
+        sessionStorage.setItem(`storefront_scroll_${subdomain}`, String(window.scrollY));
+      }
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [subdomain]);
+
+  // Restore scroll position after loading products
+  useEffect(() => {
+    if (!loading && products.length > 0 && subdomain) {
+      const saved = sessionStorage.getItem(`storefront_scroll_${subdomain}`);
+      if (saved) {
+        const y = Number(saved);
+        if (!isNaN(y) && y > 0) {
+          setTimeout(() => {
+            window.scrollTo(0, y);
+          }, 80);
+        }
+      }
+    }
+  }, [loading, products, subdomain]);
+
+  // Mobile Back Button Interceptor for Modals (Cart, Categories, Lightbox)
+  useEffect(() => {
+    const isModalOpen = cartOpen || allCategoriesOpen || lightboxImages.length > 0;
+    if (!isModalOpen) return;
+
+    window.history.pushState({ modal: true }, "");
+
+    const handlePopState = () => {
+      if (cartOpen) setCartOpen(false);
+      if (allCategoriesOpen) setAllCategoriesOpen(false);
+      if (lightboxImages.length > 0) setLightboxImages([]);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [cartOpen, allCategoriesOpen, lightboxImages]);
 
   useEffect(() => {
     const onScroll = () => setShowScrollTop(window.scrollY > 300);
@@ -111,11 +161,26 @@ export default function StoreFront() {
 
   const isSearching = search.trim().length > 0;
 
-  const usedCategoryIds = new Set(
-    products.filter((p) => p.categoryId !== null).map((p) => p.categoryId)
-  );
+  const usedCategoryIds = new Set<number>();
+  products.forEach((p) => {
+    if (p.categoryIds && p.categoryIds.length > 0) {
+      p.categoryIds.forEach((id) => usedCategoryIds.add(id));
+    } else if (p.categoryId !== null && p.categoryId !== undefined) {
+      usedCategoryIds.add(p.categoryId);
+    }
+  });
   const visibleCategories = categories.filter((c) => usedCategoryIds.has(c.id));
   const showTabs = visibleCategories.length > 0;
+
+  const categoriesWithCounts = visibleCategories.map((cat) => {
+    const productCount = products.filter((p) => {
+      if (p.categoryIds && p.categoryIds.length > 0) {
+        return p.categoryIds.includes(cat.id);
+      }
+      return p.categoryId !== null && Number(p.categoryId) === Number(cat.id);
+    }).length;
+    return { ...cat, productCount };
+  });
 
   const filtered = isSearching
     ? products.filter(
@@ -125,9 +190,24 @@ export default function StoreFront() {
       )
     : selectedCategoryId === null
     ? products
-    : products.filter((p) => p.categoryId !== null && Number(p.categoryId) === Number(selectedCategoryId));
+    : products.filter((p) => {
+        if (p.categoryIds && p.categoryIds.length > 0) {
+          return p.categoryIds.includes(Number(selectedCategoryId));
+        }
+        return p.categoryId !== null && Number(p.categoryId) === Number(selectedCategoryId);
+      });
 
-  const goToProduct = (id: number) => navigate(`/${subdomain}/p/${id}`);
+  const goToProduct = (id: number) => {
+    if (subdomain) {
+      sessionStorage.setItem(`storefront_scroll_${subdomain}`, String(window.scrollY));
+    }
+    navigate(`/${subdomain}/p/${id}`);
+  };
+
+  const handleOpenLightbox = (imgs: { url: string; id?: number }[], index = 0) => {
+    setLightboxImages(imgs);
+    setLightboxIndex(index);
+  };
 
   if (loading) {
     return (
@@ -191,8 +271,8 @@ export default function StoreFront() {
           >
             <ShoppingCart className="w-5 h-5 text-foreground" />
             {totalItems > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 bg-primary text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold leading-none">
-                {totalItems > 9 ? "9+" : totalItems}
+              <span className="absolute -top-1 -right-1 bg-primary text-white text-[10px] rounded-full min-w-4.5 h-4.5 px-1 flex items-center justify-center font-bold leading-none shadow-xs">
+                {totalItems}
               </span>
             )}
           </button>
@@ -246,46 +326,60 @@ export default function StoreFront() {
 
         {/* ── Category tabs ── */}
         {showTabs && !isSearching && (
-          <div className="relative -mx-4">
-            {showLeftFade && (
-              <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-10 z-10 bg-gradient-to-r from-background to-transparent" />
-            )}
-            {showRightFade && (
-              <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-10 z-10 bg-gradient-to-l from-background to-transparent" />
-            )}
-            <div
-              ref={tabsRef}
-              className="flex gap-2 overflow-x-auto pb-1 px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            >
-              {visibleCategories.map((cat) => (
+          <div className="flex items-center gap-2 -mx-4 px-4">
+            <div className="relative flex-1 min-w-0">
+              {showLeftFade && (
+                <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-10 z-10 bg-gradient-to-r from-background to-transparent" />
+              )}
+              {showRightFade && (
+                <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-10 z-10 bg-gradient-to-l from-background to-transparent" />
+              )}
+              <div
+                ref={tabsRef}
+                className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              >
+                {visibleCategories.map((cat) => (
+                  <button
+                    key={cat.id}
+                    onClick={() => handleCategoryChange(cat.id)}
+                    className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                      selectedCategoryId === cat.id
+                        ? "bg-primary text-white border-primary"
+                        : "bg-card border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                    }`}
+                  >
+                    {cat.name}
+                    {cat.dozenDiscountPercent != null && cat.dozenDiscountPercent > 0 && cat.bulkDiscountMinQty != null && (
+                      <span className="ml-1.5 text-xs opacity-80">
+                        {cat.dozenDiscountPercent}% off {cat.bulkDiscountMinQty}+
+                      </span>
+                    )}
+                  </button>
+                ))}
                 <button
-                  key={cat.id}
-                  onClick={() => handleCategoryChange(cat.id)}
+                  onClick={() => handleCategoryChange(null)}
                   className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
-                    selectedCategoryId === cat.id
+                    selectedCategoryId === null
                       ? "bg-primary text-white border-primary"
                       : "bg-card border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
                   }`}
                 >
-                  {cat.name}
-                  {cat.dozenDiscountPercent != null && cat.dozenDiscountPercent > 0 && cat.bulkDiscountMinQty != null && (
-                    <span className="ml-1.5 text-xs opacity-80">
-                      {cat.dozenDiscountPercent}% off {cat.bulkDiscountMinQty}+
-                    </span>
-                  )}
+                  All Items
                 </button>
-              ))}
-              <button
-                onClick={() => handleCategoryChange(null)}
-                className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
-                  selectedCategoryId === null
-                    ? "bg-primary text-white border-primary"
-                    : "bg-card border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                }`}
-              >
-                All Items
-              </button>
+              </div>
             </div>
+
+            <button
+              onClick={() => setAllCategoriesOpen(true)}
+              className={`shrink-0 p-2 rounded-full border transition-all flex items-center justify-center shadow-sm h-8 w-8 ${
+                visibleCategories.length > 6
+                  ? "bg-primary/10 border-primary/30 text-primary hover:bg-primary/20"
+                  : "bg-card border-border text-muted-foreground hover:border-primary/40 hover:text-primary"
+              }`}
+              title="View all categories"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
           </div>
         )}
 
@@ -304,7 +398,13 @@ export default function StoreFront() {
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {filtered.map((p) => (
-              <ProductCard key={p.id} product={p} layout={seller.productImageLayout ?? "square"} onClick={() => goToProduct(p.id)} />
+              <ProductCard
+                key={p.id}
+                product={p}
+                layout={seller.productImageLayout ?? "square"}
+                onClick={() => goToProduct(p.id)}
+                onOpenLightbox={handleOpenLightbox}
+              />
             ))}
           </div>
         )}
@@ -322,6 +422,93 @@ export default function StoreFront() {
         </footer>
       )}
 
+      {allCategoriesOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end justify-center p-0"
+          onClick={() => setAllCategoriesOpen(false)}
+        >
+          <div
+            className="bg-background w-full max-w-md rounded-t-2xl max-h-[80vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+              <h3 className="font-bold text-lg text-foreground flex items-center gap-2">
+                <LayoutGrid className="w-5 h-5 text-primary" />
+                Categories
+              </h3>
+              <button
+                onClick={() => setAllCategoriesOpen(false)}
+                className="p-1.5 rounded-full hover:bg-muted text-muted-foreground transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Categories List */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-2.5">
+              {/* All Items at the top */}
+              <button
+                onClick={() => {
+                  handleCategoryChange(null);
+                  setAllCategoriesOpen(false);
+                }}
+                className={`w-full px-4 py-3.5 rounded-2xl border text-left font-semibold text-sm transition-all flex items-center justify-between ${
+                  selectedCategoryId === null
+                    ? "bg-primary text-white border-primary shadow-md"
+                    : "bg-card border-border/80 text-foreground hover:bg-muted/70 hover:border-primary/30"
+                }`}
+              >
+                <span>All Items</span>
+                <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                  selectedCategoryId === null 
+                    ? "bg-white/20 text-white" 
+                    : "bg-muted text-muted-foreground border border-border/30"
+                }`}>
+                  {products.length}
+                </span>
+              </button>
+
+              {/* Real categories */}
+              {categoriesWithCounts.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => {
+                    handleCategoryChange(cat.id);
+                    setAllCategoriesOpen(false);
+                  }}
+                  className={`w-full px-4 py-3.5 rounded-2xl border text-left font-semibold text-sm transition-all flex items-center justify-between ${
+                    selectedCategoryId === cat.id
+                      ? "bg-primary text-white border-primary shadow-md"
+                      : "bg-card border-border/80 text-foreground hover:bg-muted/70 hover:border-primary/30"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="truncate">{cat.name}</span>
+                    {cat.dozenDiscountPercent != null && cat.dozenDiscountPercent > 0 && (
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
+                        selectedCategoryId === cat.id 
+                          ? "bg-white/20 text-white" 
+                          : "bg-primary/10 text-primary border border-primary/20"
+                      }`}>
+                        {cat.dozenDiscountPercent}% off
+                      </span>
+                    )}
+                  </div>
+                  <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full shrink-0 ${
+                    selectedCategoryId === cat.id 
+                      ? "bg-white/20 text-white" 
+                      : "bg-muted text-muted-foreground border border-border/30"
+                  }`}>
+                    {cat.productCount}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {showScrollTop && (
         <button
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
@@ -333,6 +520,12 @@ export default function StoreFront() {
       )}
 
       <CartSheet open={cartOpen} onClose={() => setCartOpen(false)} seller={seller} />
+      <ImageLightboxModal
+        open={lightboxImages.length > 0}
+        onClose={() => setLightboxImages([])}
+        images={lightboxImages}
+        initialIndex={lightboxIndex}
+      />
     </div>
   );
 }
@@ -341,10 +534,12 @@ function ProductCard({
   product,
   layout,
   onClick,
+  onOpenLightbox,
 }: {
   product: Product;
   layout: "square" | "portrait";
   onClick: () => void;
+  onOpenLightbox: (imgs: { url: string; id?: number }[], idx?: number) => void;
 }) {
   const primaryImage = product.images[0];
   const [imageError, setImageError] = useState(false);
@@ -373,15 +568,29 @@ function ProductCard({
   return (
     <div className="group bg-card border border-card-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-lg transition-all duration-200 w-full">
       <button onClick={onClick} className="w-full text-left">
-        <div className={`${layout === "portrait" ? "aspect-[3/4]" : "aspect-square"} bg-muted overflow-hidden relative`}>
+        <div className={`${layout === "portrait" ? "aspect-[3/4]" : "aspect-square"} bg-muted overflow-hidden relative group/img`}>
           {primaryImage && !imageError ? (
-            <img
-              src={imgSrc(primaryImage.url) + "?w=400"}
-              alt={product.name}
-              loading="lazy"
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-              onError={() => setImageError(true)}
-            />
+            <>
+              <img
+                src={imgSrc(primaryImage.url) + "?w=400"}
+                alt={product.name}
+                loading="lazy"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                onError={() => setImageError(true)}
+              />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenLightbox(product.images, 0);
+                }}
+                className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 text-white opacity-80 sm:opacity-0 group-hover/img:opacity-100 transition-opacity hover:bg-black/80 backdrop-blur-xs z-10 cursor-pointer"
+                title="Zoom image"
+                aria-label="Zoom image"
+              >
+                <ZoomIn className="w-3.5 h-3.5" />
+              </button>
+            </>
           ) : (
             <div className="w-full h-full flex items-center justify-center">
               <Store className="w-8 h-8 text-muted-foreground opacity-20" />

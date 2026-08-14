@@ -8,8 +8,9 @@ import {
   type OrderStatus,
 } from "@workspace/api-client-react";
 import { useParams, Link } from "wouter";
-import { ArrowLeft, Phone, Calendar, X, Package } from "lucide-react";
+import { ArrowLeft, Phone, Calendar, X, Package, Share2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -237,6 +238,23 @@ function OrderDetailContent() {
                     minute: "2-digit",
                   })}
                 </span>
+              </div>
+              <div className="pt-2 border-t border-slate-100">
+                <Button
+                  onClick={() => {
+                    const url = `${window.location.origin}/store/orders/${order.id}`;
+                    navigator.clipboard.writeText(url);
+                    toast({
+                      title: "Link Copied!",
+                      description: "Public order link has been copied to clipboard.",
+                    });
+                  }}
+                  className="w-full text-xs h-9 gap-1.5"
+                  variant="outline"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  Copy Order Link
+                </Button>
               </div>
             </CardContent>
           </Card>

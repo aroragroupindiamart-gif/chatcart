@@ -7,6 +7,7 @@ import {
   boolean,
   timestamp,
   pgEnum,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -50,3 +51,18 @@ export const insertProductSchema = createInsertSchema(productsTable).omit({
 
 export type InsertProduct = z.infer<typeof insertProductSchema>;
 export type Product = typeof productsTable.$inferSelect;
+
+export const productCategoriesTable = pgTable(
+  "product_categories",
+  {
+    productId: integer("product_id")
+      .notNull()
+      .references(() => productsTable.id, { onDelete: "cascade" }),
+    categoryId: integer("category_id")
+      .notNull()
+      .references(() => categoriesTable.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.productId, table.categoryId] })
+  ]
+);

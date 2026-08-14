@@ -57,9 +57,15 @@ async function cleanUpSession(sessionId: string) {
 
 const objectStorageService = new ObjectStorageService();
 
+const importImageCache = new Map<string, string>();
+
 // Helper to download image from public WA CDN and upload to R2
 async function uploadProductImage(imageUrl: string): Promise<string | null> {
   if (!imageUrl || !imageUrl.startsWith("http")) return null;
+  const cleanUrl = imageUrl.split("?")[0];
+  if (importImageCache.has(cleanUrl)) {
+    return importImageCache.get(cleanUrl)!;
+  }
   try {
     const response = await fetch(imageUrl);
     if (!response.ok) {
@@ -70,6 +76,7 @@ async function uploadProductImage(imageUrl: string): Promise<string | null> {
     const contentType = response.headers.get("content-type") || "image/jpeg";
 
     const objectPath = await objectStorageService.uploadFileBuffer(buffer, contentType);
+    importImageCache.set(cleanUrl, objectPath);
     return objectPath;
   } catch (err) {
     console.error(`[WA-IMPORT] Failed to download/upload image ${imageUrl}:`, err);

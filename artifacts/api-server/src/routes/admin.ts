@@ -117,8 +117,16 @@ router.get("/admin/sellers/:id", requireAdminAuth, async (req, res) => {
   const id = Number(req.params.id);
   const [seller] = await db.select().from(sellersTable).where(eq(sellersTable.id, id)).limit(1);
   if (!seller) { res.status(404).json({ error: "Seller not found" }); return; }
+  
+  const [pc] = await db.select({ c: count() }).from(productsTable).where(eq(productsTable.sellerId, id));
+  const [oc] = await db.select({ c: count() }).from(ordersTable).where(eq(ordersTable.sellerId, id));
+
   await audit(req.admin!.adminId, "viewed_seller", req.ip ?? "unknown", { targetSellerId: id });
-  res.json(seller);
+  res.json({
+    ...seller,
+    productCount: Number(pc?.c ?? 0),
+    orderCount: Number(oc?.c ?? 0),
+  });
 });
 
 router.patch("/admin/sellers/:id/subscription", requireAdminAuth, async (req, res) => {
@@ -226,7 +234,26 @@ router.get("/admin/sellers/:id/orders", requireAdminAuth, async (req, res) => {
   const withItems = await Promise.all(
     orders.map(async (o) => {
       const items = await db.select().from(orderItemsTable).where(eq(orderItemsTable.orderId, o.id));
-      return { ...o, items };
+
+      let customerName = "Guest";
+      let customerPhone = "-";
+      if (o.customerContact) {
+        const nameMatch = o.customerContact.match(/Name:\s*([^,]+)/i);
+        const phoneMatch = o.customerContact.match(/Phone:\s*(.+)/i);
+        customerName = nameMatch ? nameMatch[1].trim() : o.customerContact;
+        customerPhone = phoneMatch ? phoneMatch[1].trim() : "-";
+      }
+
+      const itemsCount = items.reduce((sum, i) => sum + i.quantity, 0);
+
+      return {
+        ...o,
+        total: parseFloat(o.totalAmount),
+        itemsCount,
+        customerName,
+        customerPhone,
+        items
+      };
     }),
   );
 
@@ -304,7 +331,7 @@ router.get("/admin/orders", requireAdminAuth, async (req, res) => {
 
 router.get("/admin/orders/:id", requireAdminAuth, async (req, res) => {
   try {
-    const orderId = req.params.id;
+    const orderId = String(req.params.id);
 
     const [row] = await db
       .select({
@@ -367,7 +394,7 @@ router.get("/admin/orders/:id", requireAdminAuth, async (req, res) => {
 
 router.get("/admin/sellers/:id/analytics", requireAdminAuth, async (req, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseInt(String(req.params.id));
     const { range = "all" } = req.query as Record<string, string>;
 
     const [seller] = await db

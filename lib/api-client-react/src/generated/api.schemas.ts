@@ -48,6 +48,8 @@ export const SubscriptionPlan = {
   trial: 'trial',
   basic: 'basic',
   business: 'business',
+  lifetime: 'lifetime',
+  pending: 'pending',
 } as const;
 
 export interface Seller {
@@ -62,6 +64,7 @@ export interface Seller {
   tagline?: string | null;
   subscriptionPlan?: SubscriptionPlan;
   subscriptionStatus?: string;
+  subscriptionEndDate?: string | null;
   createdAt: string;
 }
 
@@ -127,11 +130,12 @@ export interface ProductVariant {
 export interface Product {
   id: number;
   name: string;
-  sku?: string;
+  sku?: string | null;
   description?: string;
   /** Price in INR */
   price: number;
   categoryId?: number;
+  categoryIds?: number[];
   categoryName?: string;
   status: ProductStatus;
   stockCount: number;
@@ -145,19 +149,19 @@ export interface Product {
 
 export interface CreateProductRequest {
   name: string;
-  sku?: string;
   description?: string;
   price: number;
   categoryId?: number;
+  categoryIds?: number[];
   stockCount?: number;
 }
 
 export interface UpdateProductRequest {
   name?: string;
-  sku?: string;
   description?: string;
   price?: number;
   categoryId?: number;
+  categoryIds?: number[];
   stockCount?: number;
   status?: ProductStatus;
   showWhenOutOfStock?: boolean;

@@ -45,8 +45,12 @@ async function validateCart(
   subdomain: string,
   cartItems: CartItem[]
 ): Promise<ValidationResult> {
-  const freshProducts: Product[] = await api.getProducts(subdomain);
+  const [freshProducts, categories] = await Promise.all([
+    api.getProducts(subdomain),
+    api.getCategories(subdomain),
+  ]);
   const freshMap = new Map(freshProducts.map((p) => [p.id, p]));
+  const catMap = new Map(categories.map((c) => [c.id, c]));
 
   const issues: ValidationIssue[] = [];
   const resolvedItems: OrderLineItem[] = [];
@@ -91,7 +95,16 @@ async function validateCart(
       });
     }
 
-    const effectivePrice = newPrice ?? oldPrice ?? 0;
+    let effectivePrice = newPrice ?? oldPrice ?? 0;
+    if (fresh.categoryId != null && effectivePrice > 0) {
+      const cat = catMap.get(fresh.categoryId);
+      const minQty = cat?.bulkDiscountMinQty ?? null;
+      const pct = cat?.dozenDiscountPercent != null ? parseFloat(String(cat.dozenDiscountPercent)) : 0;
+      if (minQty != null && pct > 0 && adjustedQty >= minQty) {
+        effectivePrice = effectivePrice * (1 - pct / 100);
+      }
+    }
+
     resolvedItems.push({
       productNameSnapshot: item.product.name,
       priceSnapshot: effectivePrice.toFixed(2),

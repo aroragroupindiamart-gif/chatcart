@@ -388,6 +388,38 @@ function SettingsContent() {
                 </a>
               )}
             </div>
+            <div className="rounded-lg bg-slate-50 p-4 border border-slate-200/60">
+              <p className="text-xs text-slate-500 mb-1">Subscription end date</p>
+              {planName === "Lifetime" ? (
+                <p className="text-sm font-bold text-amber-600 flex items-center gap-1">
+                  <Infinity className="w-4 h-4" /> Lifetime Access
+                </p>
+              ) : (seller as any)?.subscriptionEndDate ? (
+                <div>
+                  <p className="text-sm font-bold text-slate-900">
+                    {new Date((seller as any).subscriptionEndDate).toLocaleDateString("en-IN", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {(() => {
+                      const diffDays = Math.ceil(
+                        (new Date((seller as any).subscriptionEndDate).getTime() - Date.now()) /
+                          (1000 * 60 * 60 * 24)
+                      );
+                      if (diffDays < 0) return <span className="text-red-600 font-semibold">Expired {Math.abs(diffDays)} day(s) ago</span>;
+                      if (diffDays === 0) return <span className="text-amber-600 font-semibold">Expires Today</span>;
+                      if (diffDays <= 3) return <span className="text-amber-600 font-semibold">Expires in {diffDays} day(s)</span>;
+                      return <span>Expires in {diffDays} days</span>;
+                    })()}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm font-bold text-slate-400">No expiration date set</p>
+              )}
+            </div>
             <div className="rounded-lg bg-slate-50 p-4">
               <p className="text-xs text-slate-500 mb-1">Storefront branding</p>
               <p className={`text-sm font-bold ${planColor(planName)}`}>

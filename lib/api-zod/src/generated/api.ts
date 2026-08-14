@@ -47,8 +47,9 @@ export const VerifyOtpResponse = zod.object({
   "whatsappNumber": zod.string(),
   "bannerImageUrl": zod.string().nullish(),
   "tagline": zod.string().nullish(),
-  "subscriptionPlan": zod.enum(['starter', 'growth', 'pro', 'trial', 'basic', 'business']).optional(),
+  "subscriptionPlan": zod.enum(['starter', 'growth', 'pro', 'trial', 'basic', 'business', 'lifetime', 'pending']).optional(),
   "subscriptionStatus": zod.string().optional(),
+  "subscriptionEndDate": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
 })
@@ -65,8 +66,9 @@ export const GetMeResponse = zod.object({
   "whatsappNumber": zod.string(),
   "bannerImageUrl": zod.string().nullish(),
   "tagline": zod.string().nullish(),
-  "subscriptionPlan": zod.enum(['starter', 'growth', 'pro', 'trial', 'basic', 'business']).optional(),
+  "subscriptionPlan": zod.enum(['starter', 'growth', 'pro', 'trial', 'basic', 'business', 'lifetime', 'pending']).optional(),
   "subscriptionStatus": zod.string().optional(),
+  "subscriptionEndDate": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -98,8 +100,9 @@ export const UpdateSellerResponse = zod.object({
   "whatsappNumber": zod.string(),
   "bannerImageUrl": zod.string().nullish(),
   "tagline": zod.string().nullish(),
-  "subscriptionPlan": zod.enum(['starter', 'growth', 'pro', 'trial', 'basic', 'business']).optional(),
+  "subscriptionPlan": zod.enum(['starter', 'growth', 'pro', 'trial', 'basic', 'business', 'lifetime', 'pending']).optional(),
   "subscriptionStatus": zod.string().optional(),
+  "subscriptionEndDate": zod.coerce.date().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -173,9 +176,11 @@ export const ListProductsQueryParams = zod.object({
 export const ListProductsResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
+  "sku": zod.string().nullish(),
   "description": zod.string().optional(),
   "price": zod.number().describe('Price in INR'),
   "categoryId": zod.number().optional(),
+  "categoryIds": zod.array(zod.number()).optional(),
   "categoryName": zod.string().optional(),
   "status": zod.enum(['active', 'out_of_stock', 'hidden', 'deleted']),
   "stockCount": zod.number(),
@@ -207,6 +212,7 @@ export const CreateProductBody = zod.object({
   "description": zod.string().optional(),
   "price": zod.number(),
   "categoryId": zod.number().optional(),
+  "categoryIds": zod.array(zod.number()).optional(),
   "stockCount": zod.number().default(createProductBodyStockCountDefault)
 })
 
@@ -221,9 +227,11 @@ export const GetProductParams = zod.object({
 export const GetProductResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
+  "sku": zod.string().nullish(),
   "description": zod.string().optional(),
   "price": zod.number().describe('Price in INR'),
   "categoryId": zod.number().optional(),
+  "categoryIds": zod.array(zod.number()).optional(),
   "categoryName": zod.string().optional(),
   "status": zod.enum(['active', 'out_of_stock', 'hidden', 'deleted']),
   "stockCount": zod.number(),
@@ -256,6 +264,7 @@ export const UpdateProductBody = zod.object({
   "description": zod.string().optional(),
   "price": zod.number().optional(),
   "categoryId": zod.number().optional(),
+  "categoryIds": zod.array(zod.number()).optional(),
   "stockCount": zod.number().optional(),
   "status": zod.enum(['active', 'out_of_stock', 'hidden', 'deleted']).optional(),
   "showWhenOutOfStock": zod.boolean().optional()
@@ -264,9 +273,11 @@ export const UpdateProductBody = zod.object({
 export const UpdateProductResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
+  "sku": zod.string().nullish(),
   "description": zod.string().optional(),
   "price": zod.number().describe('Price in INR'),
   "categoryId": zod.number().optional(),
+  "categoryIds": zod.array(zod.number()).optional(),
   "categoryName": zod.string().optional(),
   "status": zod.enum(['active', 'out_of_stock', 'hidden', 'deleted']),
   "stockCount": zod.number(),
@@ -570,9 +581,11 @@ export const ExportStoreDataResponse = zod.object({
   "products": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
+  "sku": zod.string().nullish(),
   "description": zod.string().optional(),
   "price": zod.number().describe('Price in INR'),
   "categoryId": zod.number().optional(),
+  "categoryIds": zod.array(zod.number()).optional(),
   "categoryName": zod.string().optional(),
   "status": zod.enum(['active', 'out_of_stock', 'hidden', 'deleted']),
   "stockCount": zod.number(),

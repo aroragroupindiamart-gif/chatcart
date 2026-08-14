@@ -272,6 +272,8 @@ router.get("/auth/me", requireAuth, async (req, res) => {
         productImageLayout: sellersTable.productImageLayout,
         subscriptionPlan: sellersTable.subscriptionPlan,
         subscriptionStatus: sellersTable.subscriptionStatus,
+        subscriptionStartDate: sellersTable.subscriptionStartDate,
+        subscriptionEndDate: sellersTable.subscriptionEndDate,
         createdAt: sellersTable.createdAt,
         updatedAt: sellersTable.updatedAt,
       })

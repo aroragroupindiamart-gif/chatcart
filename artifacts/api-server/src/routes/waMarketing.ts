@@ -12,7 +12,7 @@ import {
   waInboundMessagesTable,
   sellersTable,
 } from "@workspace/db/schema";
-import { eq, and, desc, gte, count, isNotNull, inArray, or, isNull, sql } from "drizzle-orm";
+import { eq, and, desc, gte, count, isNotNull, inArray, or, isNull, sql, ilike } from "drizzle-orm";
 import { z } from "zod";
 import {
   connectWA,
@@ -21,6 +21,7 @@ import {
   addSSEClient,
   removeSSEClient,
   getOrCreateSession,
+  sendWAMessage,
 } from "../lib/whatsapp.js";
 import { ObjectStorageService } from "../lib/objectStorage.js";
 import { purgeStaleSessionFiles } from "../lib/waAuthState.js";
@@ -28,6 +29,150 @@ import { purgeStaleSessionFiles } from "../lib/waAuthState.js";
 const memUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
 
 const router = Router();
+
+// ── Live Chat Endpoints ─────────────────────────────────────────────────────────
+
+router.get("/admin/wa/chats", requireAdminAuth, async (req, res) => {
+  try {
+    const { q } = req.query as { q?: string };
+    let query = db
+      .select({
+        id: waInboundLeadsTable.id,
+        phone: waInboundLeadsTable.phone,
+        displayName: waInboundLeadsTable.displayName,
+        lastMessage: waInboundLeadsTable.lastMessage,
+        lastMessageAt: waInboundLeadsTable.lastMessageAt,
+        unreadCount: waInboundLeadsTable.unreadCount,
+        matchedSellerId: waInboundLeadsTable.matchedSellerId,
+        sellerStoreName: sellersTable.storeName,
+      })
+      .from(waInboundLeadsTable)
+      .leftJoin(sellersTable, eq(waInboundLeadsTable.matchedSellerId, sellersTable.id))
+      .$dynamic();
+
+    if (q && q.trim()) {
+      const search = `%${q.trim()}%`;
+      query = query.where(
+        or(
+          ilike(waInboundLeadsTable.phone, search),
+          ilike(waInboundLeadsTable.displayName, search),
+          ilike(sellersTable.storeName, search),
+        ),
+      );
+    }
+
+    const chats = await query.orderBy(desc(waInboundLeadsTable.lastMessageAt));
+    res.json(chats);
+  } catch (e) {
+    console.error("[WA] List chats error:", e);
+    res.status(500).json({ error: "Failed to fetch chats" });
+  }
+});
+
+router.get("/admin/wa/chats/:leadId/messages", requireAdminAuth, async (req, res) => {
+  const leadId = Number(req.params.leadId);
+  if (!leadId) { res.status(400).json({ error: "Invalid leadId" }); return; }
+  try {
+    const messages = await db
+      .select()
+      .from(waInboundMessagesTable)
+      .where(eq(waInboundMessagesTable.inboundLeadId, leadId))
+      .orderBy(waInboundMessagesTable.receivedAt);
+
+    // Auto mark as read on fetching messages
+    await db
+      .update(waInboundLeadsTable)
+      .set({ unreadCount: 0 })
+      .where(eq(waInboundLeadsTable.id, leadId));
+
+    res.json(messages);
+  } catch (e) {
+    console.error("[WA] Get chat messages error:", e);
+    res.status(500).json({ error: "Failed to fetch messages" });
+  }
+});
+
+router.post("/admin/wa/chats/:leadId/reply", requireAdminAuth, async (req, res) => {
+  const leadId = Number(req.params.leadId);
+  const parsed = z.object({ message: z.string().min(1) }).safeParse(req.body);
+  if (!leadId || !parsed.success) {
+    res.status(400).json({ error: "Message text is required" });
+    return;
+  }
+
+  try {
+    const [lead] = await db
+      .select({ id: waInboundLeadsTable.id, phone: waInboundLeadsTable.phone })
+      .from(waInboundLeadsTable)
+      .where(eq(waInboundLeadsTable.id, leadId))
+      .limit(1);
+
+    if (!lead) {
+      res.status(404).json({ error: "Lead not found" });
+      return;
+    }
+
+    // Send WhatsApp text message using Baileys
+    await sendWAMessage(lead.phone, parsed.data.message);
+
+    // Save outbound message to message history
+    const [sentMsg] = await db
+      .insert(waInboundMessagesTable)
+      .values({
+        inboundLeadId: leadId,
+        message: parsed.data.message,
+        direction: "outbound",
+        fromMe: true,
+        receivedAt: new Date(),
+      })
+      .returning();
+
+    // Update lead's last message timestamp
+    await db
+      .update(waInboundLeadsTable)
+      .set({
+        lastMessage: parsed.data.message,
+        lastMessageAt: new Date(),
+        unreadCount: 0,
+        updatedAt: new Date(),
+      })
+      .where(eq(waInboundLeadsTable.id, leadId));
+
+    // Broadcast SSE chat message event
+    const { addSSEClient: _, ...ssePayload } = {
+      type: "chat_message",
+      leadId,
+      phone: lead.phone,
+      message: parsed.data.message,
+      direction: "outbound",
+      fromMe: true,
+      receivedAt: new Date(),
+    };
+    try {
+      const { broadcast } = await import("../lib/whatsapp.js");
+      (broadcast as any)?.(ssePayload);
+    } catch {}
+
+    res.json(sentMsg);
+  } catch (e: any) {
+    console.error("[WA] Send reply error:", e);
+    res.status(500).json({ error: e?.message || "Failed to send reply" });
+  }
+});
+
+router.post("/admin/wa/chats/:leadId/read", requireAdminAuth, async (req, res) => {
+  const leadId = Number(req.params.leadId);
+  if (!leadId) { res.status(400).json({ error: "Invalid leadId" }); return; }
+  try {
+    await db
+      .update(waInboundLeadsTable)
+      .set({ unreadCount: 0 })
+      .where(eq(waInboundLeadsTable.id, leadId));
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: "Failed to mark as read" });
+  }
+});
 
 // ── Status ─────────────────────────────────────────────────────────────────────
 

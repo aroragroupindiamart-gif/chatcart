@@ -5,6 +5,7 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   ListObjectsV2Command,
   HeadObjectCommand,
 } from "@aws-sdk/client-s3";
@@ -133,22 +134,27 @@ export async function downloadSessionFromStorage(): Promise<boolean> {
     const sessionDir = process.env.WA_SESSION_DIR ?? "/data/wa-session";
     await mkdir(sessionDir, { recursive: true });
 
-    await Promise.all(
-      objects.map(async (obj) => {
-        if (!obj.Key) return;
-        const resp = await client.send(
-          new GetObjectCommand({ Bucket: bucket, Key: obj.Key })
-        );
-        const body = resp.Body as any;
-        const chunks: Buffer[] = [];
-        for await (const chunk of body) {
-          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-        }
-        const buffer = Buffer.concat(chunks);
-        const filename = path.basename(obj.Key);
-        await writeFile(path.join(sessionDir, filename), buffer);
-      })
-    );
+    // Chunk downloads in batches of 15 to avoid socket capacity limits & event loop starvation
+    const BATCH_SIZE = 15;
+    for (let i = 0; i < objects.length; i += BATCH_SIZE) {
+      const chunk = objects.slice(i, i + BATCH_SIZE);
+      await Promise.all(
+        chunk.map(async (obj) => {
+          if (!obj.Key) return;
+          const resp = await client.send(
+            new GetObjectCommand({ Bucket: bucket, Key: obj.Key })
+          );
+          const body = resp.Body as any;
+          const chunks: Buffer[] = [];
+          for await (const chunk of body) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          }
+          const buffer = Buffer.concat(chunks);
+          const filename = path.basename(obj.Key);
+          await writeFile(path.join(sessionDir, filename), buffer);
+        })
+      );
+    }
 
     console.log(
       `[WA-AUTH] Downloaded ${objects.length} session file(s) from DO Spaces`
@@ -172,17 +178,18 @@ export async function deleteSessionFromStorage(): Promise<void> {
     const objects = list.Contents ?? [];
 
     if (objects.length > 0) {
-      await Promise.all(
-        objects.map((obj) =>
-          obj.Key
-            ? client
-                .send(new DeleteObjectCommand({ Bucket: bucket, Key: obj.Key }))
-                .catch(() => {})
-            : Promise.resolve()
-        )
-      );
+      const keys = objects.map((o) => ({ Key: o.Key! })).filter((o) => !!o.Key);
+      for (let i = 0; i < keys.length; i += 1000) {
+        const batch = keys.slice(i, i + 1000);
+        await client.send(
+          new DeleteObjectsCommand({
+            Bucket: bucket,
+            Delete: { Objects: batch },
+          })
+        );
+      }
       console.log(
-        `[WA-AUTH] Deleted ${objects.length} session file(s) from DO Spaces`
+        `[WA-AUTH] Bulk deleted ${objects.length} session file(s) from DO Spaces`
       );
     }
   } catch (e) {

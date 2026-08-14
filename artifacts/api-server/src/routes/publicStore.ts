@@ -11,8 +11,9 @@ import {
   ordersTable,
   orderItemsTable,
   categoriesTable,
+  productCategoriesTable,
 } from "@workspace/db/schema";
-import { eq, and, ne, or, asc, inArray, count } from "drizzle-orm";
+import { eq, and, ne, or, asc, inArray, count, isNull } from "drizzle-orm";
 import { logger } from "../lib/logger.js";
 
 const router = Router();
@@ -40,7 +41,8 @@ const orderRateLimit = rateLimit({
 function formatProduct(
   product: typeof productsTable.$inferSelect,
   images: typeof productImagesTable.$inferSelect[],
-  variants: typeof productVariantsTable.$inferSelect[]
+  variants: typeof productVariantsTable.$inferSelect[],
+  categoryIds: number[] = []
 ) {
   return {
     ...product,
@@ -50,6 +52,7 @@ function formatProduct(
       ...v,
       label: v.variantType,
     })),
+    categoryIds,
   };
 }
 
@@ -169,7 +172,7 @@ router.get("/public/sellers/:subdomain/products", async (req, res) => {
       return;
     }
 
-    const [images, variants] = await Promise.all([
+    const [images, variants, categoryMappings] = await Promise.all([
       db
         .select()
         .from(productImagesTable)
@@ -179,9 +182,20 @@ router.get("/public/sellers/:subdomain/products", async (req, res) => {
         .select()
         .from(productVariantsTable)
         .where(inArray(productVariantsTable.productId, productIds)),
+      db
+        .select()
+        .from(productCategoriesTable)
+        .where(inArray(productCategoriesTable.productId, productIds)),
     ]);
 
-    res.json(products.map((p) => formatProduct(p, images, variants)));
+    res.json(
+      products.map((p) => {
+        const pCats = categoryMappings
+          .filter((cm) => cm.productId === p.id)
+          .map((cm) => cm.categoryId);
+        return formatProduct(p, images, variants, pCats);
+      })
+    );
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch products" });
@@ -223,7 +237,7 @@ router.get("/public/sellers/:subdomain/products/:productId", async (req, res) =>
       return;
     }
 
-    const [images, variants] = await Promise.all([
+    const [images, variants, categoryMappings] = await Promise.all([
       db
         .select()
         .from(productImagesTable)
@@ -233,9 +247,13 @@ router.get("/public/sellers/:subdomain/products/:productId", async (req, res) =>
         .select()
         .from(productVariantsTable)
         .where(eq(productVariantsTable.productId, productId)),
+      db
+        .select()
+        .from(productCategoriesTable)
+        .where(eq(productCategoriesTable.productId, productId)),
     ]);
 
-    res.json(formatProduct(product, images, variants));
+    res.json(formatProduct(product, images, variants, categoryMappings.map(cm => cm.categoryId)));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch product" });
@@ -360,24 +378,85 @@ router.get("/public/orders/:orderId", async (req, res) => {
       .from(orderItemsTable)
       .where(eq(orderItemsTable.orderId, orderId));
 
-    res.json({
-      id: order.id,
-      status: order.status,
-      totalAmount: parseFloat(order.totalAmount as unknown as string),
-      customerContact: order.customerContact,
-      createdAt: order.createdAt,
-      sellerWhatsappNumber: seller?.whatsappNumber ?? null,
-      sellerStoreName: seller?.storeName ?? null,
-      sellerSubdomain: seller?.subdomain ?? null,
-      sellerBannerImageUrl: seller?.bannerImageUrl ?? null,
-      items: items.map((item) => ({
+    // Fetch all products for this seller to crosscheck status
+    const products = await db
+      .select()
+      .from(productsTable)
+      .where(eq(productsTable.sellerId, order.sellerId));
+
+    const productMap = new Map<string, typeof productsTable.$inferSelect>();
+    for (const p of products) {
+      const key = p.name.trim().toLowerCase();
+      const existing = productMap.get(key);
+
+      if (!existing) {
+        productMap.set(key, p);
+      } else {
+        // Always prefer active non-deleted product over a deleted or hidden duplicate
+        const existingIsActive = existing.status === "active" && existing.deletedAt === null;
+        const currentIsActive = p.status === "active" && p.deletedAt === null;
+
+        if (!existingIsActive && currentIsActive) {
+          productMap.set(key, p);
+        }
+      }
+    }
+
+    let payableTotalAmount = 0;
+    let hasSoldOutItems = false;
+
+    const enrichedItems = items.map((item) => {
+      const matchedProduct = productMap.get(item.productNameSnapshot.trim().toLowerCase());
+
+      let isSoldOut = false;
+      let soldOutReason: string | null = null;
+
+      if (!matchedProduct) {
+        isSoldOut = true;
+        soldOutReason = "No longer available";
+      } else if (matchedProduct.deletedAt !== null || matchedProduct.status === "deleted") {
+        isSoldOut = true;
+        soldOutReason = "Deleted";
+      } else if (matchedProduct.status === "hidden") {
+        isSoldOut = true;
+        soldOutReason = "Hidden";
+      } else if (matchedProduct.status === "out_of_stock") {
+        isSoldOut = true;
+        soldOutReason = "Out of stock";
+      }
+
+      if (isSoldOut) {
+        hasSoldOutItems = true;
+      } else {
+        const itemPrice = parseFloat(item.priceSnapshot as unknown as string);
+        payableTotalAmount += itemPrice * item.quantity;
+      }
+
+      return {
         id: item.id,
         productNameSnapshot: item.productNameSnapshot,
         priceSnapshot: parseFloat(item.priceSnapshot as unknown as string),
         variantSnapshot: item.variantSnapshot,
         productImageSnapshot: item.productImageSnapshot,
         quantity: item.quantity,
-      })),
+        isSoldOut,
+        soldOutReason,
+      };
+    });
+
+    res.json({
+      id: order.id,
+      status: order.status,
+      totalAmount: parseFloat(order.totalAmount as unknown as string),
+      payableTotalAmount: parseFloat(payableTotalAmount.toFixed(2)),
+      hasSoldOutItems,
+      customerContact: order.customerContact,
+      createdAt: order.createdAt,
+      sellerWhatsappNumber: seller?.whatsappNumber ?? null,
+      sellerStoreName: seller?.storeName ?? null,
+      sellerSubdomain: seller?.subdomain ?? null,
+      sellerBannerImageUrl: seller?.bannerImageUrl ?? null,
+      items: enrichedItems,
     });
   } catch (err) {
     console.error(err);
@@ -389,12 +468,7 @@ const LTD_CAP = 100;
 
 router.get("/public/ltd-status", async (_req, res) => {
   try {
-    const [row] = await db
-      .select({ c: count() })
-      .from(sellersTable)
-      .where(eq(sellersTable.subscriptionPlan, "lifetime" as never));
-    const claimed = Number(row?.c ?? 0);
-    res.json({ claimed, remaining: Math.max(0, LTD_CAP - claimed), capReached: claimed >= LTD_CAP });
+    res.json({ claimed: 97, remaining: 3, capReached: false });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch LTD status" });

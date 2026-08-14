@@ -44,6 +44,7 @@ export const waInboundLeadsTable = pgTable("wa_inbound_leads", {
   lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
   matchedSellerId: integer("matched_seller_id").references(() => sellersTable.id, { onDelete: "set null" }),
   messageCount: integer("message_count").notNull().default(1),
+  unreadCount: integer("unread_count").notNull().default(0),
   isWarm: boolean("is_warm").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -53,6 +54,8 @@ export const waInboundMessagesTable = pgTable("wa_inbound_messages", {
   id: serial("id").primaryKey(),
   inboundLeadId: integer("inbound_lead_id").notNull().references(() => waInboundLeadsTable.id, { onDelete: "cascade" }),
   message: text("message").notNull(),
+  direction: text("direction").notNull().default("inbound"),
+  fromMe: boolean("from_me").notNull().default(false),
   receivedAt: timestamp("received_at").defaultNow().notNull(),
 });
 

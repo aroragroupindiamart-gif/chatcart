@@ -32,6 +32,7 @@ export interface Product {
   price: number | null;
   status: string;
   categoryId: number | null;
+  categoryIds?: number[];
   sortOrder: number;
   stockCount: number | null;
   showWhenOutOfStock: boolean;
@@ -46,12 +47,16 @@ export interface OrderItem {
   variantSnapshot: string | null;
   productImageSnapshot: string | null;
   quantity: number;
+  isSoldOut?: boolean;
+  soldOutReason?: string | null;
 }
 
 export interface Order {
   id: string;
   status: string;
   totalAmount: number;
+  payableTotalAmount?: number;
+  hasSoldOutItems?: boolean;
   customerContact: string | null;
   createdAt: string;
   sellerWhatsappNumber: string | null;

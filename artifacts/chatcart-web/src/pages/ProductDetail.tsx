@@ -48,6 +48,8 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Save, Trash, Share2, Upload, X, Image as ImageIcon, Loader2, AlertCircle, RefreshCw, GripVertical } from "lucide-react";
 import { Link } from "wouter";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
@@ -133,15 +135,44 @@ interface OrderedImage {
   displayOrder: number;
 }
 
+import { Maximize2 } from "lucide-react";
+
+function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute top-4 right-4 text-white bg-black/60 hover:bg-black/90 rounded-full p-2.5 transition-colors shadow-lg z-50 cursor-pointer"
+        aria-label="Close picture"
+      >
+        <X className="w-6 h-6" />
+      </button>
+      <div className="relative max-w-4xl max-h-[90vh] flex items-center justify-center">
+        <img
+          src={src}
+          alt={alt}
+          className="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+    </div>
+  );
+}
+
 // ── Sortable image thumbnail ──────────────────────────────────────────────────
 
 interface SortableImageProps {
   img: OrderedImage;
   isPrimary: boolean;
   onDelete: (id: number) => void;
+  onView: (url: string) => void;
 }
 
-function SortableImage({ img, isPrimary, onDelete }: SortableImageProps) {
+function SortableImage({ img, isPrimary, onDelete, onView }: SortableImageProps) {
   const {
     attributes,
     listeners,
@@ -158,44 +189,64 @@ function SortableImage({ img, isPrimary, onDelete }: SortableImageProps) {
     zIndex: isDragging ? 10 : undefined,
   };
 
+  const fullUrl = imgSrc(img.url);
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className="relative group aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-50 touch-none"
+      className="relative group aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-50 touch-none cursor-pointer"
+      onClick={() => onView(fullUrl)}
     >
       <img
-        src={imgSrc(img.url)}
+        src={fullUrl}
         alt="Product"
         className="w-full h-full object-cover"
         draggable={false}
       />
 
-      {/* Drag handle — full tile is draggable via listeners */}
-      <div
-        {...attributes}
-        {...listeners}
-        className="absolute inset-0 cursor-grab active:cursor-grabbing"
-      />
+      {/* View full size zoom button */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onView(fullUrl);
+        }}
+        className="absolute top-1 left-1 bg-black/60 hover:bg-black/80 text-white rounded-full p-1.5 transition-opacity shadow z-10 opacity-90 group-hover:opacity-100"
+        title="View full size picture"
+      >
+        <Maximize2 className="w-3.5 h-3.5" />
+      </button>
 
       {/* Primary badge */}
       {isPrimary && (
-        <div className="absolute bottom-1 left-1 bg-indigo-600 text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-none pointer-events-none">
+        <div className="absolute bottom-1 left-1 bg-indigo-600 text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-none pointer-events-none z-10 shadow">
           Primary
         </div>
       )}
 
       {/* Delete button */}
       <button
-        onClick={(e) => { e.stopPropagation(); onDelete(img.id); }}
-        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow z-10"
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete(img.id);
+        }}
+        className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 opacity-80 group-hover:opacity-100 transition-opacity shadow z-10"
+        title="Delete photo"
       >
         <X className="w-3.5 h-3.5" />
       </button>
 
       {/* Drag indicator */}
-      <div className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-60 transition-opacity pointer-events-none">
-        <GripVertical className="w-4 h-4 text-white drop-shadow" />
+      <div
+        {...attributes}
+        {...listeners}
+        onClick={(e) => e.stopPropagation()}
+        className="absolute bottom-1 right-1 opacity-70 group-hover:opacity-100 transition-opacity z-10 cursor-grab active:cursor-grabbing p-1 bg-black/50 hover:bg-black/70 rounded text-white"
+        title="Drag to reorder"
+      >
+        <GripVertical className="w-3.5 h-3.5" />
       </div>
     </div>
   );
@@ -298,6 +349,7 @@ function ProductDetailContent() {
   const [price, setPrice] = useState("");
   const [stockCount, setStockCount] = useState("");
   const [categoryId, setCategoryId] = useState<string>("");
+  const [categoryIds, setCategoryIds] = useState<number[]>([]);
   const [status, setStatus] = useState<string>("active");
   const [showWhenOutOfStock, setShowWhenOutOfStock] = useState(false);
   const [variants, setVariants] = useState<Array<{ id?: number; variantType: string; options: string[] }>>([]);
@@ -310,6 +362,7 @@ function ProductDetailContent() {
       setPrice(product.price != null ? product.price.toString() : "");
       setStockCount(product.stockCount.toString());
       setCategoryId(product.categoryId?.toString() || "");
+      setCategoryIds((product as any).categoryIds || (product.categoryId ? [product.categoryId] : []));
       setStatus(product.status);
       setShowWhenOutOfStock(product.showWhenOutOfStock);
       setVariants(
@@ -321,6 +374,9 @@ function ProductDetailContent() {
       );
     }
   }, [product, isNew]);
+
+  // Full-size image preview lightbox modal
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
   // Sync orderedImages from product data, but preserve local order during active drag sessions
   const [isDragging, setIsDragging] = useState(false);
@@ -492,7 +548,8 @@ function ProductDetailContent() {
             price: resolvedPrice ?? 0,
             stockCount: Number(stockCount) || 0,
             categoryId: resolvedCategoryId ?? undefined,
-          },
+            categoryIds: categoryIds,
+          } as any,
         });
 
         const newId = newProduct.id;
@@ -548,9 +605,10 @@ function ProductDetailContent() {
             price: resolvedPrice,
             stockCount: Number(stockCount) || 0,
             categoryId: resolvedCategoryId ?? undefined,
+            categoryIds: categoryIds,
             status: status as ProductStatus,
             showWhenOutOfStock,
-          },
+          } as any,
         });
 
         // Sync product variants (delete old, insert new)
@@ -926,6 +984,7 @@ function ProductDetailContent() {
                     img={img}
                     isPrimary={index === 0}
                     onDelete={handleDeleteImage}
+                    onView={(url) => setPreviewImageUrl(url)}
                   />
                 ))}
 
@@ -1016,20 +1075,68 @@ function ProductDetailContent() {
             </div>
             <div className="space-y-2">
               <Label>
-                Category{" "}
+                Categories{" "}
                 <span className="text-slate-400 font-normal">(optional)</span>
               </Label>
-              <Select value={categoryId} onValueChange={setCategoryId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="unassigned">None</SelectItem>
-                  {categories?.map((c) => (
-                    <SelectItem key={c.id} value={c.id.toString()}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    className="w-full justify-between font-normal text-left bg-white border-slate-200 text-slate-900 hover:bg-slate-50"
+                  >
+                    <span className="truncate">
+                      {categoryIds.length === 0
+                        ? "Select categories"
+                        : categories
+                            ?.filter((c) => categoryIds.includes(c.id))
+                            .map((c) => c.name)
+                            .join(", ")}
+                    </span>
+                    <span className="text-slate-400 text-xs">▼</span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[300px] p-2 bg-white border border-slate-200 rounded-md shadow-md max-h-[300px] overflow-y-auto z-[9999]" align="start">
+                  {categories && categories.length > 0 ? (
+                    <div className="space-y-1">
+                      {categories.map((c) => {
+                        const isChecked = categoryIds.includes(c.id);
+                        return (
+                          <div
+                            key={c.id}
+                            className="flex items-center space-x-2 p-2 hover:bg-slate-50 rounded-md cursor-pointer text-sm text-slate-700"
+                            onClick={() => {
+                              if (!isChecked) {
+                                const newIds = [...categoryIds, c.id];
+                                setCategoryIds(newIds);
+                                if (!categoryId || categoryId === "unassigned") {
+                                  setCategoryId(c.id.toString());
+                                }
+                              } else {
+                                const updated = categoryIds.filter((id) => id !== c.id);
+                                setCategoryIds(updated);
+                                if (updated.length > 0) {
+                                  setCategoryId(updated[0].toString());
+                                } else {
+                                  setCategoryId("");
+                                }
+                              }
+                            }}
+                          >
+                            <Checkbox
+                              checked={isChecked}
+                              onCheckedChange={() => {}} // Handle inside click parent container
+                            />
+                            <span className="select-none">{c.name}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-slate-500 p-2">No categories created yet.</div>
+                  )}
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
 
@@ -1227,6 +1334,14 @@ function ProductDetailContent() {
           </div>
         )}
       </div>
+
+      {previewImageUrl && (
+        <ImageLightbox
+          src={previewImageUrl}
+          alt="Full size product view"
+          onClose={() => setPreviewImageUrl(null)}
+        />
+      )}
     </div>
   );
 }

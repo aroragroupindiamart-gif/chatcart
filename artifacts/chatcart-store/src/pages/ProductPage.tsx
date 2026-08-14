@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, ShoppingCart, Plus, Minus, Store, MessageCircle } from "lucide-react";
+import { ArrowLeft, ShoppingCart, Plus, Minus, Store, MessageCircle, ZoomIn } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
 import { api, imgSrc, formatPrice, type Seller, type Product } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import CartSheet from "@/components/CartSheet";
+import ImageLightboxModal from "@/components/ImageLightboxModal";
 import { StoreUnavailable } from "@/components/StoreUnavailable";
 
 function normalizeWhatsApp(raw: string | null): string {
@@ -36,6 +37,22 @@ export default function ProductPage() {
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+
+  // Handle mobile back button for Cart Sheet
+  useEffect(() => {
+    if (!cartOpen) return;
+    window.history.pushState({ modal: "cart" }, "");
+
+    const handlePopState = () => {
+      setCartOpen(false);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [cartOpen]);
 
   useEffect(() => {
     if (!subdomain || !productId) return;
@@ -141,8 +158,8 @@ export default function ProductPage() {
           >
             <ShoppingCart className="w-5 h-5 text-foreground" />
             {totalItems > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 bg-primary text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold leading-none">
-                {totalItems > 9 ? "9+" : totalItems}
+              <span className="absolute -top-1 -right-1 bg-primary text-white text-[10px] rounded-full min-w-4.5 h-4.5 px-1 flex items-center justify-center font-bold leading-none shadow-xs">
+                {totalItems}
               </span>
             )}
           </button>
@@ -153,17 +170,23 @@ export default function ProductPage() {
         {/* Images */}
         {product.images.length > 0 && (
           <div className="space-y-2">
-            <div className="aspect-square rounded-xl overflow-hidden bg-muted flex items-center justify-center">
+            <div
+              onClick={() => setLightboxOpen(true)}
+              className="aspect-square rounded-xl overflow-hidden bg-muted flex items-center justify-center relative cursor-zoom-in group"
+            >
               {brokenImages.has(activeImage) ? (
                 <Store className="w-12 h-12 text-muted-foreground opacity-20" />
               ) : (
                 <img
                   src={imgSrc(product.images[activeImage].url)}
                   alt={product.name}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   onError={() => setBrokenImages(prev => new Set(prev).add(activeImage))}
                 />
               )}
+              <div className="absolute top-3 right-3 bg-black/60 text-white p-2 rounded-full backdrop-blur-xs opacity-80 group-hover:opacity-100 transition-opacity">
+                <ZoomIn className="w-4 h-4" />
+              </div>
             </div>
             {product.images.length > 1 && (
               <div className="flex gap-2 overflow-x-auto pb-1">
@@ -289,6 +312,12 @@ export default function ProductPage() {
       </main>
 
       <CartSheet open={cartOpen} onClose={() => setCartOpen(false)} seller={seller} />
+      <ImageLightboxModal
+        open={lightboxOpen}
+        onClose={() => setLightboxOpen(false)}
+        images={product.images}
+        initialIndex={activeImage}
+      />
     </div>
   );
 }

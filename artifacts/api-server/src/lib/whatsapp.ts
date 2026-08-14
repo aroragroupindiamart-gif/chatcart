@@ -1,4 +1,5 @@
 import type { ServerResponse } from "http";
+import pino from "pino";
 import { db } from "@workspace/db";
 import { waSessionsTable, waInboundLeadsTable, waInboundMessagesTable, waCampaignLeadsTable, sellersTable } from "@workspace/db/schema";
 import { eq, desc, sql, and } from "drizzle-orm";
@@ -29,6 +30,7 @@ const state: WAState = {
 };
 
 const sseClients = new Set<ServerResponse>();
+const waLogger = pino({ level: "info" });
 let sock: any = null;
 let reconnectTimer: NodeJS.Timeout | null = null;
 let isLoggedOut = false;
@@ -133,7 +135,7 @@ export async function getOrCreateSession(): Promise<typeof waSessionsTable.$infe
 }
 
 export async function connectWA(): Promise<void> {
-  if (state.status === "connected" || state.status === "connecting") return;
+  if (sock && state.status === "connected") return;
 
   isLoggedOut = false;
   state.status = "connecting";
@@ -141,15 +143,31 @@ export async function connectWA(): Promise<void> {
   broadcast({ type: "state", ...state });
 
   try {
+    // Close existing socket if present
+    if (sock) {
+      try { sock.end(undefined); } catch {}
+      sock = null;
+    }
+
+    const { mkdir, rm } = await import("fs/promises");
+    // Always clear local session directory immediately so Baileys generates a clean QR code
+    await rm(SESSION_LOCAL_DIR, { recursive: true, force: true }).catch(() => {});
+    await mkdir(SESSION_LOCAL_DIR, { recursive: true });
+
+    // Purge storage in background non-blocking
+    deleteSessionFromStorage().catch(() => {});
+
     const {
       default: makeWASocket,
       useMultiFileAuthState,
+      fetchLatestBaileysVersion,
       DisconnectReason,
     } = await import("@whiskeysockets/baileys");
     const QRCode = await import("qrcode");
-    const { mkdir, rm } = await import("fs/promises");
 
-    await mkdir(SESSION_LOCAL_DIR, { recursive: true });
+    const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: [2, 3000, 1017531287] }));
+    console.log(`[WA] Initializing socket with Baileys version ${version.join(".")}`);
+
     const { state: authState, saveCreds } = await useMultiFileAuthState(SESSION_LOCAL_DIR);
 
     // Wrap saveCreds: save locally first, then mirror creds.json to object storage (non-blocking)
@@ -161,37 +179,24 @@ export async function connectWA(): Promise<void> {
     };
 
     sock = makeWASocket({
+      version,
       auth: authState,
       printQRInTerminal: false,
-      logger: silentLogger as any,
+      logger: waLogger as any,
       generateHighQualityLinkPreview: false,
       markOnlineOnConnect: false,
-      // Stable browser identity — prevents WhatsApp treating every reconnect
-      // as a brand-new session and kicking it immediately after (Code 440)
       browser: ["Chatcart", "Chrome", "120.0.0"],
     });
 
     sock.ev.on("creds.update", saveCredsAndBackup);
 
     // Build LID→phone map so messages arriving with @lid JIDs can be resolved.
-    // Three sources in Baileys:
-    //  - messaging-history.set  : bulk contacts on reconnect / history sync
-    //  - contacts.upsert        : real-time new contacts
-    //  - contacts.update        : real-time contact edits
     sock.ev.on("messaging-history.set", ({ contacts }: any) => {
       const arr: any[] = contacts ?? [];
-      if (arr.length > 0) {
-        console.log(`[WA] messaging-history.set sample contact:`, JSON.stringify(arr[0]));
-      }
       updateLidMap(arr);
-      console.log(`[WA] messaging-history.set: ${arr.length} contacts, lid map size=${Object.keys(lidToPhone).length}`);
     });
     sock.ev.on("contacts.upsert", (contacts: any[]) => {
-      if (contacts.length > 0) {
-        console.log(`[WA] contacts.upsert sample:`, JSON.stringify(contacts[0]));
-      }
       updateLidMap(contacts);
-      console.log(`[WA] contacts.upsert: ${contacts.length} contacts, lid map size=${Object.keys(lidToPhone).length}`);
     });
     sock.ev.on("contacts.update", (updates: any[]) => {
       updateLidMap(updates);
@@ -203,8 +208,11 @@ export async function connectWA(): Promise<void> {
       if (qr) {
         try {
           const dataUrl = await (QRCode.default || QRCode).toDataURL(qr, { width: 256 });
+          state.status = "connecting";
           state.qr = dataUrl;
+          broadcast({ type: "state", ...state });
           broadcast({ type: "qr", qr: dataUrl });
+          console.log("[WA] Generated QR code successfully!");
         } catch (e) {
           console.error("[WA] QR generation error:", e);
         }
@@ -227,15 +235,17 @@ export async function connectWA(): Promise<void> {
 
       if (connection === "close") {
         const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
-        const loggedOut = statusCode === DisconnectReason.loggedOut;
+        const loggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 405 || statusCode === 401 || statusCode === 403;
 
-        state.status = "disconnected";
-        state.phone = null;
-        state.qr = null;
-        state.disconnectedAt = new Date();
-        sock = null;
-        broadcast({ type: "state", ...state });
-        await updateSessionInDB({ status: "disconnected", phone: null });
+        if (loggedOut || !state.qr) {
+          state.status = "disconnected";
+          state.phone = null;
+          state.qr = null;
+          state.disconnectedAt = new Date();
+          sock = null;
+          broadcast({ type: "state", ...state });
+          await updateSessionInDB({ status: "disconnected", phone: null });
+        }
 
         console.log(`[WA] Closed. LoggedOut=${loggedOut} Code=${statusCode}`);
 
@@ -491,6 +501,7 @@ async function handleInboundLead(fromPhone: string, displayName: string, message
         lastMessageAt: new Date(),
         matchedSellerId: matchedSellerId ?? undefined,
         messageCount: sql`${waInboundLeadsTable.messageCount} + 1`,
+        unreadCount: sql`${waInboundLeadsTable.unreadCount} + 1`,
         updatedAt: new Date(),
       })
       .where(eq(waInboundLeadsTable.id, existing.id));
@@ -507,6 +518,7 @@ async function handleInboundLead(fromPhone: string, displayName: string, message
         lastMessageAt: new Date(),
         matchedSellerId,
         messageCount: 1,
+        unreadCount: 1,
         isWarm: true,
       })
       .returning({ id: waInboundLeadsTable.id });
@@ -548,14 +560,22 @@ async function handleInboundLead(fromPhone: string, displayName: string, message
     await db.insert(waInboundMessagesTable).values({
       inboundLeadId: leadId,
       message: messageText,
+      direction: "inbound",
+      fromMe: false,
       receivedAt: new Date(),
     });
   }
 
   broadcast({ type: "inbound_lead", leadId, phone: fromPhone, displayName, matchedSellerId });
+  broadcast({ type: "chat_message", leadId, phone: fromPhone, message: messageText, direction: "inbound", fromMe: false, receivedAt: new Date() });
 }
 
 export async function initWA(): Promise<void> {
+  if (process.env.DISABLE_WHATSAPP_AUTOCONNECT === "true") {
+    console.log("[WA] Auto-connect disabled via environment flag (prevents Code 440 loop with production)");
+    return;
+  }
+
   // In development, skip auto-connect entirely. The dev API server and the
   // production deployment share the same WhatsApp account. If both auto-connect
   // they kick each other every ~60s with Code 440 (connectionReplaced), causing
