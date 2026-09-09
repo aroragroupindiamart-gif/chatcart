@@ -641,9 +641,10 @@ router.post(
   requireActiveSubscription,
   async (req, res) => {
     try {
-      const { productIds, categoryId } = req.body as {
+      const { productIds, categoryId, categoryIds } = req.body as {
         productIds: number[];
-        categoryId: number | null;
+        categoryId?: number | null;
+        categoryIds?: number[];
       };
 
       if (!Array.isArray(productIds) || productIds.length === 0) {
@@ -651,9 +652,17 @@ router.post(
         return;
       }
 
+      // Determine array of category IDs to assign
+      const resolvedCategoryIds = Array.isArray(categoryIds)
+        ? categoryIds.filter((id) => typeof id === "number")
+        : (categoryId !== undefined && categoryId !== null ? [categoryId] : []);
+
+      const primaryCatId = resolvedCategoryIds.length > 0 ? resolvedCategoryIds[0] : null;
+
+      // Update primary categoryId on productsTable
       await db
         .update(productsTable)
-        .set({ categoryId })
+        .set({ categoryId: primaryCatId })
         .where(
           and(
             eq(productsTable.sellerId, req.seller!.sellerId),
@@ -661,20 +670,25 @@ router.post(
           )
         );
 
+      // Remove existing product_categories mapping for selected products
       await db
         .delete(productCategoriesTable)
         .where(inArray(productCategoriesTable.productId, productIds));
 
-      if (categoryId !== null) {
-        await db.insert(productCategoriesTable).values(
-          productIds.map((pId) => ({
-            productId: pId,
-            categoryId: categoryId,
-          }))
-        );
+      // Insert new product_categories entries for all selected categories
+      if (resolvedCategoryIds.length > 0) {
+        const newEntries: Array<{ productId: number; categoryId: number }> = [];
+        for (const pId of productIds) {
+          for (const cId of resolvedCategoryIds) {
+            newEntries.push({ productId: pId, categoryId: cId });
+          }
+        }
+        if (newEntries.length > 0) {
+          await db.insert(productCategoriesTable).values(newEntries);
+        }
       }
 
-      res.json({ success: true, count: productIds.length });
+      res.json({ success: true, count: productIds.length, categoryCount: resolvedCategoryIds.length });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to update bulk categories" });

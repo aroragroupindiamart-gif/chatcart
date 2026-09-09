@@ -11,11 +11,13 @@ import { useState, useEffect, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
-import { Plus, Search, Package, Trash2, ArrowUp, QrCode, Loader2, Folder, Filter, Layers } from "lucide-react";
+import { Plus, Search, Package, Trash2, ArrowUp, QrCode, Loader2, Folder, Filter, Layers, ChevronDown } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import { getToken } from "@/lib/auth";
 
 export default function Products() {
@@ -36,7 +38,8 @@ function ProductsContent() {
 
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const { data: categories } = useListCategories();
-  const [bulkCategoryId, setBulkCategoryId] = useState<string>("default");
+  const [bulkCategoryIds, setBulkCategoryIds] = useState<number[]>([]);
+  const [bulkCategorySearch, setBulkCategorySearch] = useState("");
   const [isBulkLoading, setIsBulkLoading] = useState(false);
 
   const toggleSelectAll = (checked: boolean) => {
@@ -57,15 +60,10 @@ function ProductsContent() {
 
   const handleBulkCategory = async () => {
     if (selectedIds.length === 0) return;
-    if (bulkCategoryId === "default") {
-      toast({ title: "Please select a category", variant: "destructive" });
-      return;
-    }
 
     setIsBulkLoading(true);
     const token = getToken();
     try {
-      const catId = bulkCategoryId === "null" ? null : parseInt(bulkCategoryId);
       const res = await fetch("/api/products/bulk-category", {
         method: "POST",
         headers: {
@@ -74,7 +72,7 @@ function ProductsContent() {
         },
         body: JSON.stringify({
           productIds: selectedIds,
-          categoryId: catId
+          categoryIds: bulkCategoryIds
         })
       });
 
@@ -82,14 +80,20 @@ function ProductsContent() {
         throw new Error(await res.text() || "Failed to update bulk categories");
       }
 
-      toast({ title: `Successfully updated ${selectedIds.length} products` });
+      toast({
+        title: `Successfully updated ${selectedIds.length} product${selectedIds.length > 1 ? "s" : ""}`,
+        description: bulkCategoryIds.length > 0
+          ? `Assigned to ${bulkCategoryIds.length} categor${bulkCategoryIds.length > 1 ? "ies" : "y"}`
+          : "Unassigned all categories"
+      });
       setSelectedIds([]);
-      setBulkCategoryId("default");
+      setBulkCategoryIds([]);
+      setBulkCategorySearch("");
       queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
     } catch (err: any) {
       toast({
         title: "Error",
-        description: err.message || "Failed to apply category in bulk",
+        description: err.message || "Failed to apply categories in bulk",
         variant: "destructive"
       });
     } finally {
@@ -724,17 +728,81 @@ function ProductsContent() {
           <div className="h-4 w-px bg-slate-700 hidden lg:block" />
           
           <div className="flex items-center gap-2">
-            <select
-              value={bulkCategoryId}
-              onChange={(e) => setBulkCategoryId(e.target.value)}
-              className="bg-slate-800 border border-slate-700 text-white rounded-md text-xs px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer font-medium"
-            >
-              <option value="default" disabled>Change Category...</option>
-              {categories?.map((cat) => (
-                <option key={cat.id} value={cat.id}>{cat.name}</option>
-              ))}
-              <option value="null">Uncategorized (General)</option>
-            </select>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="bg-slate-800 border-slate-700 hover:bg-slate-700 text-white text-xs h-7 px-2.5 font-medium flex items-center gap-1.5"
+                >
+                  <Folder className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="truncate max-w-[140px]">
+                    {bulkCategoryIds.length === 0
+                      ? "Select Categories..."
+                      : bulkCategoryIds.length === 1
+                      ? categories?.find((c) => c.id === bulkCategoryIds[0])?.name || "1 Category"
+                      : `${bulkCategoryIds.length} Categories`}
+                  </span>
+                  <ChevronDown className="w-3 h-3 text-slate-400 ml-0.5 shrink-0" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-72 p-2 bg-slate-900 border border-slate-800 text-white rounded-xl shadow-2xl z-[60]" align="start">
+                <div className="p-1 space-y-2">
+                  <div className="flex items-center justify-between px-1 pb-1 border-b border-slate-800">
+                    <span className="text-xs font-semibold text-slate-300">Assign Categories</span>
+                    {bulkCategoryIds.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setBulkCategoryIds([])}
+                        className="text-[11px] text-emerald-400 hover:text-emerald-300 font-medium"
+                      >
+                        Clear All ({bulkCategoryIds.length})
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search categories..."
+                      value={bulkCategorySearch}
+                      onChange={(e) => setBulkCategorySearch(e.target.value)}
+                      className="w-full pl-8 pr-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+
+                  <div className="max-h-56 overflow-y-auto space-y-0.5 pr-1">
+                    {categories && categories.length > 0 ? (
+                      categories
+                        .filter((c) => c.name.toLowerCase().includes(bulkCategorySearch.toLowerCase()))
+                        .map((c) => {
+                          const isChecked = bulkCategoryIds.includes(c.id);
+                          return (
+                            <div
+                              key={c.id}
+                              onClick={() => {
+                                if (isChecked) {
+                                  setBulkCategoryIds(bulkCategoryIds.filter((id) => id !== c.id));
+                                } else {
+                                  setBulkCategoryIds([...bulkCategoryIds, c.id]);
+                                }
+                              }}
+                              className="flex items-center space-x-2 p-1.5 hover:bg-slate-800 rounded-md cursor-pointer text-xs text-slate-200 transition-colors"
+                            >
+                              <Checkbox checked={isChecked} onCheckedChange={() => {}} />
+                              <span className="select-none truncate">{c.name}</span>
+                            </div>
+                          );
+                        })
+                    ) : (
+                      <div className="text-xs text-slate-400 p-2 text-center">No categories found</div>
+                    )}
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+
             <Button
               onClick={handleBulkCategory}
               disabled={isBulkLoading}
