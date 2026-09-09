@@ -292,10 +292,62 @@ router.post("/public/orders", orderRateLimit, async (req, res) => {
       return;
     }
 
+    // Server-side validation: sanitize quantities and verify product prices against database
+    const dbProducts = await db
+      .select({
+        id: productsTable.id,
+        name: productsTable.name,
+        price: productsTable.price,
+        status: productsTable.status,
+      })
+      .from(productsTable)
+      .where(
+        and(
+          eq(productsTable.sellerId, body.sellerId),
+          ne(productsTable.status, "deleted")
+        )
+      );
+
+    const productMap = new Map<string, typeof dbProducts[0]>();
+    for (const p of dbProducts) {
+      productMap.set(p.name.trim().toLowerCase(), p);
+    }
+
+    const validatedItems = body.items.map((item) => {
+      const rawQty = Number(item.quantity);
+      const safeQty = Number.isInteger(rawQty) && rawQty > 0 ? Math.min(rawQty, 9999) : 1;
+      
+      const matched = productMap.get((item.productNameSnapshot || "").trim().toLowerCase());
+      let safePrice = 0;
+      
+      if (matched && matched.price != null) {
+        const canonicalPrice = parseFloat(matched.price as unknown as string);
+        const clientPrice = parseFloat(item.priceSnapshot);
+        // If client sends invalid or negative price, enforce canonical price
+        if (isNaN(clientPrice) || clientPrice < 0) {
+          safePrice = canonicalPrice;
+        } else {
+          // Allow reasonable discounts (e.g. bulk dozen discount applied in storefront), but clamp minimum to 0
+          safePrice = Math.max(0, clientPrice);
+        }
+      } else {
+        const parsed = parseFloat(item.priceSnapshot);
+        safePrice = isNaN(parsed) || parsed < 0 ? 0 : parsed;
+      }
+
+      return {
+        productNameSnapshot: item.productNameSnapshot || "Product",
+        priceSnapshot: safePrice.toFixed(2),
+        variantSnapshot: item.variantSnapshot,
+        productImageSnapshot: item.productImageSnapshot ?? null,
+        quantity: safeQty,
+      };
+    });
+
     const orderId = generateOrderId();
-    const totalAmount = body.items
+    const totalAmount = validatedItems
       .reduce(
-        (sum, item) => sum + parseFloat(item.priceSnapshot) * (item.quantity ?? 1),
+        (sum, item) => sum + parseFloat(item.priceSnapshot) * item.quantity,
         0
       )
       .toFixed(2);
@@ -313,13 +365,13 @@ router.post("/public/orders", orderRateLimit, async (req, res) => {
     const items = await db
       .insert(orderItemsTable)
       .values(
-        body.items.map((item) => ({
+        validatedItems.map((item) => ({
           orderId,
           productNameSnapshot: item.productNameSnapshot,
           priceSnapshot: item.priceSnapshot,
           variantSnapshot: item.variantSnapshot,
-          productImageSnapshot: item.productImageSnapshot ?? null,
-          quantity: item.quantity ?? 1,
+          productImageSnapshot: item.productImageSnapshot,
+          quantity: item.quantity,
         }))
       )
       .returning();

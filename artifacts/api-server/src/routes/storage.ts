@@ -223,7 +223,15 @@ router.get("/storage/public-objects/*filePath", async (req: Request, res: Respon
   try {
     const raw = req.params.filePath;
     const filePath = Array.isArray(raw) ? raw.join("/") : raw;
-    const file = await objectStorageService.searchPublicObject(filePath);
+    const cleanPath = (filePath || "").replace(/^\/+/, "");
+
+    // Security check: restrict public objects to public/ or uploads/ and disallow path traversal / backups
+    if (cleanPath.includes("..") || cleanPath.includes("\0") || cleanPath.startsWith("backups/") || (!cleanPath.startsWith("public/") && !cleanPath.startsWith("uploads/"))) {
+      res.status(404).json({ error: "File not found" });
+      return;
+    }
+
+    const file = await objectStorageService.searchPublicObject(cleanPath);
     if (!file) {
       res.status(404).json({ error: "File not found" });
       return;
@@ -319,7 +327,16 @@ router.get("/public/img/*path", async (req: Request, res: Response) => {
   try {
     const raw = req.params.path;
     const filePath = Array.isArray(raw) ? raw.join("/") : raw;
-    const s3Key = filePath; // e.g. uploads/<uuid>
+    const cleanPath = (filePath || "").replace(/^\/+/, "");
+
+    // Security check: strictly restrict to uploaded assets (product images / logos)
+    // Never allow traversing into backups/ or other prefixes in the bucket
+    if (cleanPath.includes("..") || cleanPath.includes("\0") || !cleanPath.startsWith("uploads/")) {
+      res.status(404).json({ error: "Image not found" });
+      return;
+    }
+
+    const s3Key = cleanPath; // e.g. uploads/<uuid>
 
     const client = getS3Client();
     const bucket = getS3BucketName();

@@ -1,5 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { requireAuth } from "../middleware/auth.js";
+import { requireAdminAuth } from "../middleware/adminAuth.js";
 import { db } from "@workspace/db";
 import { productsTable, categoriesTable, productImagesTable } from "@workspace/db/schema";
 import { eq, and, count } from "drizzle-orm";
@@ -614,7 +615,7 @@ router.get("/sellers/wa-import/stream/:sessionId", async (req: Request, res: Res
   });
 });
 
-router.get("/debug", async (req, res) => {
+router.get("/debug", requireAdminAuth, async (req, res) => {
   try {
     const adminSock = getWASocket();
     if (!adminSock) {

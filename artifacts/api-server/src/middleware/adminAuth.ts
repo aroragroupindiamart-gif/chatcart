@@ -2,6 +2,9 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
 const envSecret = process.env.JWT_SECRET;
+if (!envSecret && process.env.NODE_ENV === "production") {
+  throw new Error("JWT_SECRET environment variable must be set in production");
+}
 const ADMIN_JWT_SECRET = (envSecret ?? "chatcart-dev-secret-change-in-prod") + "-admin";
 
 export interface AdminJwtPayload {

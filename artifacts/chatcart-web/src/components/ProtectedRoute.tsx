@@ -9,19 +9,26 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const [, setLocation] = useLocation();
   const token = getToken();
 
-  const { data: user, isLoading, isError } = useGetMe({
+  const { data: user, isLoading, isError, error } = useGetMe({
     query: {
       enabled: !!token,
-      retry: false,
+      retry: 2,
       queryKey: getGetMeQueryKey(),
     },
   });
 
   useEffect(() => {
-    if (!token || isError) {
+    if (!token) {
       setLocation("/login");
+      return;
     }
-  }, [token, isError, setLocation]);
+    if (isError) {
+      const status = (error as any)?.status || (error as any)?.response?.status;
+      if (status === 401 || status === 403) {
+        setLocation("/login");
+      }
+    }
+  }, [token, isError, error, setLocation]);
 
   const refreshedRef = useRef(false);
   useEffect(() => {
@@ -50,6 +57,20 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
       return <PendingActivation />;
     }
     return <>{children}</>;
+  }
+
+  if (isError) {
+    return (
+      <div className="h-screen w-full flex flex-col items-center justify-center gap-3 text-muted-foreground p-4 text-center">
+        <p className="text-sm">Unable to connect to server. Reconnecting...</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-primary text-primary-foreground text-xs rounded-md font-medium hover:bg-primary/90"
+        >
+          Reload Page
+        </button>
+      </div>
+    );
   }
 
   return null;
