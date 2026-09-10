@@ -14,7 +14,7 @@ interface AuthState {
 
 interface AdminAuthContextType extends AuthState {
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, challengeToken?: string, challengeAnswer?: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -33,15 +33,23 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     return { token, admin };
   });
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, challengeToken?: string, challengeAnswer?: string) => {
     const res = await fetch('/api/admin/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, challengeToken, challengeAnswer }),
     });
 
     if (!res.ok) {
-      throw new Error(await res.text());
+      let errData: any = null;
+      try {
+        errData = await res.json();
+      } catch {
+        // Not JSON
+      }
+      const err: any = new Error(errData?.error || 'Authentication failed');
+      err.data = errData;
+      throw err;
     }
 
     const data = await res.json();

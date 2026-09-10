@@ -11,6 +11,8 @@ import { Shield } from 'lucide-react';
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [challenge, setChallenge] = useState<{ token: string; question: string } | null>(null);
+  const [challengeAnswer, setChallengeAnswer] = useState('');
   const [loading, setLoading] = useState(false);
   const { login, isAuthenticated } = useAdminAuth();
   const [, setLocation] = useLocation();
@@ -26,13 +28,20 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     try {
-      await login(email, password);
+      await login(email, password, challenge?.token, challengeAnswer);
       toast({
         title: 'Authentication successful',
         description: 'Welcome to Chatcart Admin Console.',
       });
       setLocation('/dashboard');
     } catch (err: any) {
+      if (err.data?.requireChallenge) {
+        setChallenge({
+          token: err.data.challengeToken,
+          question: err.data.challengeQuestion,
+        });
+        setChallengeAnswer('');
+      }
       toast({
         variant: 'destructive',
         title: 'Authentication failed',
@@ -84,6 +93,25 @@ export default function Login() {
                 className="bg-card"
               />
             </div>
+
+            {challenge && (
+              <div className="space-y-2 p-3 bg-muted/60 rounded-md border border-border">
+                <Label htmlFor="challengeAnswer" className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+                  <Shield className="w-3.5 h-3.5" /> Security Check: {challenge.question}
+                </Label>
+                <Input
+                  id="challengeAnswer"
+                  type="text"
+                  placeholder="Enter answer"
+                  value={challengeAnswer}
+                  onChange={(e) => setChallengeAnswer(e.target.value)}
+                  required
+                  autoFocus
+                  className="bg-card"
+                />
+              </div>
+            )}
+
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Authenticating...' : 'Sign In'}
             </Button>

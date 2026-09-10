@@ -1,4 +1,5 @@
 import { Router } from "express";
+import crypto from "crypto";
 import { db } from "@workspace/db";
 import {
   adminUsers,
@@ -21,13 +22,70 @@ const router = Router();
 
 const MAX_LOGIN_ATTEMPTS = 10;
 const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
+const CHALLENGE_THRESHOLD = 3;
 
 // Pre-computed bcrypt hash (cost 10) for constant-time comparison when email is not found
 const DUMMY_BCRYPT_HASH = "$2b$10$X7lCqv4qKqj8wU1yGZ6m6.7jLgD4vF3kL1mN0pQ9rS8tU7vW6xY2a";
 
+const CHALLENGE_SECRET = process.env.JWT_SECRET || "chatcart-admin-challenge-secret";
+
+export function generateAdminChallenge(): { token: string; question: string } {
+  const n1 = Math.floor(Math.random() * 15) + 1;
+  const n2 = Math.floor(Math.random() * 15) + 1;
+  const ans = n1 + n2;
+  const exp = Date.now() + 5 * 60 * 1000; // 5 minute validity
+  const data = `${n1}:${n2}:${ans}:${exp}`;
+  const sig = crypto.createHmac("sha256", CHALLENGE_SECRET).update(data).digest("hex");
+  const token = Buffer.from(JSON.stringify({ n1, n2, exp, sig })).toString("base64url");
+  return {
+    token,
+    question: `What is ${n1} + ${n2}?`,
+  };
+}
+
+export function verifyAdminChallenge(token: string, answer: string | number | undefined): boolean {
+  if (!token || answer === undefined || answer === null || String(answer).trim() === "") {
+    return false;
+  }
+  try {
+    const raw = Buffer.from(token, "base64url").toString("utf-8");
+    const parsed = JSON.parse(raw);
+    const { n1, n2, exp, sig } = parsed;
+    if (typeof n1 !== "number" || typeof n2 !== "number" || typeof exp !== "number" || typeof sig !== "string") {
+      return false;
+    }
+    if (Date.now() > exp) {
+      return false;
+    }
+    const expectedAns = n1 + n2;
+    if (parseInt(String(answer).trim(), 10) !== expectedAns) {
+      return false;
+    }
+    const data = `${n1}:${n2}:${expectedAns}:${exp}`;
+    const expectedSig = crypto.createHmac("sha256", CHALLENGE_SECRET).update(data).digest("hex");
+    return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig));
+  } catch {
+    return false;
+  }
+}
+
+async function notifyAdminLockout(email: string, ip: string, lockedUntil: Date, attempts: number) {
+  const alertPhone = (process.env.ADMIN_ALERT_PHONE || "918368484361").replace(/^\+/, "");
+  const lockoutUntilStr = lockedUntil.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+  const alertMsg = `⚠️ Multiple failed login attempts (${attempts}) detected on your Chatcart admin account (${email}) — if this wasn't you, your account is temporarily locked as a precaution until ${lockoutUntilStr} IST. Login attempt IP: ${ip}`;
+
+  try {
+    const { sendWAMessage } = await import("../lib/whatsapp.js");
+    await sendWAMessage(alertPhone, alertMsg);
+    console.log(`[ADMIN LOCKOUT] Dispatched WhatsApp lockout alert to +${alertPhone}`);
+  } catch (err: any) {
+    console.warn(`[ADMIN LOCKOUT] Could not dispatch WhatsApp alert to +${alertPhone}:`, err?.message || err);
+  }
+}
+
 const adminLoginRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 15, // max 15 login attempts per IP per 15 minutes
+  max: 5, // max 5 login attempts per IP per 15 minutes (ensures single IP is blocked before triggering 10-attempt account lockout)
   standardHeaders: true,
   legacyHeaders: false,
   handler: (_req, res) => {
@@ -58,12 +116,18 @@ async function audit(
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 router.post("/admin/auth/login", adminLoginRateLimit, async (req, res) => {
-  const parsed = z.object({ email: z.string().email(), password: z.string().min(1) }).safeParse(req.body);
+  const parsed = z.object({
+    email: z.string().email(),
+    password: z.string().min(1),
+    challengeToken: z.string().optional(),
+    challengeAnswer: z.union([z.string(), z.number()]).optional(),
+  }).safeParse(req.body);
+
   if (!parsed.success) {
     res.status(400).json({ error: "email and password are required" });
     return;
   }
-  const { email, password } = parsed.data;
+  const { email, password, challengeToken, challengeAnswer } = parsed.data;
   const ip = req.ip ?? "unknown";
 
   const [admin] = await db.select().from(adminUsers).where(eq(adminUsers.email, email.toLowerCase())).limit(1);
@@ -74,22 +138,67 @@ router.post("/admin/auth/login", adminLoginRateLimit, async (req, res) => {
     return;
   }
 
-  if (admin.loginLockedUntil && admin.loginLockedUntil > new Date()) {
-    await bcrypt.compare(password, DUMMY_BCRYPT_HASH).catch(() => false);
-    res.status(429).json({ error: "Account locked due to too many failed attempts. Try again later." });
-    return;
+  // Handle active or expired lockouts
+  if (admin.loginLockedUntil) {
+    if (admin.loginLockedUntil > new Date()) {
+      await bcrypt.compare(password, DUMMY_BCRYPT_HASH).catch(() => false);
+      res.status(429).json({ error: "Account locked due to too many failed attempts. Try again later." });
+      return;
+    } else {
+      // Lockout window expired, auto-reset counter
+      await db.update(adminUsers).set({ loginAttempts: 0, loginLockedUntil: null }).where(eq(adminUsers.id, admin.id));
+      admin.loginAttempts = 0;
+      admin.loginLockedUntil = null;
+    }
+  }
+
+  // If failed attempts reached challenge threshold (3), enforce challenge before touching password
+  if ((admin.loginAttempts ?? 0) >= CHALLENGE_THRESHOLD) {
+    const isChallengeValid = verifyAdminChallenge(challengeToken ?? "", challengeAnswer);
+    if (!isChallengeValid) {
+      // Keep constant time for defense
+      await bcrypt.compare(password, DUMMY_BCRYPT_HASH).catch(() => false);
+      const newChallenge = generateAdminChallenge();
+      // DO NOT increment loginAttempts! Script is blocked at threshold without causing lockout.
+      res.status(403).json({
+        error: "Security verification required. Please solve the challenge.",
+        requireChallenge: true,
+        challengeToken: newChallenge.token,
+        challengeQuestion: newChallenge.question,
+      });
+      return;
+    }
   }
 
   const valid = await bcrypt.compare(password, admin.passwordHash);
   if (!valid) {
     const newAttempts = (admin.loginAttempts ?? 0) + 1;
-    const lockedUntil = newAttempts >= MAX_LOGIN_ATTEMPTS ? new Date(Date.now() + LOGIN_LOCKOUT_MS) : null;
+    const isLocked = newAttempts >= MAX_LOGIN_ATTEMPTS;
+    const lockedUntil = isLocked ? new Date(Date.now() + LOGIN_LOCKOUT_MS) : null;
+
     await db.update(adminUsers).set({ loginAttempts: newAttempts, loginLockedUntil: lockedUntil }).where(eq(adminUsers.id, admin.id));
-    if (newAttempts >= MAX_LOGIN_ATTEMPTS) {
+
+    if (isLocked) {
       await audit(admin.id, "admin_account_locked_failed_attempts", ip, {
-        details: { email: admin.email, failedAttempts: newAttempts },
+        details: { email: admin.email, failedAttempts: newAttempts, lockedUntil: lockedUntil?.toISOString() },
       });
+      // Fire alert via WhatsApp notification to admin phone
+      notifyAdminLockout(admin.email, ip, lockedUntil!, newAttempts);
+      res.status(429).json({ error: "Account locked due to too many failed attempts. An alert has been sent to the administrator." });
+      return;
     }
+
+    if (newAttempts >= CHALLENGE_THRESHOLD) {
+      const challenge = generateAdminChallenge();
+      res.status(401).json({
+        error: "Invalid credentials. Additional security verification is now required.",
+        requireChallenge: true,
+        challengeToken: challenge.token,
+        challengeQuestion: challenge.question,
+      });
+      return;
+    }
+
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
