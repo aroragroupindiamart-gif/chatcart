@@ -111,13 +111,16 @@ export default function StoreFront() {
     initForSeller(subdomain);
     setLoading(true);
     setError(null);
-    Promise.all([
-      api.getSeller(subdomain),
-      api.getProducts(subdomain),
-      api.getCategories(subdomain).catch(() => [] as Category[]),
-    ])
-      .then(([sellerData, productsData, categoriesData]) => {
+    api.getSeller(subdomain)
+      .then(async (sellerData) => {
         setSeller(sellerData);
+        if (sellerData.plan === "pending") {
+          return;
+        }
+        const [productsData, categoriesData] = await Promise.all([
+          api.getProducts(subdomain),
+          api.getCategories(subdomain).catch(() => [] as Category[]),
+        ]);
         setProducts(productsData);
         setCategoriesState(categoriesData);
         setCategories(categoriesData);

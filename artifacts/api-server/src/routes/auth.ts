@@ -6,8 +6,24 @@ import { eq, and, gt, desc, sql } from "drizzle-orm";
 import { signToken } from "../lib/jwt.js";
 import { requireAuth } from "../middleware/auth.js";
 import { sendOtp } from "../lib/sms.js";
+import rateLimit from "express-rate-limit";
 
 const router = Router();
+
+// ── IP-based rate limit for sending OTPs ───────────────────────────────────────
+// Allows up to 20 OTP send requests per hour per IP to prevent distributed SMS
+// draining scripts, while accommodating shared Indian mobile CGNAT networks.
+const sendOtpIpRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20, // 20 requests per hour per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    res.status(429).json({
+      error: "Too many OTP requests from this connection. Please wait before requesting another code.",
+    });
+  },
+});
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -124,7 +140,7 @@ function generateSubdomain(phone: string): string {
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
-router.post("/auth/send-otp", async (req, res) => {
+router.post("/auth/send-otp", sendOtpIpRateLimit, async (req, res) => {
   try {
     const { phone } = req.body as { phone: string };
     if (!phone) {

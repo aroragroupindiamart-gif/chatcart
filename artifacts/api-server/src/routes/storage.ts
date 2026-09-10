@@ -15,10 +15,46 @@ import { productImagesTable, productsTable } from "@workspace/db/schema";
 import { eq, and, count } from "drizzle-orm";
 import sharp from "sharp";
 
+const ALLOWED_IMAGE_MIMES = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+]);
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB hard limit
+  fileFilter: (_req, file, cb) => {
+    const mime = (file.mimetype || "").toLowerCase();
+    if (ALLOWED_IMAGE_MIMES.has(mime)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Invalid file type. Only JPEG, PNG, and WebP images are allowed."));
+    }
+  },
 });
+
+function handleImageUpload(fieldName: string) {
+  const single = upload.single(fieldName);
+  return (req: Request, res: Response, next: any) => {
+    single(req, res, (err: any) => {
+      if (err) {
+        if (err.message?.includes("Invalid file type")) {
+          res.status(400).json({ error: err.message });
+          return;
+        }
+        if (err.code === "LIMIT_FILE_SIZE") {
+          res.status(400).json({ error: "File size exceeds 10 MB limit." });
+          return;
+        }
+        res.status(400).json({ error: err.message || "Failed to parse upload" });
+        return;
+      }
+      next();
+    });
+  };
+}
 
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
@@ -37,7 +73,7 @@ const objectStorageService = new ObjectStorageService();
 router.post(
   "/storage/uploads/file",
   requireAuth,
-  upload.single("file"),
+  handleImageUpload("file"),
   async (req: Request, res: Response) => {
     const file = req.file;
     if (!file) {
@@ -92,7 +128,7 @@ router.post(
 router.post(
   "/storage/uploads/logo",
   requireAuth,
-  upload.single("file"),
+  handleImageUpload("file"),
   async (req: Request, res: Response) => {
     const file = req.file;
     if (!file) {
@@ -125,6 +161,10 @@ router.post("/storage/uploads/request-url", requireAuth, async (req: Request, re
   }
 
   const { productId, name, size, contentType, displayOrder } = parsed.data;
+  if (!ALLOWED_IMAGE_MIMES.has((contentType || "").toLowerCase())) {
+    res.status(400).json({ error: "Invalid contentType. Only JPEG, PNG, and WebP images are allowed." });
+    return;
+  }
   const sellerId = req.seller!.sellerId;
 
   try {
@@ -194,6 +234,10 @@ router.post("/storage/uploads/request-logo-url", requireAuth, async (req: Reques
   }
 
   const { name, size, contentType } = parsed.data;
+  if (!ALLOWED_IMAGE_MIMES.has((contentType || "").toLowerCase())) {
+    res.status(400).json({ error: "Invalid contentType. Only JPEG, PNG, and WebP images are allowed." });
+    return;
+  }
 
   try {
     const uploadURL = await objectStorageService.getObjectEntityUploadURL();
@@ -347,6 +391,8 @@ router.get("/public/img/*path", async (req: Request, res: Response) => {
     );
 
     res.setHeader("Content-Type", resp.ContentType || "image/jpeg");
+    res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'none'; sandbox");
+    res.setHeader("X-Content-Type-Options", "nosniff");
     
     // Explicitly allow public caching to let Nginx and browsers cache it aggressively
     res.setHeader("Cache-Control", "public, max-age=31536000, immutable");

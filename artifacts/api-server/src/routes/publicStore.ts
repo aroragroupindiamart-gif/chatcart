@@ -62,18 +62,45 @@ function generateOrderId(): string {
   return `ORD-${timestamp}${random}`;
 }
 
+function isStoreActive(seller: {
+  subscriptionPlan: string | null;
+  subscriptionStatus?: string | null;
+  subscriptionEndDate?: Date | null;
+}): boolean {
+  if (!seller) return false;
+  if (seller.subscriptionPlan === "pending") return false;
+  if (seller.subscriptionStatus === "cancelled" || seller.subscriptionStatus === "expired") return false;
+  if (seller.subscriptionEndDate && seller.subscriptionEndDate < new Date()) {
+    if (seller.subscriptionPlan !== "lifetime") return false;
+  }
+  return true;
+}
+
 // GET /public/sellers/:subdomain/categories — public category list (no auth)
 router.get("/public/sellers/:subdomain/categories", async (req, res) => {
   try {
     const { subdomain } = req.params;
     const [seller] = await db
-      .select({ id: sellersTable.id })
+      .select({
+        id: sellersTable.id,
+        subscriptionPlan: sellersTable.subscriptionPlan,
+        subscriptionStatus: sellersTable.subscriptionStatus,
+        subscriptionEndDate: sellersTable.subscriptionEndDate,
+      })
       .from(sellersTable)
       .where(eq(sellersTable.subdomain, subdomain))
       .limit(1);
 
     if (!seller) {
       res.status(404).json({ error: "Store not found" });
+      return;
+    }
+
+    if (!isStoreActive(seller)) {
+      res.status(403).json({
+        error: "This store is currently unavailable or pending activation.",
+        isPending: true,
+      });
       return;
     }
 
@@ -140,13 +167,26 @@ router.get("/public/sellers/:subdomain/products", async (req, res) => {
   try {
     const { subdomain } = req.params;
     const [seller] = await db
-      .select({ id: sellersTable.id })
+      .select({
+        id: sellersTable.id,
+        subscriptionPlan: sellersTable.subscriptionPlan,
+        subscriptionStatus: sellersTable.subscriptionStatus,
+        subscriptionEndDate: sellersTable.subscriptionEndDate,
+      })
       .from(sellersTable)
       .where(eq(sellersTable.subdomain, subdomain))
       .limit(1);
 
     if (!seller) {
       res.status(404).json({ error: "Store not found" });
+      return;
+    }
+
+    if (!isStoreActive(seller)) {
+      res.status(403).json({
+        error: "This store is currently unavailable or pending activation.",
+        isPending: true,
+      });
       return;
     }
 
@@ -209,13 +249,26 @@ router.get("/public/sellers/:subdomain/products/:productId", async (req, res) =>
     const productId = parseInt(String(req.params.productId));
 
     const [seller] = await db
-      .select({ id: sellersTable.id })
+      .select({
+        id: sellersTable.id,
+        subscriptionPlan: sellersTable.subscriptionPlan,
+        subscriptionStatus: sellersTable.subscriptionStatus,
+        subscriptionEndDate: sellersTable.subscriptionEndDate,
+      })
       .from(sellersTable)
       .where(eq(sellersTable.subdomain, subdomain))
       .limit(1);
 
     if (!seller) {
       res.status(404).json({ error: "Store not found" });
+      return;
+    }
+
+    if (!isStoreActive(seller)) {
+      res.status(403).json({
+        error: "This store is currently unavailable or pending activation.",
+        isPending: true,
+      });
       return;
     }
 
@@ -280,15 +333,27 @@ router.post("/public/orders", orderRateLimit, async (req, res) => {
       return;
     }
 
-    // Verify seller exists
+    // Verify seller exists and is active
     const [seller] = await db
-      .select({ id: sellersTable.id })
+      .select({
+        id: sellersTable.id,
+        subscriptionPlan: sellersTable.subscriptionPlan,
+        subscriptionStatus: sellersTable.subscriptionStatus,
+        subscriptionEndDate: sellersTable.subscriptionEndDate,
+      })
       .from(sellersTable)
       .where(eq(sellersTable.id, body.sellerId))
       .limit(1);
 
     if (!seller) {
       res.status(404).json({ error: "Seller not found" });
+      return;
+    }
+
+    if (!isStoreActive(seller)) {
+      res.status(403).json({
+        error: "Orders cannot be placed for this store because it is pending activation or currently inactive.",
+      });
       return;
     }
 

@@ -15,10 +15,27 @@ import bcrypt from "bcrypt";
 import { signAdminToken, requireAdminAuth, type AdminJwtPayload } from "../middleware/adminAuth.js";
 import { z } from "zod";
 
+import rateLimit from "express-rate-limit";
+
 const router = Router();
 
-const MAX_LOGIN_ATTEMPTS = 5;
+const MAX_LOGIN_ATTEMPTS = 10;
 const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
+
+// Pre-computed bcrypt hash (cost 10) for constant-time comparison when email is not found
+const DUMMY_BCRYPT_HASH = "$2b$10$X7lCqv4qKqj8wU1yGZ6m6.7jLgD4vF3kL1mN0pQ9rS8tU7vW6xY2a";
+
+const adminLoginRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 15, // max 15 login attempts per IP per 15 minutes
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    res.status(429).json({
+      error: "Too many login attempts from this connection. Please try again in 15 minutes.",
+    });
+  },
+});
 
 // ── Audit helper ──────────────────────────────────────────────────────────────
 
@@ -40,7 +57,7 @@ async function audit(
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
-router.post("/admin/auth/login", async (req, res) => {
+router.post("/admin/auth/login", adminLoginRateLimit, async (req, res) => {
   const parsed = z.object({ email: z.string().email(), password: z.string().min(1) }).safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "email and password are required" });
@@ -51,11 +68,14 @@ router.post("/admin/auth/login", async (req, res) => {
 
   const [admin] = await db.select().from(adminUsers).where(eq(adminUsers.email, email.toLowerCase())).limit(1);
   if (!admin) {
+    // Constant-time defense: run bcrypt against dummy hash so timing doesn't reveal valid emails
+    await bcrypt.compare(password, DUMMY_BCRYPT_HASH).catch(() => false);
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
 
   if (admin.loginLockedUntil && admin.loginLockedUntil > new Date()) {
+    await bcrypt.compare(password, DUMMY_BCRYPT_HASH).catch(() => false);
     res.status(429).json({ error: "Account locked due to too many failed attempts. Try again later." });
     return;
   }
@@ -65,6 +85,11 @@ router.post("/admin/auth/login", async (req, res) => {
     const newAttempts = (admin.loginAttempts ?? 0) + 1;
     const lockedUntil = newAttempts >= MAX_LOGIN_ATTEMPTS ? new Date(Date.now() + LOGIN_LOCKOUT_MS) : null;
     await db.update(adminUsers).set({ loginAttempts: newAttempts, loginLockedUntil: lockedUntil }).where(eq(adminUsers.id, admin.id));
+    if (newAttempts >= MAX_LOGIN_ATTEMPTS) {
+      await audit(admin.id, "admin_account_locked_failed_attempts", ip, {
+        details: { email: admin.email, failedAttempts: newAttempts },
+      });
+    }
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
