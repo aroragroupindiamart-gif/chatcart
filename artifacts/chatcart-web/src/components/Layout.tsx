@@ -132,7 +132,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 md:ml-64 min-h-screen pt-14 md:pt-0 pb-20 md:pb-0">
+      <main className="flex-1 min-w-0 w-full max-w-full overflow-x-hidden md:ml-64 min-h-screen pt-14 md:pt-0 pb-20 md:pb-0">
         <div className="p-4 md:p-8 max-w-7xl mx-auto">
           <LtdBanner />
           {daysLeft !== null && daysLeft <= 3 && (

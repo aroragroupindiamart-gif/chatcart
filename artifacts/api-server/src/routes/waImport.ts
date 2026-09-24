@@ -393,7 +393,8 @@ async function runImport(sessionId: string, sock: any, sellerId: number, res: Re
             description: prod.description || null,
             price: parsedPrice,
             categoryId,
-            status: requestedStatus,
+            status: existingProduct[0].status,
+            updatedAt: new Date(),
           })
           .where(eq(productsTable.id, existingProduct[0].id))
           .returning();

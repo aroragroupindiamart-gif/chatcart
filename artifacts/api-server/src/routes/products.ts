@@ -746,7 +746,7 @@ router.post(
 
       await db
         .update(productsTable)
-        .set({ status })
+        .set({ status, updatedAt: new Date() })
         .where(
           and(
             eq(productsTable.sellerId, req.seller!.sellerId),
@@ -785,7 +785,7 @@ router.post(
 
       await db
         .update(productsTable)
-        .set({ stockCount })
+        .set({ stockCount, updatedAt: new Date() })
         .where(
           and(
             eq(productsTable.sellerId, req.seller!.sellerId),
