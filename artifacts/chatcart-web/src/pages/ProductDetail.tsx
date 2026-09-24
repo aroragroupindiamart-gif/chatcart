@@ -45,7 +45,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, Trash, Share2, Upload, X, Image as ImageIcon, Loader2, AlertCircle, RefreshCw, GripVertical } from "lucide-react";
+import { ArrowLeft, Save, Trash, Share2, Upload, X, Image as ImageIcon, Loader2, AlertCircle, RefreshCw, GripVertical, Link2, Check } from "lucide-react";
 import { Link } from "wouter";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -378,15 +378,119 @@ function ProductDetailContent() {
   // Full-size image preview lightbox modal
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
-  // Sync orderedImages from product data, but preserve local order during active drag sessions
+  const [deletedImageIds, setDeletedImageIds] = useState<number[]>([]);
+
+  // Sync orderedImages from product data, but preserve local order during active drag sessions and filter out deleted
   const [isDragging, setIsDragging] = useState(false);
   useEffect(() => {
     if (product?.images && !isDragging) {
       setOrderedImages(
-        [...product.images].sort((a, b) => a.displayOrder - b.displayOrder)
+        [...product.images]
+          .filter((img) => !deletedImageIds.includes(img.id))
+          .sort((a, b) => a.displayOrder - b.displayOrder)
       );
     }
-  }, [product?.images, isDragging]);
+  }, [product?.images, isDragging, deletedImageIds]);
+
+  const hasUnsavedChanges = useMemo(() => {
+    if (isNew) {
+      return Boolean(name.trim() || price || description.trim() || pendingFiles.length > 0);
+    }
+    if (!product) return false;
+    if (deletedImageIds.length > 0) return true;
+    if (pendingFiles.length > 0) return true;
+    if (name !== product.name) return true;
+    if (sku !== (product.sku || "")) return true;
+    if (description !== (product.description || "")) return true;
+    const origPrice = product.price != null ? product.price.toString() : "";
+    if (price !== origPrice) return true;
+    if (stockCount !== product.stockCount.toString()) return true;
+    const origCatId = product.categoryId?.toString() || "";
+    if (categoryId !== origCatId) return true;
+    if (status !== product.status) return true;
+    if (showWhenOutOfStock !== product.showWhenOutOfStock) return true;
+    return false;
+  }, [
+    isNew,
+    product,
+    deletedImageIds,
+    pendingFiles,
+    name,
+    sku,
+    description,
+    price,
+    stockCount,
+    categoryId,
+    status,
+    showWhenOutOfStock,
+  ]);
+
+  const navigateBack = () => {
+    const returnUrl = new URLSearchParams(window.location.search).get("returnUrl") || "/products";
+    setLocation(returnUrl);
+  };
+
+  const handleBackClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (hasUnsavedChanges) {
+      const leave = window.confirm("You have unsaved changes. Do you want to discard them and leave?");
+      if (!leave) return;
+    }
+    navigateBack();
+  };
+
+  const handleDiscard = () => {
+    if (hasUnsavedChanges) {
+      const confirmed = window.confirm("Discard all unsaved changes and restore original details and photos?");
+      if (!confirmed) return;
+    }
+
+    if (!isNew && product) {
+      setName(product.name);
+      setSku(product.sku || "");
+      setDescription(product.description || "");
+      setPrice(product.price != null ? product.price.toString() : "");
+      setStockCount(product.stockCount.toString());
+      setCategoryId(product.categoryId?.toString() || "");
+      setCategoryIds((product as any).categoryIds || (product.categoryId ? [product.categoryId] : []));
+      setStatus(product.status);
+      setShowWhenOutOfStock(product.showWhenOutOfStock);
+      setVariants(
+        (product.variants || []).map((v: any) => ({
+          id: v.id,
+          variantType: v.label || v.variantType,
+          options: v.options || [],
+        }))
+      );
+      setDeletedImageIds([]);
+      setOrderedImages([...product.images].sort((a, b) => a.displayOrder - b.displayOrder));
+      pendingFiles.forEach((f) => URL.revokeObjectURL(f.preview));
+      setPendingFiles([]);
+      toast({ title: "Changes discarded", description: "Original photos and product details restored." });
+    } else {
+      pendingFiles.forEach((f) => URL.revokeObjectURL(f.preview));
+      setPendingFiles([]);
+      navigateBack();
+    }
+  };
+
+  const [copiedLink, setCopiedLink] = useState(false);
+  const handleCopyLink = () => {
+    const storeSubdomain = meData?.subdomain || "";
+    const productUrl = storeSubdomain
+      ? `https://chatcart.in/store/${storeSubdomain}/p/${productId}`
+      : `https://chatcart.in/p/${productId}`;
+    navigator.clipboard
+      .writeText(productUrl)
+      .then(() => {
+        setCopiedLink(true);
+        setTimeout(() => setCopiedLink(false), 2000);
+        toast({ title: "Product link copied to clipboard!" });
+      })
+      .catch(() => {
+        toast({ title: "Failed to copy link" });
+      });
+  };
 
   // On the edit page, check sessionStorage for failed uploads from the create flow
   useEffect(() => {
@@ -594,8 +698,29 @@ function ProductDetailContent() {
           toast({ title: "Product created successfully" });
         }
 
-        setLocation(`/products/${newId}`);
+        setLocation(`/products/${newId}?returnUrl=${encodeURIComponent(new URLSearchParams(window.location.search).get("returnUrl") || "/products")}`);
       } else {
+        // 1. Permanently delete images that were staged for deletion
+        if (deletedImageIds.length > 0) {
+          for (const imgId of deletedImageIds) {
+            try {
+              await deleteProductImage.mutateAsync({ productId, imageId: imgId });
+            } catch (err) {
+              console.error("Failed to delete staged image:", imgId, err);
+            }
+          }
+          setDeletedImageIds([]);
+        }
+
+        // 2. Upload any new photos staged in pendingFiles
+        if (pendingFiles.length > 0) {
+          const snapshot = [...pendingFiles];
+          await uploadFilesToProduct(snapshot, productId, orderedImages.length);
+          snapshot.forEach((f) => URL.revokeObjectURL(f.preview));
+          setPendingFiles([]);
+        }
+
+        // 3. Update product details
         await updateProduct.mutateAsync({
           productId,
           data: {
@@ -611,7 +736,7 @@ function ProductDetailContent() {
           } as any,
         });
 
-        // Sync product variants (delete old, insert new)
+        // 4. Sync product variants (delete old, insert new)
         if (product?.variants && product.variants.length > 0) {
           for (const orig of product.variants) {
             await fetch(`/api/products/${productId}/variants/${orig.id}`, {
@@ -637,8 +762,9 @@ function ProductDetailContent() {
         }
 
         queryClient.invalidateQueries({ queryKey: getGetProductQueryKey(productId) });
+        queryClient.invalidateQueries({ queryKey: ["/api/products"] });
         toast({ title: "Product updated successfully" });
-        setLocation("/products");
+        navigateBack();
       }
     } catch (err: any) {
       toast({ title: "Error", description: err.message || "Failed to save product", variant: "destructive" });
@@ -650,7 +776,7 @@ function ProductDetailContent() {
     try {
       await deleteProduct.mutateAsync({ productId });
       toast({ title: "Product deleted" });
-      setLocation("/products");
+      navigateBack();
     } catch (err: any) {
       toast({ title: "Error", description: err.message || "Failed to delete product", variant: "destructive" });
     }
@@ -691,42 +817,17 @@ function ProductDetailContent() {
     return valid;
   };
 
-  const handleFilesSelected = async (files: FileList | null) => {
+  const handleFilesSelected = (files: FileList | null) => {
     const valid = validateFiles(files);
     if (valid.length === 0) return;
 
-    if (isNew) {
-      const entries: PendingFile[] = valid.map((f) => ({
-        id: Math.random().toString(36).slice(2),
-        file: f,
-        preview: URL.createObjectURL(f),
-        status: "pending" as const,
-      }));
-      setPendingFiles((prev) => [...prev, ...entries]);
-      return;
-    }
-
-    // Saved product — upload immediately, keep in uploadingFiles for progress display
-    const entries: UploadingFile[] = valid.map((f) => ({
+    const entries: PendingFile[] = valid.map((f) => ({
       id: Math.random().toString(36).slice(2),
       file: f,
-      name: f.name,
       preview: URL.createObjectURL(f),
-      status: "uploading" as const,
+      status: "pending" as const,
     }));
-    setUploadingFiles((prev) => [...prev, ...entries]);
-
-    for (let i = 0; i < valid.length; i++) {
-      const file = valid[i];
-      const entry = entries[i];
-      const existingCount = (product?.images?.length ?? 0) + i;
-      const result = await uploadSingleFile(file, entry.id, productId, existingCount);
-      if (result.status === "done") {
-        // Remove done entries and refresh images
-        setUploadingFiles((prev) => prev.filter((e) => e.id !== entry.id));
-        queryClient.invalidateQueries({ queryKey: getGetProductQueryKey(productId) });
-      }
-    }
+    setPendingFiles((prev) => [...prev, ...entries]);
   };
 
   const handleRetryUpload = async (entry: UploadingFile) => {
@@ -757,15 +858,13 @@ function ProductDetailContent() {
     });
   };
 
-  const handleDeleteImage = async (imageId: number) => {
-    try {
-      await deleteProductImage.mutateAsync({ productId, imageId });
-      setOrderedImages((prev) => prev.filter((img) => img.id !== imageId));
-      queryClient.invalidateQueries({ queryKey: getGetProductQueryKey(productId) });
-      toast({ title: "Image removed" });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message || "Failed to remove image", variant: "destructive" });
-    }
+  const handleDeleteImage = (imageId: number) => {
+    setDeletedImageIds((prev) => [...prev, imageId]);
+    setOrderedImages((prev) => prev.filter((img) => img.id !== imageId));
+    toast({
+      title: "Photo marked for removal",
+      description: "Click 'Save Changes' to permanently delete or 'Discard Changes' to restore.",
+    });
   };
 
   if (!isNew && isLoading) {
@@ -774,16 +873,21 @@ function ProductDetailContent() {
 
   const isSaving = createProduct.isPending || updateProduct.isPending;
   const hasPendingFiles = pendingFiles.length > 0;
-  const hasExistingOrUploading = orderedImages.length > 0 || uploadingFiles.length > 0;
+  const hasExistingOrUploading = orderedImages.length > 0 || uploadingFiles.length > 0 || pendingFiles.length > 0;
 
   return (
     <div className="space-y-6 max-w-3xl">
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div className="flex items-center gap-3">
-          <Link href="/products" className="p-2 rounded-md hover:bg-slate-100 text-slate-500 transition-colors">
+          <button
+            type="button"
+            onClick={handleBackClick}
+            className="p-2 rounded-md hover:bg-slate-100 text-slate-500 transition-colors cursor-pointer"
+            aria-label="Back"
+          >
             <ArrowLeft className="w-5 h-5" />
-          </Link>
+          </button>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">
             {isNew ? "New Product" : "Edit Product"}
           </h1>
@@ -791,15 +895,31 @@ function ProductDetailContent() {
         <div className="flex items-center flex-wrap gap-2 w-full sm:w-auto justify-end">
           {!isNew && (
             <>
-              <Button variant="outline" size="sm" onClick={handleShare}>
+              <Button variant="outline" size="sm" onClick={handleCopyLink} type="button">
+                {copiedLink ? <Check className="w-4 h-4 mr-2 text-emerald-600" /> : <Link2 className="w-4 h-4 mr-2" />}
+                {copiedLink ? "Copied" : "Copy Link"}
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleShare} type="button">
                 <Share2 className="w-4 h-4 mr-2" />
                 Share
               </Button>
-              <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleteProduct.isPending}>
+              <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleteProduct.isPending} type="button">
                 <Trash className="w-4 h-4 mr-2" />
                 Delete
               </Button>
             </>
+          )}
+          {hasUnsavedChanges && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleDiscard}
+              disabled={isSaving || isUploadingAfterCreate}
+              className="border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer"
+            >
+              Discard Changes
+            </Button>
           )}
           <Button onClick={handleSave} disabled={isSaving || isUploadingAfterCreate} size="sm">
             {isUploadingAfterCreate ? (
@@ -879,6 +999,27 @@ function ProductDetailContent() {
             </Button>
           )}
         </div>
+
+        {deletedImageIds.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 flex items-center justify-between">
+            <span>
+              <strong>{deletedImageIds.length} photo{deletedImageIds.length > 1 ? "s" : ""}</strong> marked for removal. Click "Save Changes" to permanently delete or "Restore" to cancel.
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setDeletedImageIds([]);
+                if (product) {
+                  setOrderedImages([...product.images].sort((a, b) => a.displayOrder - b.displayOrder));
+                }
+                toast({ title: "Removed photos restored" });
+              }}
+              className="font-semibold underline text-amber-900 hover:text-amber-950 cursor-pointer ml-3 shrink-0"
+            >
+              Restore Photos
+            </button>
+          </div>
+        )}
 
         <input
           ref={fileInputRef}
@@ -986,6 +1127,27 @@ function ProductDetailContent() {
                     onDelete={handleDeleteImage}
                     onView={(url) => setPreviewImageUrl(url)}
                   />
+                ))}
+
+                {/* Newly added photos staged before save */}
+                {pendingFiles.map((f) => (
+                  <div
+                    key={f.id}
+                    className="relative group aspect-square rounded-lg overflow-hidden border-2 border-dashed border-indigo-300 bg-indigo-50/40"
+                  >
+                    <img src={f.preview} alt={f.file.name} className="w-full h-full object-cover opacity-90" />
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePendingFile(f.id)}
+                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-80 hover:opacity-100 transition-opacity shadow cursor-pointer"
+                      title="Remove"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                    <div className="absolute bottom-1 left-1 bg-indigo-600/90 text-white text-[9px] px-1.5 py-0.5 rounded font-medium">
+                      Unsaved
+                    </div>
+                  </div>
                 ))}
 
                 {/* In-flight / error uploads */}
@@ -1333,6 +1495,47 @@ function ProductDetailContent() {
             </Button>
           </div>
         )}
+      </div>
+
+      {/* ── Bottom Floating / Sticky Action Bar ── */}
+      <div className="sticky bottom-4 z-20 bg-white/95 backdrop-blur border border-slate-200 shadow-lg rounded-xl p-4 flex items-center justify-between gap-4 mt-8">
+        <div className="text-sm text-slate-500">
+          {hasUnsavedChanges ? (
+            <span className="flex items-center text-amber-600 font-medium">
+              <span className="w-2 h-2 rounded-full bg-amber-500 mr-2 animate-pulse" />
+              Unsaved changes
+            </span>
+          ) : (
+            <span className="text-slate-400">All changes saved</span>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {hasUnsavedChanges && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleDiscard}
+              disabled={isSaving || isUploadingAfterCreate}
+              className="border-slate-300 text-slate-700 hover:bg-slate-100 cursor-pointer"
+            >
+              Discard Changes
+            </Button>
+          )}
+          <Button onClick={handleSave} disabled={isSaving || isUploadingAfterCreate} size="sm">
+            {isUploadingAfterCreate ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Uploading…
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4 mr-2" />
+                {isNew ? "Create Product" : "Save Changes"}
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {previewImageUrl && (

@@ -6,12 +6,13 @@ import {
   useListCategories,
   getListProductsQueryKey,
   type ListProductsParams,
+  useGetMe,
 } from "@workspace/api-client-react";
 import { useState, useEffect, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
-import { Plus, Search, Package, Trash2, ArrowUp, QrCode, Loader2, Folder, Filter, Layers, ChevronDown } from "lucide-react";
+import { Plus, Search, Package, Trash2, ArrowUp, QrCode, Loader2, Folder, Filter, Layers, ChevronDown, Link2, Check } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -31,10 +32,54 @@ export default function Products() {
 }
 
 function ProductsContent() {
-  const [search, setSearch] = useState("");
-  const [statusTab, setStatusTab] = useState<string>("all");
+  const { data: meData } = useGetMe();
+  const [copiedId, setCopiedId] = useState<number | null>(null);
+
+  const [search, setSearch] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("q") ?? sessionStorage.getItem("seller_products_search") ?? "";
+  });
+  const [statusTab, setStatusTab] = useState<string>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("status") ?? sessionStorage.getItem("seller_products_status") ?? "all";
+  });
+  const [selectedCategory, setSelectedCategory] = useState<string>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("category") ?? sessionStorage.getItem("seller_products_category") ?? "all";
+  });
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Sync search, statusTab, selectedCategory to URL and sessionStorage
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (search.trim()) {
+      url.searchParams.set("q", search.trim());
+      sessionStorage.setItem("seller_products_search", search.trim());
+    } else {
+      url.searchParams.delete("q");
+      sessionStorage.removeItem("seller_products_search");
+    }
+
+    if (statusTab && statusTab !== "all") {
+      url.searchParams.set("status", statusTab);
+      sessionStorage.setItem("seller_products_status", statusTab);
+    } else {
+      url.searchParams.delete("status");
+      sessionStorage.removeItem("seller_products_status");
+    }
+
+    if (selectedCategory && selectedCategory !== "all") {
+      url.searchParams.set("category", selectedCategory);
+      sessionStorage.setItem("seller_products_category", selectedCategory);
+    } else {
+      url.searchParams.delete("category");
+      sessionStorage.removeItem("seller_products_category");
+    }
+
+    window.history.replaceState(null, "", url.toString());
+  }, [search, statusTab, selectedCategory]);
 
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const { data: categories } = useListCategories();
@@ -104,12 +149,18 @@ function ProductsContent() {
   const handleBulkStatus = async (status: "active" | "out_of_stock" | "hidden" | "deleted") => {
     if (selectedIds.length === 0) return;
 
-    if (status === "deleted") {
-      const confirmDelete = window.confirm(
-        `Are you sure you want to delete ${selectedIds.length} products?`
-      );
-      if (!confirmDelete) return;
-    }
+    const actionLabels: Record<string, string> = {
+      active: "set to Active",
+      hidden: "Hide",
+      out_of_stock: "mark Out of Stock",
+      deleted: "delete"
+    };
+    const actionText = actionLabels[status] || status;
+
+    const confirmed = window.confirm(
+      `Are you sure you want to ${actionText} ${selectedIds.length} selected product${selectedIds.length > 1 ? "s" : ""}?`
+    );
+    if (!confirmed) return;
 
     setIsBulkLoading(true);
     const token = getToken();
@@ -146,6 +197,11 @@ function ProductsContent() {
 
   const handleBulkStock = async (stockCount: number) => {
     if (selectedIds.length === 0) return;
+
+    const confirmed = window.confirm(
+      `Are you sure you want to set unlimited stock for ${selectedIds.length} selected product${selectedIds.length > 1 ? "s" : ""}?`
+    );
+    if (!confirmed) return;
 
     setIsBulkLoading(true);
     const token = getToken();
@@ -298,7 +354,69 @@ function ProductsContent() {
   const deleteProduct = useDeleteProduct();
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  // Save and restore scroll position
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 0) {
+        sessionStorage.setItem("seller_products_scroll", String(window.scrollY));
+      }
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
+    const saved = sessionStorage.getItem("seller_products_scroll");
+    if (saved && Number(saved) > 0) {
+      setTimeout(() => {
+        window.scrollTo({ top: Number(saved), behavior: "instant" as ScrollBehavior });
+      }, 50);
+    }
+  }, [products]);
+
+  const handleCopyProductLink = (productId: number) => {
+    const sub = meData?.subdomain || "";
+    const fullUrl = sub
+      ? `https://chatcart.in/store/${sub}/p/${productId}`
+      : `https://chatcart.in/p/${productId}`;
+    navigator.clipboard
+      .writeText(fullUrl)
+      .then(() => {
+        setCopiedId(productId);
+        setTimeout(() => setCopiedId(null), 2000);
+        toast({
+          title: "Product link copied!",
+          description: "Direct link copied to clipboard.",
+        });
+      })
+      .catch(() => {
+        toast({ title: "Failed to copy link" });
+      });
+  };
+
+  const handleToggleProductStatus = async (productId: number, currentStatus: string) => {
+    const newStatus = currentStatus === "active" ? "hidden" : "active";
+    const token = getToken();
+    try {
+      const res = await fetch("/api/products/bulk-status", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          productIds: [productId],
+          status: newStatus
+        })
+      });
+      if (!res.ok) throw new Error(await res.text() || "Failed to update status");
+      queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
+      toast({ title: `Product set to ${newStatus === "active" ? "Active" : "Hidden"}` });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Failed to update status", variant: "destructive" });
+    }
+  };
+
   const [groupByCategory, setGroupByCategory] = useState<boolean>(true);
 
   const getProductCategoryName = (p: any): string => {
@@ -470,21 +588,24 @@ function ProductsContent() {
                 {product.categoryName}
               </span>
             )}
-            <span
-              className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+            <button
+              type="button"
+              onClick={() => handleToggleProductStatus(product.id, product.status)}
+              className={`text-xs px-2.5 py-0.5 rounded-full font-medium transition-all cursor-pointer border hover:opacity-80 active:scale-95 ${
                 product.status === "active"
-                  ? "bg-green-100 text-green-700"
+                  ? "bg-green-100 text-green-700 border-green-200"
                   : product.status === "out_of_stock"
-                    ? "bg-amber-100 text-amber-700"
-                    : "bg-slate-100 text-slate-500"
+                    ? "bg-amber-100 text-amber-700 border-amber-200"
+                    : "bg-slate-100 text-slate-600 border-slate-200"
               }`}
+              title={`Click to ${product.status === "active" ? "Hide" : "Activate"}`}
             >
               {product.status === "active"
                 ? "Active"
                 : product.status === "out_of_stock"
                   ? "Out of Stock"
                   : "Hidden"}
-            </span>
+            </button>
             {isMobile && (
               <span className="text-xs text-slate-500">
                 • {product.stockCount === 0 ? "Unlimited" : `${product.stockCount} stock`}
@@ -507,16 +628,34 @@ function ProductsContent() {
           </span>
         )}
         <div className="flex items-center gap-2 ml-auto lg:ml-0">
+          <button
+            type="button"
+            onClick={() => handleCopyProductLink(product.id)}
+            className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-xs lg:text-sm font-medium transition-colors focus-visible:outline-none border border-input bg-background shadow-xs hover:bg-accent hover:text-accent-foreground h-7 lg:h-8 px-2 lg:px-2.5 gap-1 text-slate-600 cursor-pointer"
+            title="Copy direct product link"
+          >
+            {copiedId === product.id ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="text-emerald-600 font-semibold text-xs">Copied</span>
+              </>
+            ) : (
+              <>
+                <Link2 className="w-3.5 h-3.5 text-slate-500" />
+                <span className="hidden sm:inline text-xs">Copy Link</span>
+              </>
+            )}
+          </button>
           <Link
-            href={`/products/${product.id}`}
-            className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-xs lg:text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-7 lg:h-8 px-2.5 lg:px-3"
+            href={`/products/${product.id}?returnUrl=${encodeURIComponent(window.location.pathname + window.location.search)}`}
+            className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-xs lg:text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background shadow-xs hover:bg-accent hover:text-accent-foreground h-7 lg:h-8 px-2.5 lg:px-3"
           >
             Edit
           </Link>
           <button
             onClick={() => handleDelete(product.id, product.name)}
             disabled={deletingId === product.id}
-            className="inline-flex items-center justify-center rounded-md text-sm transition-colors focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 text-slate-400 hover:text-red-600 hover:bg-red-50 h-7 w-7 lg:h-8 lg:w-8"
+            className="inline-flex items-center justify-center rounded-md text-sm transition-colors focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 text-slate-400 hover:text-red-600 hover:bg-red-50 h-7 w-7 lg:h-8 lg:w-8 cursor-pointer"
             aria-label="Delete product"
           >
             <Trash2 className="w-4 h-4" />
@@ -538,7 +677,7 @@ function ProductsContent() {
             Manage your catalogue and inventory
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             onClick={startImport}
             variant="outline"

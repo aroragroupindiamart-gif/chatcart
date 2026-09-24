@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
-import { ShoppingCart, Store, Search, X, ArrowUp, LayoutGrid, ZoomIn } from "lucide-react";
+import { ShoppingCart, Store, Search, X, ArrowUp, LayoutGrid, ZoomIn, Link2, Check } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
 import { api, imgSrc, formatPrice, type Seller, type Product, type Category } from "@/lib/api";
 import { Input } from "@/components/ui/input";
@@ -8,16 +8,27 @@ import CartSheet from "@/components/CartSheet";
 import ImageLightboxModal from "@/components/ImageLightboxModal";
 import { usePageMeta, absImgUrl } from "@/lib/usePageMeta";
 import { StoreUnavailable } from "@/components/StoreUnavailable";
+import { useToast } from "@/hooks/use-toast";
+
+interface StoreDataCache {
+  seller: Seller;
+  products: Product[];
+  categories: Category[];
+  timestamp: number;
+}
+const storeDataCache = new Map<string, StoreDataCache>();
 
 export default function StoreFront() {
   const { subdomain } = useParams<{ subdomain: string }>();
   const [, navigate] = useLocation();
   const { totalItems, setCategories, initForSeller } = useCart();
+  const { toast } = useToast();
 
-  const [seller, setSeller] = useState<Seller | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategoriesState] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cached = subdomain ? storeDataCache.get(subdomain) : null;
+  const [seller, setSeller] = useState<Seller | null>(() => (cached ? cached.seller : null));
+  const [products, setProducts] = useState<Product[]>(() => (cached ? cached.products : []));
+  const [categories, setCategoriesState] = useState<Category[]>(() => (cached ? cached.categories : []));
+  const [loading, setLoading] = useState(() => !cached);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [cartOpen, setCartOpen] = useState(false);
@@ -27,37 +38,67 @@ export default function StoreFront() {
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(() => {
     const params = new URLSearchParams(window.location.search);
     const cat = params.get("category");
-    return cat ? Number(cat) : null;
+    if (cat !== null) {
+      const num = Number(cat);
+      return isNaN(num) ? null : num;
+    }
+    const saved = subdomain ? sessionStorage.getItem(`storefront_category_${subdomain}`) : null;
+    if (saved) {
+      const num = Number(saved);
+      return isNaN(num) ? null : num;
+    }
+    return null;
   });
 
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [allCategoriesOpen, setAllCategoriesOpen] = useState(false);
 
+  // Sync category changes to popstate (browser back/forward button)
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const cat = params.get("category");
+      if (cat !== null) {
+        const num = Number(cat);
+        setSelectedCategoryId(isNaN(num) ? null : num);
+      } else {
+        setSelectedCategoryId(null);
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
   // Save scroll position on scroll
   useEffect(() => {
     const handleScroll = () => {
-      if (window.scrollY > 0 && subdomain) {
+      if (!loading && window.scrollY > 0 && subdomain) {
+        const scrollKey = `storefront_scroll_${subdomain}_cat_${selectedCategoryId ?? "all"}`;
+        sessionStorage.setItem(scrollKey, String(window.scrollY));
         sessionStorage.setItem(`storefront_scroll_${subdomain}`, String(window.scrollY));
       }
     };
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
-  }, [subdomain]);
+  }, [subdomain, selectedCategoryId, loading]);
 
-  // Restore scroll position after loading products
+  // Restore scroll position after loading products or on initial mount
   useEffect(() => {
-    if (!loading && products.length > 0 && subdomain) {
-      const saved = sessionStorage.getItem(`storefront_scroll_${subdomain}`);
+    if (products.length > 0 && subdomain) {
+      const scrollKey = `storefront_scroll_${subdomain}_cat_${selectedCategoryId ?? "all"}`;
+      const saved = sessionStorage.getItem(scrollKey) || sessionStorage.getItem(`storefront_scroll_${subdomain}`);
       if (saved) {
         const y = Number(saved);
         if (!isNaN(y) && y > 0) {
-          setTimeout(() => {
-            window.scrollTo(0, y);
-          }, 80);
+          [0, 40, 100, 250].forEach((delay) => {
+            setTimeout(() => {
+              window.scrollTo({ top: y, behavior: "instant" as ScrollBehavior });
+            }, delay);
+          });
         }
       }
     }
-  }, [loading, products, subdomain]);
+  }, [loading, products.length, subdomain, selectedCategoryId]);
 
   // Mobile Back Button Interceptor for Modals (Cart, Categories, Lightbox)
   useEffect(() => {
@@ -100,8 +141,14 @@ export default function StoreFront() {
     const url = new URL(window.location.href);
     if (id !== null) {
       url.searchParams.set("category", String(id));
+      if (subdomain) {
+        sessionStorage.setItem(`storefront_category_${subdomain}`, String(id));
+      }
     } else {
       url.searchParams.delete("category");
+      if (subdomain) {
+        sessionStorage.removeItem(`storefront_category_${subdomain}`);
+      }
     }
     window.history.replaceState(null, "", url.toString());
   };
@@ -109,7 +156,9 @@ export default function StoreFront() {
   useEffect(() => {
     if (!subdomain) return;
     initForSeller(subdomain);
-    setLoading(true);
+    if (!storeDataCache.has(subdomain)) {
+      setLoading(true);
+    }
     setError(null);
     api.getSeller(subdomain)
       .then(async (sellerData) => {
@@ -124,8 +173,18 @@ export default function StoreFront() {
         setProducts(productsData);
         setCategoriesState(categoriesData);
         setCategories(categoriesData);
+        storeDataCache.set(subdomain, {
+          seller: sellerData,
+          products: productsData,
+          categories: categoriesData,
+          timestamp: Date.now(),
+        });
       })
-      .catch((err) => setError(err.message ?? "Failed to load store"))
+      .catch((err) => {
+        if (!storeDataCache.has(subdomain)) {
+          setError(err.message ?? "Failed to load store");
+        }
+      })
       .finally(() => setLoading(false));
   }, [subdomain, setCategories, initForSeller]);
 
@@ -202,9 +261,17 @@ export default function StoreFront() {
 
   const goToProduct = (id: number) => {
     if (subdomain) {
+      const scrollKey = `storefront_scroll_${subdomain}_cat_${selectedCategoryId ?? "all"}`;
+      sessionStorage.setItem(scrollKey, String(window.scrollY));
       sessionStorage.setItem(`storefront_scroll_${subdomain}`, String(window.scrollY));
+      if (selectedCategoryId !== null) {
+        sessionStorage.setItem(`storefront_category_${subdomain}`, String(selectedCategoryId));
+      } else {
+        sessionStorage.removeItem(`storefront_category_${subdomain}`);
+      }
     }
-    navigate(`/${subdomain}/p/${id}`);
+    const catQuery = selectedCategoryId !== null ? `?category=${selectedCategoryId}` : "";
+    navigate(`/${subdomain}/p/${id}${catQuery}`);
   };
 
   const handleOpenLightbox = (imgs: { url: string; id?: number }[], index = 0) => {
@@ -404,6 +471,8 @@ export default function StoreFront() {
               <ProductCard
                 key={p.id}
                 product={p}
+                subdomain={subdomain}
+                selectedCategoryId={selectedCategoryId}
                 layout={seller.productImageLayout ?? "square"}
                 onClick={() => goToProduct(p.id)}
                 onOpenLightbox={handleOpenLightbox}
@@ -535,20 +604,27 @@ export default function StoreFront() {
 
 function ProductCard({
   product,
+  subdomain,
+  selectedCategoryId,
   layout,
   onClick,
   onOpenLightbox,
 }: {
   product: Product;
+  subdomain?: string;
+  selectedCategoryId?: number | null;
   layout: "square" | "portrait";
   onClick: () => void;
   onOpenLightbox: (imgs: { url: string; id?: number }[], idx?: number) => void;
 }) {
   const primaryImage = product.images[0];
   const [imageError, setImageError] = useState(false);
+  const [copied, setCopied] = useState(false);
   const { items, addToCart, updateQuantity } = useCart();
+  const { toast } = useToast();
   const isOutOfStock = product.status === "out_of_stock";
   const hasPrice = product.price != null;
+  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
   const cartKey = `${product.id}__`;
   const qty = items.find((i) => i.key === cartKey)?.quantity ?? 0;
@@ -566,11 +642,42 @@ function ProductCard({
     updateQuantity(cartKey, qty - 1);
   };
 
+  const catQuery = selectedCategoryId !== null && selectedCategoryId !== undefined ? `?category=${selectedCategoryId}` : "";
+  const productPath = `${BASE}/${subdomain || ""}/p/${product.id}${catQuery}`;
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) {
+      return;
+    }
+    e.preventDefault();
+    onClick();
+  };
+
+  const handleCopyLink = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const origin = window.location.origin;
+    const fullUrl = `${origin}${BASE}/${subdomain || ""}/p/${product.id}${catQuery}`;
+    navigator.clipboard
+      .writeText(fullUrl)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+        toast({
+          title: "Product link copied!",
+          description: "Direct product URL copied to clipboard.",
+        });
+      })
+      .catch(() => {
+        toast({ title: "Failed to copy link" });
+      });
+  };
+
   const showQtyControls = hasPrice && !isOutOfStock;
 
   return (
-    <div className="group bg-card border border-card-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-lg transition-all duration-200 w-full">
-      <button onClick={onClick} className="w-full text-left">
+    <div className="group bg-card border border-card-border rounded-xl overflow-hidden hover:border-primary/40 hover:shadow-lg transition-all duration-200 w-full relative">
+      <a href={productPath} onClick={handleCardClick} className="w-full text-left block no-underline text-inherit cursor-pointer">
         <div className={`${layout === "portrait" ? "aspect-[3/4]" : "aspect-square"} bg-muted overflow-hidden relative group/img`}>
           {primaryImage && !imageError ? (
             <>
@@ -581,6 +688,18 @@ function ProductCard({
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 onError={() => setImageError(true)}
               />
+              {/* Copy Product Link button */}
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="absolute top-2 left-2 p-1.5 rounded-full bg-black/60 text-white opacity-85 sm:opacity-0 group-hover/img:opacity-100 transition-all hover:bg-black/90 backdrop-blur-xs z-10 cursor-pointer shadow-xs"
+                title="Copy product link"
+                aria-label="Copy product link"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Link2 className="w-3.5 h-3.5" />}
+              </button>
+
+              {/* Zoom image button */}
               <button
                 type="button"
                 onClick={(e) => {
@@ -595,8 +714,17 @@ function ProductCard({
               </button>
             </>
           ) : (
-            <div className="w-full h-full flex items-center justify-center">
+            <div className="w-full h-full flex items-center justify-center relative">
               <Store className="w-8 h-8 text-muted-foreground opacity-20" />
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="absolute top-2 left-2 p-1.5 rounded-full bg-black/60 text-white opacity-85 sm:opacity-0 group-hover:opacity-100 transition-all hover:bg-black/90 backdrop-blur-xs z-10 cursor-pointer shadow-xs"
+                title="Copy product link"
+                aria-label="Copy product link"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Link2 className="w-3.5 h-3.5" />}
+              </button>
             </div>
           )}
           {isOutOfStock && (
@@ -617,7 +745,7 @@ function ProductCard({
             <span className="text-xs text-muted-foreground italic">Price on request</span>
           )}
         </div>
-      </button>
+      </a>
 
       {showQtyControls && (
         <div className="px-2.5 pb-2.5 pt-1">

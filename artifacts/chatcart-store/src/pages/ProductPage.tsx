@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, ShoppingCart, Plus, Minus, Store, MessageCircle, ZoomIn } from "lucide-react";
+import { ArrowLeft, ShoppingCart, Plus, Minus, Store, MessageCircle, ZoomIn, Link2, Check } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
 import { api, imgSrc, formatPrice, type Seller, type Product } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import CartSheet from "@/components/CartSheet";
 import ImageLightboxModal from "@/components/ImageLightboxModal";
 import { StoreUnavailable } from "@/components/StoreUnavailable";
+import { useToast } from "@/hooks/use-toast";
 
 function normalizeWhatsApp(raw: string | null): string {
   if (!raw) return "";
@@ -25,6 +26,7 @@ export default function ProductPage() {
   }>();
   const [, navigate] = useLocation();
   const { addToCart, totalItems, initForSeller } = useCart();
+  const { toast } = useToast();
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
   const [seller, setSeller] = useState<Seller | null>(null);
@@ -38,6 +40,38 @@ export default function ProductPage() {
   const [added, setAdded] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyLink = () => {
+    const origin = window.location.origin;
+    const cat = new URLSearchParams(window.location.search).get("category") || (subdomain ? sessionStorage.getItem(`storefront_category_${subdomain}`) : null);
+    const catQuery = cat ? `?category=${cat}` : "";
+    const fullUrl = `${origin}${BASE}/${subdomain || ""}/p/${productId}${catQuery}`;
+    navigator.clipboard
+      .writeText(fullUrl)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+        toast({
+          title: "Product link copied!",
+          description: "Direct product URL copied to clipboard.",
+        });
+      })
+      .catch(() => {
+        toast({ title: "Failed to copy link" });
+      });
+  };
+
+  const handleBack = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      const cat = new URLSearchParams(window.location.search).get("category") || (subdomain ? sessionStorage.getItem(`storefront_category_${subdomain}`) : null);
+      const catQuery = cat ? `?category=${cat}` : "";
+      navigate(`/${subdomain || ""}${catQuery}`);
+    }
+  };
 
   // Handle mobile back button for Cart Sheet
   useEffect(() => {
@@ -131,9 +165,11 @@ export default function ProductPage() {
       {/* ── Sticky header ── */}
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur border-b border-border/50">
         <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
-          <a
-            href={`${BASE}/${subdomain}`}
-            className="flex items-center gap-2 min-w-0 hover:opacity-80 transition-opacity"
+          <button
+            type="button"
+            onClick={handleBack}
+            className="flex items-center gap-2 min-w-0 hover:opacity-80 transition-opacity bg-transparent border-0 p-0 text-left cursor-pointer"
+            aria-label="Back to store"
           >
             <ArrowLeft className="w-4 h-4 shrink-0 text-muted-foreground" />
             {seller.bannerImageUrl ? (
@@ -150,19 +186,30 @@ export default function ProductPage() {
             <span className="text-sm font-medium truncate text-foreground">
               {seller.storeName ?? subdomain}
             </span>
-          </a>
-          <button
-            onClick={() => setCartOpen(true)}
-            className="relative p-2 rounded-lg hover:bg-muted transition-colors"
-            aria-label="Open cart"
-          >
-            <ShoppingCart className="w-5 h-5 text-foreground" />
-            {totalItems > 0 && (
-              <span className="absolute -top-1 -right-1 bg-primary text-white text-[10px] rounded-full min-w-4.5 h-4.5 px-1 flex items-center justify-center font-bold leading-none shadow-xs">
-                {totalItems}
-              </span>
-            )}
           </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={handleCopyLink}
+              className="p-2 rounded-lg hover:bg-muted text-foreground transition-colors flex items-center justify-center cursor-pointer"
+              title="Copy product link"
+              aria-label="Copy product link"
+            >
+              {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Link2 className="w-4 h-4 text-muted-foreground" />}
+            </button>
+            <button
+              onClick={() => setCartOpen(true)}
+              className="relative p-2 rounded-lg hover:bg-muted transition-colors cursor-pointer"
+              aria-label="Open cart"
+            >
+              <ShoppingCart className="w-5 h-5 text-foreground" />
+              {totalItems > 0 && (
+                <span className="absolute -top-1 -right-1 bg-primary text-white text-[10px] rounded-full min-w-4.5 h-4.5 px-1 flex items-center justify-center font-bold leading-none shadow-xs">
+                  {totalItems}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -221,13 +268,24 @@ export default function ProductPage() {
 
         {/* Name + Price */}
         <div className="space-y-1">
-          <div className="flex items-start justify-between gap-2">
-            <h1 className="text-xl font-bold leading-snug text-foreground">{product.name}</h1>
-            {outOfStock && (
-              <Badge variant="secondary" className="shrink-0 mt-0.5">
-                Out of stock
-              </Badge>
-            )}
+          <div className="flex items-start justify-between gap-3">
+            <h1 className="text-xl font-bold leading-snug text-foreground flex-1">{product.name}</h1>
+            <div className="flex items-center gap-2 shrink-0 mt-0.5">
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-border bg-card text-xs font-semibold hover:bg-muted text-foreground transition-colors cursor-pointer shadow-xs"
+                title="Copy product link"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Link2 className="w-3.5 h-3.5 text-muted-foreground" />}
+                <span>{copied ? "Copied" : "Copy Link"}</span>
+              </button>
+              {outOfStock && (
+                <Badge variant="secondary">
+                  Out of stock
+                </Badge>
+              )}
+            </div>
           </div>
           {hasPrice ? (
             <p className="text-2xl font-bold text-primary">
