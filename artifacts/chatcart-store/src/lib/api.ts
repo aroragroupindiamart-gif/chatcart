@@ -7,6 +7,7 @@ export interface Seller {
   tagline: string | null;
   plan: string | null;
   productImageLayout: "square" | "portrait" | null;
+  enableGst?: boolean | null;
   gstPercentage?: number | string | null;
   enableShipping?: boolean | null;
   shippingRatePerKg?: number | string | null;

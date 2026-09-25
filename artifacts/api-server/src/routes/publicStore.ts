@@ -146,6 +146,7 @@ router.get("/public/sellers/:subdomain", async (req, res) => {
         tagline: sellersTable.tagline,
         plan: sellersTable.subscriptionPlan,
         productImageLayout: sellersTable.productImageLayout,
+        enableGst: sellersTable.enableGst,
         gstPercentage: sellersTable.gstPercentage,
         enableShipping: sellersTable.enableShipping,
         shippingRatePerKg: sellersTable.shippingRatePerKg,
@@ -344,6 +345,7 @@ router.post("/public/orders", orderRateLimit, async (req, res) => {
         subscriptionPlan: sellersTable.subscriptionPlan,
         subscriptionStatus: sellersTable.subscriptionStatus,
         subscriptionEndDate: sellersTable.subscriptionEndDate,
+        enableGst: sellersTable.enableGst,
         gstPercentage: sellersTable.gstPercentage,
         enableShipping: sellersTable.enableShipping,
         shippingRatePerKg: sellersTable.shippingRatePerKg,
@@ -423,7 +425,7 @@ router.post("/public/orders", orderRateLimit, async (req, res) => {
     );
 
     let gstAmount = 0;
-    const gstPct = seller?.gstPercentage ? parseFloat(String(seller.gstPercentage)) : 0;
+    const gstPct = (seller?.enableGst && seller?.gstPercentage) ? parseFloat(String(seller.gstPercentage)) : 0;
     if (gstPct > 0 && subtotal > 0) {
       gstAmount = parseFloat(((subtotal * gstPct) / 100).toFixed(2));
     }
@@ -509,6 +511,7 @@ router.get("/public/orders/:orderId", async (req, res) => {
         subdomain: sellersTable.subdomain,
         whatsappNumber: sellersTable.whatsappNumber,
         bannerImageUrl: sellersTable.bannerImageUrl,
+        enableGst: sellersTable.enableGst,
         gstPercentage: sellersTable.gstPercentage,
         enableShipping: sellersTable.enableShipping,
         shippingRatePerKg: sellersTable.shippingRatePerKg,
@@ -547,7 +550,7 @@ router.get("/public/orders/:orderId", async (req, res) => {
       }
     }
 
-    const gstPct = seller?.gstPercentage ? parseFloat(String(seller.gstPercentage)) : 0;
+    const gstPct = (seller?.enableGst && seller?.gstPercentage) ? parseFloat(String(seller.gstPercentage)) : 0;
     const enableShipping = Boolean(seller?.enableShipping);
     const ratePerKg = seller?.shippingRatePerKg ? parseFloat(String(seller.shippingRatePerKg)) : 0;
     const step = seller?.shippingAmountPerKgStep ? parseFloat(String(seller.shippingAmountPerKgStep)) : 0;

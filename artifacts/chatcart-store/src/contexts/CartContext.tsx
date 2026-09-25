@@ -189,10 +189,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
   );
 
   const gstPercentage = useMemo(() => {
-    if (!seller?.gstPercentage) return 0;
+    if (!seller?.enableGst || !seller?.gstPercentage) return 0;
     const parsed = parseFloat(String(seller.gstPercentage));
     return isNaN(parsed) || parsed < 0 ? 0 : parsed;
-  }, [seller?.gstPercentage]);
+  }, [seller?.enableGst, seller?.gstPercentage]);
 
   const gstAmount = useMemo(() => {
     if (gstPercentage <= 0 || subtotalAmount <= 0) return 0;

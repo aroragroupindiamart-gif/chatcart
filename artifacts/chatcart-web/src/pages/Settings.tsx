@@ -96,6 +96,7 @@ function SettingsContent() {
   const [bannerImageUrl, setBannerImageUrl] = useState<string | null>(null);
   const [tagline, setTagline] = useState("");
   const [productImageLayout, setProductImageLayout] = useState<"square" | "portrait">("square");
+  const [enableGst, setEnableGst] = useState(false);
   const [gstPercentage, setGstPercentage] = useState("0");
   const [enableShipping, setEnableShipping] = useState(false);
   const [shippingRatePerKg, setShippingRatePerKg] = useState("0");
@@ -131,6 +132,7 @@ function SettingsContent() {
       setBannerImageUrl((seller as any).bannerImageUrl ?? null);
       setTagline((seller as any).tagline ?? "");
       setProductImageLayout((seller as any).productImageLayout ?? "square");
+      setEnableGst(Boolean((seller as any).enableGst));
       setGstPercentage((seller as any).gstPercentage != null ? String((seller as any).gstPercentage) : "0");
       setEnableShipping(Boolean((seller as any).enableShipping));
       setShippingRatePerKg((seller as any).shippingRatePerKg != null ? String((seller as any).shippingRatePerKg) : "0");
@@ -196,6 +198,7 @@ function SettingsContent() {
     try {
       await updateSeller.mutateAsync({
         data: {
+          enableGst,
           gstPercentage: gstNum,
           enableShipping,
           shippingRatePerKg: rateNum,
@@ -579,28 +582,49 @@ function SettingsContent() {
         </CardHeader>
         <CardContent className="space-y-6">
           {/* GST Section */}
-          <div className="space-y-3 pb-6 border-b border-slate-100">
-            <div>
-              <Label className="text-base font-semibold">GST Slab (%)</Label>
-              <p className="text-xs text-slate-500">
-                Applied dynamically to in-stock items. Leave at 0 if you do not charge GST.
-              </p>
-            </div>
-            <div className="flex items-center gap-3 max-w-xs">
-              <Input
-                type="number"
-                min="0"
-                max="100"
-                step="0.01"
-                value={gstPercentage}
-                onChange={(e) => setGstPercentage(e.target.value)}
-                placeholder="e.g. 3"
+          <div className="space-y-4 pb-6 border-b border-slate-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-base font-semibold">GST Charges</Label>
+                <p className="text-xs text-slate-500">
+                  Charge GST on order items.
+                </p>
+              </div>
+              <Switch
+                checked={enableGst}
+                onCheckedChange={setEnableGst}
               />
-              <span className="text-sm font-semibold text-slate-500">%</span>
             </div>
-            {parseFloat(gstPercentage) > 0 && (
-              <p className="text-xs text-emerald-700 bg-emerald-50 rounded-md p-2">
-                ✓ Active: {gstPercentage}% GST will be calculated on customer carts.
+
+            {enableGst ? (
+              <div className="space-y-3 pt-1">
+                <div>
+                  <Label className="text-sm">GST Slab (%)</Label>
+                  <p className="text-xs text-slate-500">
+                    Applied dynamically to in-stock items.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 max-w-xs">
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={gstPercentage}
+                    onChange={(e) => setGstPercentage(e.target.value)}
+                    placeholder="e.g. 3"
+                  />
+                  <span className="text-sm font-semibold text-slate-500">%</span>
+                </div>
+                {parseFloat(gstPercentage) > 0 && (
+                  <p className="text-xs text-emerald-700 bg-emerald-50 rounded-md p-2">
+                    ✓ Active: {gstPercentage}% GST will be calculated on customer carts.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400">
+                Disabled — customers will not be charged GST.
               </p>
             )}
           </div>
@@ -619,6 +643,12 @@ function SettingsContent() {
                 onCheckedChange={setEnableShipping}
               />
             </div>
+
+            {!enableShipping && (
+              <p className="text-xs text-slate-400">
+                Disabled — no shipping charges will be added to orders.
+              </p>
+            )}
 
             {enableShipping && (
               <div className="space-y-4 pt-2">

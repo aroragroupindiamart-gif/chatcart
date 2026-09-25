@@ -23,6 +23,7 @@ export const sellersTable = pgTable("sellers", {
   isSuspended: boolean("is_suspended").default(false).notNull(),
   suspensionReason: text("suspension_reason"),
   suspendedAt: timestamp("suspended_at"),
+  enableGst: boolean("enable_gst").default(false).notNull(),
   gstPercentage: numeric("gst_percentage", { precision: 5, scale: 2 }).default("0"),
   enableShipping: boolean("enable_shipping").default(false).notNull(),
   shippingRatePerKg: numeric("shipping_rate_per_kg", { precision: 10, scale: 2 }).default("0"),

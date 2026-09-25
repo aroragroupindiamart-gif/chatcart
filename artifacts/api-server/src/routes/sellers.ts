@@ -31,6 +31,7 @@ router.patch("/sellers/me", requireAuth, requireActiveSubscription, async (req, 
       tagline,
       subdomain,
       productImageLayout,
+      enableGst,
       gstPercentage,
       enableShipping,
       shippingRatePerKg,
@@ -42,6 +43,7 @@ router.patch("/sellers/me", requireAuth, requireActiveSubscription, async (req, 
       tagline?: string | null;
       subdomain?: string;
       productImageLayout?: "square" | "portrait";
+      enableGst?: boolean;
       gstPercentage?: number | string | null;
       enableShipping?: boolean;
       shippingRatePerKg?: number | string | null;
@@ -68,6 +70,7 @@ router.patch("/sellers/me", requireAuth, requireActiveSubscription, async (req, 
     if (bannerImageUrl !== undefined) updates.bannerImageUrl = bannerImageUrl;
     if (tagline !== undefined) updates.tagline = tagline;
     if (productImageLayout !== undefined) updates.productImageLayout = productImageLayout;
+    if (enableGst !== undefined) updates.enableGst = Boolean(enableGst);
     if (gstPercentage !== undefined) {
       const parsedGst = parseFloat(String(gstPercentage));
       updates.gstPercentage = isNaN(parsedGst) || parsedGst < 0 ? "0" : parsedGst.toFixed(2);

@@ -193,7 +193,7 @@ export default function CheckoutPage({ seller, onBack }: CheckoutPageProps) {
     0
   ) ?? 0;
 
-  const gstPct = seller.gstPercentage != null ? parseFloat(String(seller.gstPercentage)) : 0;
+  const gstPct = Boolean(seller.enableGst) && seller.gstPercentage != null ? parseFloat(String(seller.gstPercentage)) : 0;
   const adjustedGst = adjustedSubtotal > 0 && gstPct > 0 ? (adjustedSubtotal * gstPct) / 100 : 0;
 
   const enableShipping = Boolean(seller.enableShipping);

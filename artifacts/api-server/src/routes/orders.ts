@@ -112,6 +112,7 @@ router.get("/orders/:orderId", requireAuth, requireActiveSubscription, async (re
         .where(eq(orderItemsTable.orderId, order.id)),
       db
         .select({
+          enableGst: sellersTable.enableGst,
           gstPercentage: sellersTable.gstPercentage,
           enableShipping: sellersTable.enableShipping,
           shippingRatePerKg: sellersTable.shippingRatePerKg,
@@ -127,7 +128,7 @@ router.get("/orders/:orderId", requireAuth, requireActiveSubscription, async (re
       0
     );
 
-    const gstPct = seller?.gstPercentage != null ? parseFloat(seller.gstPercentage) : 0;
+    const gstPct = (seller?.enableGst && seller?.gstPercentage != null) ? parseFloat(seller.gstPercentage) : 0;
     const gstAmount = gstPct > 0 ? (subtotal * gstPct) / 100 : 0;
 
     const enableShipping = Boolean(seller?.enableShipping);
