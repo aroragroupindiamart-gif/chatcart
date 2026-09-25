@@ -7,6 +7,10 @@ export interface Seller {
   tagline: string | null;
   plan: string | null;
   productImageLayout: "square" | "portrait" | null;
+  gstPercentage?: number | string | null;
+  enableShipping?: boolean | null;
+  shippingRatePerKg?: number | string | null;
+  shippingAmountPerKgStep?: number | string | null;
 }
 
 export interface ProductImage {
@@ -54,7 +58,16 @@ export interface OrderItem {
 export interface Order {
   id: string;
   status: string;
+  subtotalAmount?: number;
+  gstPercentage?: number;
+  gstAmount?: number;
+  shippingAmount?: number;
+  shippingKg?: number;
   totalAmount: number;
+  payableSubtotalAmount?: number;
+  payableGstAmount?: number;
+  payableShippingAmount?: number;
+  payableShippingKg?: number;
   payableTotalAmount?: number;
   hasSoldOutItems?: boolean;
   customerContact: string | null;

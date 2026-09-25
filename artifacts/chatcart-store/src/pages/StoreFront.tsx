@@ -21,11 +21,16 @@ const storeDataCache = new Map<string, StoreDataCache>();
 export default function StoreFront() {
   const { subdomain } = useParams<{ subdomain: string }>();
   const [, navigate] = useLocation();
-  const { totalItems, setCategories, initForSeller } = useCart();
+  const { totalItems, setCategories, initForSeller, setSeller: setCartSeller } = useCart();
   const { toast } = useToast();
 
   const cached = subdomain ? storeDataCache.get(subdomain) : null;
-  const [seller, setSeller] = useState<Seller | null>(() => (cached ? cached.seller : null));
+  const [seller, setSeller] = useState<Seller | null>(() => {
+    if (cached?.seller) {
+      // pass to cart context
+    }
+    return cached ? cached.seller : null;
+  });
   const [products, setProducts] = useState<Product[]>(() => (cached ? cached.products : []));
   const [categories, setCategoriesState] = useState<Category[]>(() => (cached ? cached.categories : []));
   const [loading, setLoading] = useState(() => !cached);
@@ -156,6 +161,9 @@ export default function StoreFront() {
   useEffect(() => {
     if (!subdomain) return;
     initForSeller(subdomain);
+    if (cached?.seller) {
+      setCartSeller(cached.seller);
+    }
     if (!storeDataCache.has(subdomain)) {
       setLoading(true);
     }
@@ -163,6 +171,7 @@ export default function StoreFront() {
     api.getSeller(subdomain)
       .then(async (sellerData) => {
         setSeller(sellerData);
+        setCartSeller(sellerData);
         if (sellerData.plan === "pending") {
           return;
         }
@@ -186,7 +195,7 @@ export default function StoreFront() {
         }
       })
       .finally(() => setLoading(false));
-  }, [subdomain, setCategories, initForSeller]);
+  }, [subdomain, setCategories, initForSeller, setCartSeller]);
 
   useEffect(() => {
     const el = tabsRef.current;

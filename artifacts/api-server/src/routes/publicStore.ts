@@ -146,6 +146,10 @@ router.get("/public/sellers/:subdomain", async (req, res) => {
         tagline: sellersTable.tagline,
         plan: sellersTable.subscriptionPlan,
         productImageLayout: sellersTable.productImageLayout,
+        gstPercentage: sellersTable.gstPercentage,
+        enableShipping: sellersTable.enableShipping,
+        shippingRatePerKg: sellersTable.shippingRatePerKg,
+        shippingAmountPerKgStep: sellersTable.shippingAmountPerKgStep,
       })
       .from(sellersTable)
       .where(eq(sellersTable.subdomain, subdomain))
@@ -340,6 +344,10 @@ router.post("/public/orders", orderRateLimit, async (req, res) => {
         subscriptionPlan: sellersTable.subscriptionPlan,
         subscriptionStatus: sellersTable.subscriptionStatus,
         subscriptionEndDate: sellersTable.subscriptionEndDate,
+        gstPercentage: sellersTable.gstPercentage,
+        enableShipping: sellersTable.enableShipping,
+        shippingRatePerKg: sellersTable.shippingRatePerKg,
+        shippingAmountPerKgStep: sellersTable.shippingAmountPerKgStep,
       })
       .from(sellersTable)
       .where(eq(sellersTable.id, body.sellerId))
@@ -409,13 +417,29 @@ router.post("/public/orders", orderRateLimit, async (req, res) => {
       };
     });
 
+    const subtotal = validatedItems.reduce(
+      (sum, item) => sum + parseFloat(item.priceSnapshot) * item.quantity,
+      0
+    );
+
+    let gstAmount = 0;
+    const gstPct = seller?.gstPercentage ? parseFloat(String(seller.gstPercentage)) : 0;
+    if (gstPct > 0 && subtotal > 0) {
+      gstAmount = parseFloat(((subtotal * gstPct) / 100).toFixed(2));
+    }
+
+    let shippingFee = 0;
+    if (seller?.enableShipping && subtotal > 0) {
+      const ratePerKg = seller.shippingRatePerKg ? parseFloat(String(seller.shippingRatePerKg)) : 0;
+      const step = seller.shippingAmountPerKgStep ? parseFloat(String(seller.shippingAmountPerKgStep)) : 0;
+      if (ratePerKg > 0) {
+        const kg = step > 0 ? Math.max(1, Math.ceil(subtotal / step)) : 1;
+        shippingFee = parseFloat((kg * ratePerKg).toFixed(2));
+      }
+    }
+
     const orderId = generateOrderId();
-    const totalAmount = validatedItems
-      .reduce(
-        (sum, item) => sum + parseFloat(item.priceSnapshot) * item.quantity,
-        0
-      )
-      .toFixed(2);
+    const totalAmount = (subtotal + gstAmount + shippingFee).toFixed(2);
 
     const [order] = await db
       .insert(ordersTable)
@@ -485,6 +509,10 @@ router.get("/public/orders/:orderId", async (req, res) => {
         subdomain: sellersTable.subdomain,
         whatsappNumber: sellersTable.whatsappNumber,
         bannerImageUrl: sellersTable.bannerImageUrl,
+        gstPercentage: sellersTable.gstPercentage,
+        enableShipping: sellersTable.enableShipping,
+        shippingRatePerKg: sellersTable.shippingRatePerKg,
+        shippingAmountPerKgStep: sellersTable.shippingAmountPerKgStep,
       })
       .from(sellersTable)
       .where(eq(sellersTable.id, order.sellerId))
@@ -519,7 +547,26 @@ router.get("/public/orders/:orderId", async (req, res) => {
       }
     }
 
-    let payableTotalAmount = 0;
+    const gstPct = seller?.gstPercentage ? parseFloat(String(seller.gstPercentage)) : 0;
+    const enableShipping = Boolean(seller?.enableShipping);
+    const ratePerKg = seller?.shippingRatePerKg ? parseFloat(String(seller.shippingRatePerKg)) : 0;
+    const step = seller?.shippingAmountPerKgStep ? parseFloat(String(seller.shippingAmountPerKgStep)) : 0;
+
+    const computeShipping = (amt: number) => {
+      if (!enableShipping || ratePerKg <= 0 || amt <= 0) return { fee: 0, kg: 0 };
+      const kg = step > 0 ? Math.max(1, Math.ceil(amt / step)) : 1;
+      return { fee: parseFloat((kg * ratePerKg).toFixed(2)), kg };
+    };
+
+    const originalSubtotal = items.reduce((sum, item) => {
+      const p = parseFloat(item.priceSnapshot as unknown as string);
+      return sum + p * item.quantity;
+    }, 0);
+
+    const originalGst = gstPct > 0 && originalSubtotal > 0 ? parseFloat(((originalSubtotal * gstPct) / 100).toFixed(2)) : 0;
+    const { fee: originalShipping, kg: originalKg } = computeShipping(originalSubtotal);
+
+    let payableSubtotal = 0;
     let hasSoldOutItems = false;
 
     const enrichedItems = items.map((item) => {
@@ -546,7 +593,7 @@ router.get("/public/orders/:orderId", async (req, res) => {
         hasSoldOutItems = true;
       } else {
         const itemPrice = parseFloat(item.priceSnapshot as unknown as string);
-        payableTotalAmount += itemPrice * item.quantity;
+        payableSubtotal += itemPrice * item.quantity;
       }
 
       return {
@@ -561,11 +608,24 @@ router.get("/public/orders/:orderId", async (req, res) => {
       };
     });
 
+    const payableGst = gstPct > 0 && payableSubtotal > 0 ? parseFloat(((payableSubtotal * gstPct) / 100).toFixed(2)) : 0;
+    const { fee: payableShipping, kg: payableKg } = computeShipping(payableSubtotal);
+    const payableTotalAmount = payableSubtotal > 0 ? parseFloat((payableSubtotal + payableGst + payableShipping).toFixed(2)) : 0;
+
     res.json({
       id: order.id,
       status: order.status,
+      subtotalAmount: parseFloat(originalSubtotal.toFixed(2)),
+      gstPercentage: gstPct,
+      gstAmount: originalGst,
+      shippingAmount: originalShipping,
+      shippingKg: originalKg,
       totalAmount: parseFloat(order.totalAmount as unknown as string),
-      payableTotalAmount: parseFloat(payableTotalAmount.toFixed(2)),
+      payableSubtotalAmount: parseFloat(payableSubtotal.toFixed(2)),
+      payableGstAmount: payableGst,
+      payableShippingAmount: payableShipping,
+      payableShippingKg: payableKg,
+      payableTotalAmount,
       hasSoldOutItems,
       customerContact: order.customerContact,
       createdAt: order.createdAt,

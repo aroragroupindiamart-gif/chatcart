@@ -25,7 +25,7 @@ export default function ProductPage() {
     productId: string;
   }>();
   const [, navigate] = useLocation();
-  const { addToCart, totalItems, initForSeller } = useCart();
+  const { addToCart, totalItems, initForSeller, setSeller: setCartSeller } = useCart();
   const { toast } = useToast();
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -99,6 +99,7 @@ export default function ProductPage() {
     ])
       .then(([s, p]) => {
         setSeller(s);
+        setCartSeller(s);
         setProduct(p);
         const defaults: Record<string, string> = {};
         for (const v of p.variants) {
@@ -108,7 +109,7 @@ export default function ProductPage() {
       })
       .catch((err) => setError(err.message ?? "Failed to load product"))
       .finally(() => setLoading(false));
-  }, [subdomain, productId, initForSeller]);
+  }, [subdomain, productId, initForSeller, setCartSeller]);
 
   const handleAddToCart = () => {
     if (!product) return;

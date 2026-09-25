@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { ArrowLeft, Loader2, Tag, AlertTriangle, TrendingUp, Package } from "lucide-react";
 import { useCart, type CartItem } from "@/contexts/CartContext";
@@ -119,7 +119,25 @@ async function validateCart(
 
 export default function CheckoutPage({ seller, onBack }: CheckoutPageProps) {
   const [, navigate] = useLocation();
-  const { items, totalAmount, totalSavings, clearCart, getItemPricing } = useCart();
+  const {
+    items,
+    subtotalAmount,
+    gstPercentage,
+    gstAmount,
+    shippingFee,
+    shippingLabel,
+    totalAmount,
+    totalSavings,
+    clearCart,
+    getItemPricing,
+    setSeller: setCartSeller,
+  } = useCart();
+
+  useEffect(() => {
+    if (seller) {
+      setCartSeller(seller);
+    }
+  }, [seller, setCartSeller]);
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -170,10 +188,25 @@ export default function CheckoutPage({ seller, onBack }: CheckoutPageProps) {
     }
   };
 
-  const adjustedTotal = validation?.resolvedItems.reduce(
+  const adjustedSubtotal = validation?.resolvedItems.reduce(
     (sum, item) => sum + parseFloat(item.priceSnapshot) * (item.quantity ?? 1),
     0
   ) ?? 0;
+
+  const gstPct = seller.gstPercentage != null ? parseFloat(String(seller.gstPercentage)) : 0;
+  const adjustedGst = adjustedSubtotal > 0 && gstPct > 0 ? (adjustedSubtotal * gstPct) / 100 : 0;
+
+  const enableShipping = Boolean(seller.enableShipping);
+  const ratePerKg = seller.shippingRatePerKg != null ? parseFloat(String(seller.shippingRatePerKg)) : 0;
+  const stepAmount = seller.shippingAmountPerKgStep != null ? parseFloat(String(seller.shippingAmountPerKgStep)) : 0;
+
+  let adjustedShipping = 0;
+  let adjustedShippingKg = 0;
+  if (enableShipping && ratePerKg > 0 && adjustedSubtotal > 0) {
+    adjustedShippingKg = stepAmount > 0 ? Math.max(1, Math.ceil(adjustedSubtotal / stepAmount)) : 1;
+    adjustedShipping = adjustedShippingKg * ratePerKg;
+  }
+  const adjustedTotal = adjustedSubtotal + adjustedGst + adjustedShipping;
 
   const issueIcon = (reason: ValidationIssue["reason"]) => {
     if (reason === "price_changed") return <TrendingUp className="w-4 h-4 text-amber-500 shrink-0" />;
@@ -273,11 +306,29 @@ export default function CheckoutPage({ seller, onBack }: CheckoutPageProps) {
                 </span>
               </div>
             )}
-            <div className="flex justify-between items-center p-3 bg-muted/50">
-              <span className="font-semibold text-sm">Total</span>
-              <span className="font-bold text-primary">
-                {formatPrice(totalAmount)}
-              </span>
+            <div className="p-3 bg-muted/30 space-y-1.5 border-t border-border">
+              <div className="flex justify-between items-center text-sm text-muted-foreground">
+                <span>Items Subtotal</span>
+                <span className="font-medium text-foreground">{formatPrice(subtotalAmount)}</span>
+              </div>
+              {gstPercentage > 0 && (
+                <div className="flex justify-between items-center text-sm text-muted-foreground">
+                  <span>GST ({gstPercentage}%)</span>
+                  <span className="font-medium text-foreground">{formatPrice(gstAmount)}</span>
+                </div>
+              )}
+              {shippingFee > 0 && (
+                <div className="flex justify-between items-center text-sm text-muted-foreground">
+                  <span>Shipping {shippingLabel ? `(${shippingLabel})` : ""}</span>
+                  <span className="font-medium text-foreground">{formatPrice(shippingFee)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center pt-1 border-t border-border/60">
+                <span className="font-bold text-sm text-foreground">Total</span>
+                <span className="font-bold text-primary text-base">
+                  {formatPrice(totalAmount)}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -361,9 +412,28 @@ export default function CheckoutPage({ seller, onBack }: CheckoutPageProps) {
                   </p>
                 )}
                 {validation && validation.resolvedItems.length > 0 && adjustedTotal > 0 && (
-                  <p className="text-sm font-semibold text-foreground pt-1 border-t border-border">
-                    Updated total: {formatPrice(adjustedTotal)}
-                  </p>
+                  <div className="pt-2 border-t border-border space-y-1 text-xs">
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Items Subtotal:</span>
+                      <span className="font-medium text-foreground">{formatPrice(adjustedSubtotal)}</span>
+                    </div>
+                    {adjustedGst > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>GST ({gstPct}%):</span>
+                        <span className="font-medium text-foreground">{formatPrice(adjustedGst)}</span>
+                      </div>
+                    )}
+                    {adjustedShipping > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Shipping ({adjustedShippingKg} kg shipping):</span>
+                        <span className="font-medium text-foreground">{formatPrice(adjustedShipping)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-bold text-sm text-foreground pt-1 border-t border-border/60">
+                      <span>Updated total:</span>
+                      <span className="text-primary">{formatPrice(adjustedTotal)}</span>
+                    </div>
+                  </div>
                 )}
               </div>
             </AlertDialogDescription>

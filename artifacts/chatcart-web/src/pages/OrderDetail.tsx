@@ -208,10 +208,35 @@ function OrderDetailContent() {
                     </div>
                   </div>
                 ))}
-                <div className="pt-4 flex justify-between items-center text-lg font-bold text-slate-900">
-                  <span>Total</span>
-                  <span>₹{order.totalAmount}</span>
-                </div>
+                {(order as any).subtotalAmount != null && ((order as any).gstAmount > 0 || (order as any).shippingAmount > 0) ? (
+                  <div className="pt-4 border-t border-slate-100 space-y-2">
+                    <div className="flex justify-between items-center text-sm text-slate-500">
+                      <span>Items Subtotal</span>
+                      <span>₹{Number((order as any).subtotalAmount).toFixed(2)}</span>
+                    </div>
+                    {(order as any).gstAmount != null && (order as any).gstAmount > 0 && (
+                      <div className="flex justify-between items-center text-sm text-slate-500">
+                        <span>GST ({(order as any).gstPercentage}%)</span>
+                        <span>₹{Number((order as any).gstAmount).toFixed(2)}</span>
+                      </div>
+                    )}
+                    {(order as any).shippingAmount != null && (order as any).shippingAmount > 0 && (
+                      <div className="flex justify-between items-center text-sm text-slate-500">
+                        <span>Shipping ({(order as any).shippingKg ?? 1} kg shipping)</span>
+                        <span>₹{Number((order as any).shippingAmount).toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="pt-2 flex justify-between items-center text-lg font-bold text-slate-900 border-t border-slate-100">
+                      <span>Total</span>
+                      <span>₹{order.totalAmount}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="pt-4 flex justify-between items-center text-lg font-bold text-slate-900 border-t border-slate-100">
+                    <span>Total</span>
+                    <span>₹{order.totalAmount}</span>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

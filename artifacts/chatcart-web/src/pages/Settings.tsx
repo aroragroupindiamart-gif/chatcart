@@ -32,8 +32,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Plus, Edit2, Trash, X, Check, Upload, Loader2, Image as ImageIcon, Download, Lock, Crown, Zap, ArrowRight, Infinity } from "lucide-react";
+import { Save, Plus, Edit2, Trash, X, Check, Upload, Loader2, Image as ImageIcon, Download, Lock, Crown, Zap, ArrowRight, Infinity, Truck } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -95,6 +96,10 @@ function SettingsContent() {
   const [bannerImageUrl, setBannerImageUrl] = useState<string | null>(null);
   const [tagline, setTagline] = useState("");
   const [productImageLayout, setProductImageLayout] = useState<"square" | "portrait">("square");
+  const [gstPercentage, setGstPercentage] = useState("0");
+  const [enableShipping, setEnableShipping] = useState(false);
+  const [shippingRatePerKg, setShippingRatePerKg] = useState("0");
+  const [shippingAmountPerKgStep, setShippingAmountPerKgStep] = useState("0");
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
@@ -126,6 +131,10 @@ function SettingsContent() {
       setBannerImageUrl((seller as any).bannerImageUrl ?? null);
       setTagline((seller as any).tagline ?? "");
       setProductImageLayout((seller as any).productImageLayout ?? "square");
+      setGstPercentage((seller as any).gstPercentage != null ? String((seller as any).gstPercentage) : "0");
+      setEnableShipping(Boolean((seller as any).enableShipping));
+      setShippingRatePerKg((seller as any).shippingRatePerKg != null ? String((seller as any).shippingRatePerKg) : "0");
+      setShippingAmountPerKgStep((seller as any).shippingAmountPerKgStep != null ? String((seller as any).shippingAmountPerKgStep) : "0");
     }
   }, [seller]);
 
@@ -164,6 +173,39 @@ function SettingsContent() {
     } catch (err: any) {
       const apiError = err?.response?.data?.error || err.message || "Failed to save";
       toast({ title: "Error", description: apiError, variant: "destructive" });
+    }
+  };
+
+  const handleSaveTaxesAndShipping = async () => {
+    const gstNum = parseFloat(gstPercentage);
+    if (isNaN(gstNum) || gstNum < 0 || gstNum > 100) {
+      toast({ title: "Invalid GST percentage", description: "Enter a percentage between 0 and 100.", variant: "destructive" });
+      return;
+    }
+    const rateNum = parseFloat(shippingRatePerKg);
+    if (isNaN(rateNum) || rateNum < 0) {
+      toast({ title: "Invalid shipping rate", description: "Enter a valid shipping rate.", variant: "destructive" });
+      return;
+    }
+    const stepNum = parseFloat(shippingAmountPerKgStep);
+    if (isNaN(stepNum) || stepNum < 0) {
+      toast({ title: "Invalid order amount step", description: "Enter a valid order amount step.", variant: "destructive" });
+      return;
+    }
+
+    try {
+      await updateSeller.mutateAsync({
+        data: {
+          gstPercentage: gstNum,
+          enableShipping,
+          shippingRatePerKg: rateNum,
+          shippingAmountPerKgStep: stepNum,
+        } as any,
+      });
+      toast({ title: "Taxes & shipping updated" });
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err.message || "Failed to save";
+      toast({ title: "Error", description: msg, variant: "destructive" });
     }
   };
 
@@ -520,6 +562,135 @@ function SettingsContent() {
           <Button onClick={handleSaveStore} disabled={updateSeller.isPending}>
             <Save className="w-4 h-4 mr-2" />
             Save Changes
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* ── Taxes & Shipping ── */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Truck className="w-5 h-5 text-primary" />
+            Taxes &amp; Shipping
+          </CardTitle>
+          <CardDescription>
+            Configure optional GST and weight-tiered shipping charges for your customer cart.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* GST Section */}
+          <div className="space-y-3 pb-6 border-b border-slate-100">
+            <div>
+              <Label className="text-base font-semibold">GST Slab (%)</Label>
+              <p className="text-xs text-slate-500">
+                Applied dynamically to in-stock items. Leave at 0 if you do not charge GST.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 max-w-xs">
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={gstPercentage}
+                onChange={(e) => setGstPercentage(e.target.value)}
+                placeholder="e.g. 3"
+              />
+              <span className="text-sm font-semibold text-slate-500">%</span>
+            </div>
+            {parseFloat(gstPercentage) > 0 && (
+              <p className="text-xs text-emerald-700 bg-emerald-50 rounded-md p-2">
+                ✓ Active: {gstPercentage}% GST will be calculated on customer carts.
+              </p>
+            )}
+          </div>
+
+          {/* Shipping Section */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label className="text-base font-semibold">Weight-Tiered Shipping</Label>
+                <p className="text-xs text-slate-500">
+                  Charge shipping based on weight brackets calculated from the order value.
+                </p>
+              </div>
+              <Switch
+                checked={enableShipping}
+                onCheckedChange={setEnableShipping}
+              />
+            </div>
+
+            {enableShipping && (
+              <div className="space-y-4 pt-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">Shipping Rate per 1 kg (₹)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={shippingRatePerKg}
+                      onChange={(e) => setShippingRatePerKg(e.target.value)}
+                      placeholder="e.g. 130"
+                    />
+                    <p className="text-[11px] text-slate-400">
+                      Charge per kg (e.g. ₹130 per kg)
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-sm">Order Amount per 1 kg Step (₹)</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={shippingAmountPerKgStep}
+                      onChange={(e) => setShippingAmountPerKgStep(e.target.value)}
+                      placeholder="e.g. 4000"
+                    />
+                    <p className="text-[11px] text-slate-400">
+                      1 kg added for every step (e.g. every ₹4,000 adds 1 kg)
+                    </p>
+                  </div>
+                </div>
+
+                {parseFloat(shippingRatePerKg) > 0 && (
+                  <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs space-y-1.5">
+                    <p className="font-semibold text-slate-700">Customer Awareness Preview:</p>
+                    {parseFloat(shippingAmountPerKgStep) > 0 ? (
+                      <ul className="space-y-1 text-slate-600">
+                        <li>
+                          • Orders up to ₹{parseFloat(shippingAmountPerKgStep).toLocaleString("en-IN")}:{" "}
+                          <span className="font-semibold text-slate-900">
+                            1 kg shipping (₹{parseFloat(shippingRatePerKg).toLocaleString("en-IN")})
+                          </span>
+                        </li>
+                        <li>
+                          • Orders ₹{(parseFloat(shippingAmountPerKgStep) + 1).toLocaleString("en-IN")} – ₹{(parseFloat(shippingAmountPerKgStep) * 2).toLocaleString("en-IN")}:{" "}
+                          <span className="font-semibold text-slate-900">
+                            2 kg shipping (₹{(parseFloat(shippingRatePerKg) * 2).toLocaleString("en-IN")})
+                          </span>
+                        </li>
+                        <li>
+                          • Orders ₹{(parseFloat(shippingAmountPerKgStep) * 2 + 1).toLocaleString("en-IN")} – ₹{(parseFloat(shippingAmountPerKgStep) * 3).toLocaleString("en-IN")}:{" "}
+                          <span className="font-semibold text-slate-900">
+                            3 kg shipping (₹{(parseFloat(shippingRatePerKg) * 3).toLocaleString("en-IN")})
+                          </span>
+                        </li>
+                      </ul>
+                    ) : (
+                      <p className="text-slate-600">
+                        Flat rate of <span className="font-semibold">₹{shippingRatePerKg}</span> (1 kg) will be charged on all orders.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <Button onClick={handleSaveTaxesAndShipping} disabled={updateSeller.isPending}>
+            <Save className="w-4 h-4 mr-2" />
+            Save Taxes &amp; Shipping
           </Button>
         </CardContent>
       </Card>

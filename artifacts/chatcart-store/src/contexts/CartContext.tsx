@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef, ReactNode } from "react";
-import type { Product, Category } from "@/lib/api";
+import type { Product, Category, Seller } from "@/lib/api";
 
 export interface CartItem {
   product: Product;
@@ -42,11 +42,19 @@ function loadCartFromStorage(slug: string): CartItem[] {
 interface CartContextValue {
   items: CartItem[];
   totalItems: number;
+  subtotalAmount: number;
+  gstAmount: number;
+  gstPercentage: number;
+  shippingFee: number;
+  shippingKg: number;
+  shippingLabel: string;
   totalAmount: number;
   totalSavings: number;
+  seller: Seller | null;
+  setSeller: (seller: Seller | null) => void;
   getItemPricing: (key: string) => CartItemPricing;
   setCategories: (cats: Category[]) => void;
-  initForSeller: (slug: string) => void;
+  initForSeller: (slug: string, seller?: Seller | null) => void;
   addToCart: (product: Product, variants: Record<string, string>, qty?: number) => void;
   removeFromCart: (key: string) => void;
   updateQuantity: (key: string, qty: number) => void;
@@ -59,9 +67,13 @@ const CartContext = createContext<CartContextValue | null>(null);
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [seller, setSeller] = useState<Seller | null>(null);
   const currentSlugRef = useRef<string | null>(null);
 
-  const initForSeller = useCallback((slug: string) => {
+  const initForSeller = useCallback((slug: string, currentSeller?: Seller | null) => {
+    if (currentSeller !== undefined && currentSeller !== null) {
+      setSeller(currentSeller);
+    }
     if (currentSlugRef.current === slug) return;
     if (currentSlugRef.current !== null) {
       setItems((prev) => {
@@ -171,10 +183,44 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
 
-  const totalAmount = useMemo(
+  const subtotalAmount = useMemo(
     () => Array.from(pricingMap.values()).reduce((sum, p) => sum + p.lineTotal, 0),
     [pricingMap]
   );
+
+  const gstPercentage = useMemo(() => {
+    if (!seller?.gstPercentage) return 0;
+    const parsed = parseFloat(String(seller.gstPercentage));
+    return isNaN(parsed) || parsed < 0 ? 0 : parsed;
+  }, [seller?.gstPercentage]);
+
+  const gstAmount = useMemo(() => {
+    if (gstPercentage <= 0 || subtotalAmount <= 0) return 0;
+    return Number(((subtotalAmount * gstPercentage) / 100).toFixed(2));
+  }, [subtotalAmount, gstPercentage]);
+
+  const { shippingFee, shippingKg, shippingLabel } = useMemo(() => {
+    if (!seller?.enableShipping || subtotalAmount <= 0) {
+      return { shippingFee: 0, shippingKg: 0, shippingLabel: "" };
+    }
+    const ratePerKg = seller.shippingRatePerKg ? parseFloat(String(seller.shippingRatePerKg)) : 0;
+    if (ratePerKg <= 0) {
+      return { shippingFee: 0, shippingKg: 0, shippingLabel: "" };
+    }
+    const step = seller.shippingAmountPerKgStep ? parseFloat(String(seller.shippingAmountPerKgStep)) : 0;
+    const kg = step > 0 ? Math.max(1, Math.ceil(subtotalAmount / step)) : 1;
+    const fee = Math.round(kg * ratePerKg * 100) / 100;
+    return {
+      shippingFee: fee,
+      shippingKg: kg,
+      shippingLabel: `${kg} kg shipping`,
+    };
+  }, [seller, subtotalAmount]);
+
+  const totalAmount = useMemo(() => {
+    if (subtotalAmount <= 0) return 0;
+    return Number((subtotalAmount + gstAmount + shippingFee).toFixed(2));
+  }, [subtotalAmount, gstAmount, shippingFee]);
 
   const totalSavings = useMemo(
     () => Array.from(pricingMap.values()).reduce((sum, p) => sum + p.savings, 0),
@@ -199,8 +245,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
       value={{
         items,
         totalItems,
+        subtotalAmount,
+        gstAmount,
+        gstPercentage,
+        shippingFee,
+        shippingKg,
+        shippingLabel,
         totalAmount,
         totalSavings,
+        seller,
+        setSeller,
         getItemPricing,
         setCategories: handleSetCategories,
         initForSeller,

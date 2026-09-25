@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, boolean, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, boolean, numeric, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -23,6 +23,10 @@ export const sellersTable = pgTable("sellers", {
   isSuspended: boolean("is_suspended").default(false).notNull(),
   suspensionReason: text("suspension_reason"),
   suspendedAt: timestamp("suspended_at"),
+  gstPercentage: numeric("gst_percentage", { precision: 5, scale: 2 }).default("0"),
+  enableShipping: boolean("enable_shipping").default(false).notNull(),
+  shippingRatePerKg: numeric("shipping_rate_per_kg", { precision: 10, scale: 2 }).default("0"),
+  shippingAmountPerKgStep: numeric("shipping_amount_per_kg_step", { precision: 10, scale: 2 }).default("0"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

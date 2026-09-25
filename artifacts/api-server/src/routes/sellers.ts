@@ -24,13 +24,28 @@ function validateSlug(slug: string): string | null {
 
 router.patch("/sellers/me", requireAuth, requireActiveSubscription, async (req, res) => {
   try {
-    const { storeName, whatsappNumber, bannerImageUrl, tagline, subdomain, productImageLayout } = req.body as {
+    const {
+      storeName,
+      whatsappNumber,
+      bannerImageUrl,
+      tagline,
+      subdomain,
+      productImageLayout,
+      gstPercentage,
+      enableShipping,
+      shippingRatePerKg,
+      shippingAmountPerKgStep,
+    } = req.body as {
       storeName?: string;
       whatsappNumber?: string;
       bannerImageUrl?: string | null;
       tagline?: string | null;
       subdomain?: string;
       productImageLayout?: "square" | "portrait";
+      gstPercentage?: number | string | null;
+      enableShipping?: boolean;
+      shippingRatePerKg?: number | string | null;
+      shippingAmountPerKgStep?: number | string | null;
     };
 
     const hasBrandingUpdate = bannerImageUrl !== undefined || tagline !== undefined;
@@ -53,6 +68,19 @@ router.patch("/sellers/me", requireAuth, requireActiveSubscription, async (req, 
     if (bannerImageUrl !== undefined) updates.bannerImageUrl = bannerImageUrl;
     if (tagline !== undefined) updates.tagline = tagline;
     if (productImageLayout !== undefined) updates.productImageLayout = productImageLayout;
+    if (gstPercentage !== undefined) {
+      const parsedGst = parseFloat(String(gstPercentage));
+      updates.gstPercentage = isNaN(parsedGst) || parsedGst < 0 ? "0" : parsedGst.toFixed(2);
+    }
+    if (enableShipping !== undefined) updates.enableShipping = Boolean(enableShipping);
+    if (shippingRatePerKg !== undefined) {
+      const parsedRate = parseFloat(String(shippingRatePerKg));
+      updates.shippingRatePerKg = isNaN(parsedRate) || parsedRate < 0 ? "0" : parsedRate.toFixed(2);
+    }
+    if (shippingAmountPerKgStep !== undefined) {
+      const parsedStep = parseFloat(String(shippingAmountPerKgStep));
+      updates.shippingAmountPerKgStep = isNaN(parsedStep) || parsedStep < 0 ? "0" : parsedStep.toFixed(2);
+    }
 
     if (subdomain !== undefined) {
       const err = validateSlug(subdomain);

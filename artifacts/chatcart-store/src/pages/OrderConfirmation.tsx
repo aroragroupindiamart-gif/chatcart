@@ -82,6 +82,23 @@ function buildWhatsAppText(order: Order, orderUrl: string): string {
   }
 
   lines.push(``);
+  const subtotal = order.hasSoldOutItems ? (order.payableSubtotalAmount ?? order.subtotalAmount) : order.subtotalAmount;
+  const gst = order.hasSoldOutItems ? (order.payableGstAmount ?? order.gstAmount) : order.gstAmount;
+  const shipping = order.hasSoldOutItems ? (order.payableShippingAmount ?? order.shippingAmount) : order.shippingAmount;
+  const shippingKg = order.hasSoldOutItems ? (order.payableShippingKg ?? order.shippingKg) : order.shippingKg;
+
+  if (subtotal != null && ((gst != null && gst > 0) || (shipping != null && shipping > 0))) {
+    lines.push(`*Items Subtotal:* ${formatPrice(subtotal)}`);
+    if (gst != null && gst > 0) {
+      const pct = order.gstPercentage ?? 0;
+      lines.push(`*GST (${pct}%):* ${formatPrice(gst)}`);
+    }
+    if (shipping != null && shipping > 0) {
+      const kgText = shippingKg != null && shippingKg > 0 ? ` (${shippingKg} kg shipping)` : "";
+      lines.push(`*Shipping:* ${formatPrice(shipping)}${kgText}`);
+    }
+  }
+
   lines.push(`*Payable Balance: ${formatPrice(payableTotal)}*`);
 
   if (order.customerContact) {
@@ -321,11 +338,29 @@ export default function OrderConfirmation() {
             ))}
 
             {order.hasSoldOutItems ? (
-              <div className="px-4 py-3 bg-muted/30 space-y-1.5">
+              <div className="px-4 py-3 bg-muted/30 space-y-1.5 text-sm">
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>Original Total ({totalItemsCount} {totalItemsCount === 1 ? "item" : "items"})</span>
                   <span className="line-through">{formatPrice(order.totalAmount)}</span>
                 </div>
+                {order.payableSubtotalAmount != null && (
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>In-Stock Subtotal</span>
+                    <span>{formatPrice(order.payableSubtotalAmount)}</span>
+                  </div>
+                )}
+                {order.payableGstAmount != null && order.payableGstAmount > 0 && (
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>GST ({order.gstPercentage}%)</span>
+                    <span>{formatPrice(order.payableGstAmount)}</span>
+                  </div>
+                )}
+                {order.payableShippingAmount != null && order.payableShippingAmount > 0 && (
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Shipping ({order.payableShippingKg ?? 1} kg shipping)</span>
+                    <span>{formatPrice(order.payableShippingAmount)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center text-sm pt-1 border-t border-border/60">
                   <span className="font-bold text-foreground">
                     Payable Balance ({inStockItemsCount} in-stock {inStockItemsCount === 1 ? "item" : "items"})
@@ -336,13 +371,35 @@ export default function OrderConfirmation() {
                 </div>
               </div>
             ) : (
-              <div className="px-4 py-3 flex justify-between bg-muted/30">
-                <span className="font-semibold">
-                  Total ({totalItemsCount} {totalItemsCount === 1 ? "item" : "items"})
-                </span>
-                <span className="font-bold text-primary">
-                  {formatPrice(order.totalAmount)}
-                </span>
+              <div className="px-4 py-3 bg-muted/30 space-y-1.5 text-sm">
+                {order.subtotalAmount != null && ((order.gstAmount != null && order.gstAmount > 0) || (order.shippingAmount != null && order.shippingAmount > 0)) ? (
+                  <>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Items Subtotal</span>
+                      <span>{formatPrice(order.subtotalAmount)}</span>
+                    </div>
+                    {order.gstAmount != null && order.gstAmount > 0 && (
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>GST ({order.gstPercentage}%)</span>
+                        <span>{formatPrice(order.gstAmount)}</span>
+                      </div>
+                    )}
+                    {order.shippingAmount != null && order.shippingAmount > 0 && (
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Shipping ({order.shippingKg ?? 1} kg shipping)</span>
+                        <span>{formatPrice(order.shippingAmount)}</span>
+                      </div>
+                    )}
+                  </>
+                ) : null}
+                <div className="flex justify-between items-center pt-1 border-t border-border/60">
+                  <span className="font-semibold">
+                    Total ({totalItemsCount} {totalItemsCount === 1 ? "item" : "items"})
+                  </span>
+                  <span className="font-bold text-primary text-base">
+                    {formatPrice(order.totalAmount)}
+                  </span>
+                </div>
               </div>
             )}
           </div>

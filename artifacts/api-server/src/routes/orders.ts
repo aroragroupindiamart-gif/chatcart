@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { ordersTable, orderItemsTable } from "@workspace/db/schema";
+import { ordersTable, orderItemsTable, sellersTable } from "@workspace/db/schema";
 import { eq, and, desc, count, inArray, gte } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
 import { getSellerPlan, getPlanLimits, requireActiveSubscription } from "../lib/planLimits.js";
@@ -105,15 +105,52 @@ router.get("/orders/:orderId", requireAuth, requireActiveSubscription, async (re
       res.status(404).json({ error: "Order not found" });
       return;
     }
-    const items = await db
-      .select()
-      .from(orderItemsTable)
-      .where(eq(orderItemsTable.orderId, order.id));
+    const [items, [seller]] = await Promise.all([
+      db
+        .select()
+        .from(orderItemsTable)
+        .where(eq(orderItemsTable.orderId, order.id)),
+      db
+        .select({
+          gstPercentage: sellersTable.gstPercentage,
+          enableShipping: sellersTable.enableShipping,
+          shippingRatePerKg: sellersTable.shippingRatePerKg,
+          shippingAmountPerKgStep: sellersTable.shippingAmountPerKgStep,
+        })
+        .from(sellersTable)
+        .where(eq(sellersTable.id, req.seller!.sellerId))
+        .limit(1),
+    ]);
+
+    const subtotal = items.reduce(
+      (sum, item) => sum + parseFloat(item.priceSnapshot as unknown as string) * (item.quantity ?? 1),
+      0
+    );
+
+    const gstPct = seller?.gstPercentage != null ? parseFloat(seller.gstPercentage) : 0;
+    const gstAmount = gstPct > 0 ? (subtotal * gstPct) / 100 : 0;
+
+    const enableShipping = Boolean(seller?.enableShipping);
+    const ratePerKg = seller?.shippingRatePerKg != null ? parseFloat(seller.shippingRatePerKg) : 0;
+    const stepAmount = seller?.shippingAmountPerKgStep != null ? parseFloat(seller.shippingAmountPerKgStep) : 0;
+
+    let shippingAmount = 0;
+    let shippingKg = 0;
+    if (enableShipping && ratePerKg > 0 && subtotal > 0) {
+      shippingKg = stepAmount > 0 ? Math.max(1, Math.ceil(subtotal / stepAmount)) : 1;
+      shippingAmount = shippingKg * ratePerKg;
+    }
+
     res.json({
       id: order.id,
       customerContact: order.customerContact,
       status: order.status,
       totalAmount: parseFloat(order.totalAmount as unknown as string),
+      subtotalAmount: parseFloat(subtotal.toFixed(2)),
+      gstPercentage: gstPct,
+      gstAmount: parseFloat(gstAmount.toFixed(2)),
+      shippingAmount: parseFloat(shippingAmount.toFixed(2)),
+      shippingKg,
       itemCount: items.length,
       createdAt: order.createdAt,
       items: items.map((item) => ({

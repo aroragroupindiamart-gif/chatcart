@@ -290,6 +290,10 @@ router.get("/auth/me", requireAuth, async (req, res) => {
         subscriptionStatus: sellersTable.subscriptionStatus,
         subscriptionStartDate: sellersTable.subscriptionStartDate,
         subscriptionEndDate: sellersTable.subscriptionEndDate,
+        gstPercentage: sellersTable.gstPercentage,
+        enableShipping: sellersTable.enableShipping,
+        shippingRatePerKg: sellersTable.shippingRatePerKg,
+        shippingAmountPerKgStep: sellersTable.shippingAmountPerKgStep,
         createdAt: sellersTable.createdAt,
         updatedAt: sellersTable.updatedAt,
       })

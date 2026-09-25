@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, Plus, Minus, ShoppingCart, Tag } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
 import { formatPrice, imgSrc, type Seller } from "@/lib/api";
@@ -18,9 +18,28 @@ interface CartSheetProps {
 }
 
 export default function CartSheet({ open, onClose, seller }: CartSheetProps) {
-  const { items, totalItems, totalAmount, totalSavings, removeFromCart, updateQuantity, getItemPricing } =
-    useCart();
+  const {
+    items,
+    totalItems,
+    subtotalAmount,
+    gstPercentage,
+    gstAmount,
+    shippingFee,
+    shippingLabel,
+    totalAmount,
+    totalSavings,
+    removeFromCart,
+    updateQuantity,
+    getItemPricing,
+    setSeller: setCartSeller,
+  } = useCart();
   const [checkout, setCheckout] = useState(false);
+
+  useEffect(() => {
+    if (seller) {
+      setCartSeller(seller);
+    }
+  }, [seller, setCartSeller]);
 
   const handleClose = () => {
     setCheckout(false);
@@ -157,11 +176,37 @@ export default function CartSheet({ open, onClose, seller }: CartSheetProps) {
                     <span className="font-semibold">−{formatPrice(totalSavings)}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Subtotal</span>
-                  <span className="font-bold text-primary">
-                    {formatPrice(totalAmount)}
-                  </span>
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Items Subtotal</span>
+                    <span className="font-medium text-foreground">
+                      {formatPrice(subtotalAmount)}
+                    </span>
+                  </div>
+                  {gstPercentage > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">GST ({gstPercentage}%)</span>
+                      <span className="font-medium text-foreground">
+                        {formatPrice(gstAmount)}
+                      </span>
+                    </div>
+                  )}
+                  {shippingFee > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        Shipping {shippingLabel ? `(${shippingLabel})` : ""}
+                      </span>
+                      <span className="font-medium text-foreground">
+                        {formatPrice(shippingFee)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-base font-bold pt-1 border-t border-border/60">
+                    <span>Total</span>
+                    <span className="text-primary">
+                      {formatPrice(totalAmount)}
+                    </span>
+                  </div>
                 </div>
                 <Button
                   className="w-full"
