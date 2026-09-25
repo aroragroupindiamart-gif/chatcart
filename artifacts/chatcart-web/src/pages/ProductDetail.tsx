@@ -426,7 +426,15 @@ function ProductDetailContent() {
   ]);
 
   const navigateBack = () => {
-    const returnUrl = new URLSearchParams(window.location.search).get("returnUrl") || "/products";
+    let returnUrl = new URLSearchParams(window.location.search).get("returnUrl") || "/products";
+    if (returnUrl.startsWith("/app/")) {
+      returnUrl = returnUrl.slice(4);
+    } else if (returnUrl === "/app") {
+      returnUrl = "/products";
+    }
+    if (!returnUrl.startsWith("/")) {
+      returnUrl = `/${returnUrl}`;
+    }
     setLocation(returnUrl);
   };
 
@@ -698,7 +706,16 @@ function ProductDetailContent() {
           toast({ title: "Product created successfully" });
         }
 
-        setLocation(`/products/${newId}?returnUrl=${encodeURIComponent(new URLSearchParams(window.location.search).get("returnUrl") || "/products")}`);
+        let returnUrl = new URLSearchParams(window.location.search).get("returnUrl") || "/products";
+        if (returnUrl.startsWith("/app/")) {
+          returnUrl = returnUrl.slice(4);
+        } else if (returnUrl === "/app") {
+          returnUrl = "/products";
+        }
+        if (!returnUrl.startsWith("/")) {
+          returnUrl = `/${returnUrl}`;
+        }
+        setLocation(`/products/${newId}?returnUrl=${encodeURIComponent(returnUrl)}`);
       } else {
         // 1. Permanently delete images that were staged for deletion
         if (deletedImageIds.length > 0) {

@@ -647,7 +647,7 @@ function ProductsContent() {
             )}
           </button>
           <Link
-            href={`/products/${product.id}?returnUrl=${encodeURIComponent(window.location.pathname + window.location.search)}`}
+            href={`/products/${product.id}?returnUrl=${encodeURIComponent(`/products${window.location.search}`)}`}
             className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-xs lg:text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background shadow-xs hover:bg-accent hover:text-accent-foreground h-7 lg:h-8 px-2.5 lg:px-3"
           >
             Edit
@@ -687,7 +687,7 @@ function ProductsContent() {
             Import from WhatsApp
           </Button>
           <Link
-            href="/products/new"
+            href={`/products/new?returnUrl=${encodeURIComponent(`/products${window.location.search}`)}`}
             className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-xs sm:text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground shadow hover:bg-primary/90 h-9 px-4 py-2 font-semibold"
           >
             <Plus className="w-4 h-4 mr-2 shrink-0" />
@@ -773,7 +773,7 @@ function ProductsContent() {
               Start building your catalogue by adding your first product.
             </p>
             <Link
-              href="/products/new"
+              href={`/products/new?returnUrl=${encodeURIComponent(`/products${window.location.search}`)}`}
               className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground shadow hover:bg-primary/90 h-9 px-4 py-2"
             >
               <Plus className="w-4 h-4 mr-2" />
