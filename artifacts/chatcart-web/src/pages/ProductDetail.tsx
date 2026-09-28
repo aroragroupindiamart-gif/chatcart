@@ -90,10 +90,12 @@ function normalizeWhatsAppNumber(raw: string): string {
 }
 
 export default function ProductDetail() {
+  const params = useParams();
+  const routeKey = params.id ?? "new";
   return (
     <ProtectedRoute>
       <Layout>
-        <ProductDetailContent />
+        <ProductDetailContent key={routeKey} />
       </Layout>
     </ProtectedRoute>
   );
@@ -393,12 +395,13 @@ function ProductDetailContent() {
   }, [product?.images, isDragging, deletedImageIds]);
 
   const hasUnsavedChanges = useMemo(() => {
+    const hasUnsavedPhotos = pendingFiles.some((f) => f.status !== "done");
     if (isNew) {
-      return Boolean(name.trim() || price || description.trim() || pendingFiles.length > 0);
+      return Boolean(name.trim() || price || description.trim() || hasUnsavedPhotos);
     }
     if (!product) return false;
     if (deletedImageIds.length > 0) return true;
-    if (pendingFiles.length > 0) return true;
+    if (hasUnsavedPhotos) return true;
     if (name !== product.name) return true;
     if (sku !== (product.sku || "")) return true;
     if (description !== (product.description || "")) return true;
@@ -688,6 +691,9 @@ function ProductDetailContent() {
           const results = await uploadFilesToProduct(snapshot, newId, 0);
           setIsUploadingAfterCreate(false);
 
+          snapshot.forEach((f) => URL.revokeObjectURL(f.preview));
+          setPendingFiles([]);
+
           const failed = results.filter((r) => r.status === "error");
           if (failed.length > 0) {
             sessionStorage.setItem(
@@ -889,8 +895,8 @@ function ProductDetailContent() {
   }
 
   const isSaving = createProduct.isPending || updateProduct.isPending;
-  const hasPendingFiles = pendingFiles.length > 0;
-  const hasExistingOrUploading = orderedImages.length > 0 || uploadingFiles.length > 0 || pendingFiles.length > 0;
+  const hasPendingFiles = pendingFiles.some((f) => f.status !== "done");
+  const hasExistingOrUploading = orderedImages.length > 0 || uploadingFiles.length > 0 || hasPendingFiles;
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -1147,7 +1153,9 @@ function ProductDetailContent() {
                 ))}
 
                 {/* Newly added photos staged before save */}
-                {pendingFiles.map((f) => (
+                {pendingFiles
+                  .filter((f) => f.status !== "done")
+                  .map((f) => (
                   <div
                     key={f.id}
                     className="relative group aspect-square rounded-lg overflow-hidden border-2 border-dashed border-indigo-300 bg-indigo-50/40"
