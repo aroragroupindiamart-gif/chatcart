@@ -24,7 +24,7 @@ const ALLOWED_IMAGE_MIMES = new Set([
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB hard limit
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB hard limit
   fileFilter: (_req, file, cb) => {
     const mime = (file.mimetype || "").toLowerCase();
     if (ALLOWED_IMAGE_MIMES.has(mime)) {
@@ -45,7 +45,7 @@ function handleImageUpload(fieldName: string) {
           return;
         }
         if (err.code === "LIMIT_FILE_SIZE") {
-          res.status(400).json({ error: "File size exceeds 10 MB limit." });
+          res.status(400).json({ error: "File size exceeds 25 MB limit." });
           return;
         }
         res.status(400).json({ error: err.message || "Failed to parse upload" });
@@ -103,7 +103,26 @@ router.post(
         return;
       }
 
-      const objectPath = await objectStorageService.uploadFileBuffer(file.buffer, file.mimetype);
+      let uploadBuffer = file.buffer;
+      let uploadMime = file.mimetype;
+
+      try {
+        if (file.mimetype.startsWith("image/")) {
+          const image = sharp(file.buffer).rotate();
+          const metadata = await image.metadata();
+          if ((metadata.width && metadata.width > 2048) || (metadata.height && metadata.height > 2048) || file.size > 2 * 1024 * 1024) {
+            uploadBuffer = await image
+              .resize({ width: 2048, height: 2048, fit: "inside", withoutEnlargement: true })
+              .jpeg({ quality: 88, progressive: true })
+              .toBuffer();
+            uploadMime = "image/jpeg";
+          }
+        }
+      } catch (sharpErr) {
+        req.log.warn({ err: sharpErr }, "Sharp optimization fallback to raw buffer");
+      }
+
+      const objectPath = await objectStorageService.uploadFileBuffer(uploadBuffer, uploadMime);
 
       const [newImage] = await db
         .insert(productImagesTable)
@@ -137,7 +156,26 @@ router.post(
     }
 
     try {
-      const objectPath = await objectStorageService.uploadFileBuffer(file.buffer, file.mimetype);
+      let uploadBuffer = file.buffer;
+      let uploadMime = file.mimetype;
+
+      try {
+        if (file.mimetype.startsWith("image/")) {
+          const image = sharp(file.buffer).rotate();
+          const metadata = await image.metadata();
+          if ((metadata.width && metadata.width > 2048) || (metadata.height && metadata.height > 2048) || file.size > 2 * 1024 * 1024) {
+            uploadBuffer = await image
+              .resize({ width: 2048, height: 2048, fit: "inside", withoutEnlargement: true })
+              .jpeg({ quality: 88, progressive: true })
+              .toBuffer();
+            uploadMime = "image/jpeg";
+          }
+        }
+      } catch (sharpErr) {
+        req.log.warn({ err: sharpErr }, "Sharp logo optimization fallback to raw buffer");
+      }
+
+      const objectPath = await objectStorageService.uploadFileBuffer(uploadBuffer, uploadMime);
       res.json({ objectPath });
     } catch (error) {
       req.log.error({ err: error }, "Error uploading logo");

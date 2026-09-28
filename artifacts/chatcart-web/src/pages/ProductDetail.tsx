@@ -68,8 +68,10 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
+import { optimizeImageForUpload } from "@/lib/imageOptimizer";
+
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const MAX_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_RAW_INPUT_BYTES = 25 * 1024 * 1024; // Allow selecting up to 25MB phone camera photos
 
 /** Key used to pass failed-upload metadata from the create flow to the edit page via sessionStorage. */
 const retryStorageKey = (productId: number) => `chatcart_pendingRetry_${productId}`;
@@ -831,8 +833,8 @@ function ProductDetailContent() {
         toast({ title: `${file.name}: unsupported type`, description: "Only JPG, PNG, WebP allowed.", variant: "destructive" });
         continue;
       }
-      if (file.size > MAX_SIZE_BYTES) {
-        toast({ title: `${file.name}: too large`, description: "Max 5 MB per image.", variant: "destructive" });
+      if (file.size > MAX_RAW_INPUT_BYTES) {
+        toast({ title: `${file.name}: too large`, description: "Max 25 MB per image.", variant: "destructive" });
         continue;
       }
       valid.push(file);
@@ -840,11 +842,22 @@ function ProductDetailContent() {
     return valid;
   };
 
-  const handleFilesSelected = (files: FileList | null) => {
+  const handleFilesSelected = async (files: FileList | null) => {
     const valid = validateFiles(files);
     if (valid.length === 0) return;
 
-    const entries: PendingFile[] = valid.map((f) => ({
+    // Automatically optimize high-resolution camera images without compromising visual quality
+    const optimizedFiles = await Promise.all(
+      valid.map(async (file) => {
+        try {
+          return await optimizeImageForUpload(file);
+        } catch {
+          return file;
+        }
+      })
+    );
+
+    const entries: PendingFile[] = optimizedFiles.map((f) => ({
       id: Math.random().toString(36).slice(2),
       file: f,
       preview: URL.createObjectURL(f),
@@ -1007,7 +1020,7 @@ function ProductDetailContent() {
             <p className="text-sm text-slate-500">
               {!isNew && orderedImages.length > 1
                 ? "Drag to reorder · first photo is the storefront thumbnail"
-                : "JPG, PNG, WebP · max 5 MB each"}
+                : "JPG, PNG, WebP · Auto-optimized for high quality"}
             </p>
           </div>
           {(!isNew || hasPendingFiles) && (

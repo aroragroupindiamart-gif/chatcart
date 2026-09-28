@@ -37,8 +37,10 @@ import { useToast } from "@/hooks/use-toast";
 import { Save, Plus, Edit2, Trash, X, Check, Upload, Loader2, Image as ImageIcon, Download, Lock, Crown, Zap, ArrowRight, Infinity, Truck } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { optimizeImageForUpload } from "@/lib/imageOptimizer";
+
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
-const MAX_SIZE_BYTES = 5 * 1024 * 1024;
+const MAX_RAW_INPUT_BYTES = 25 * 1024 * 1024;
 
 function imgSrc(url: string): string {
   if (url.startsWith("/objects/")) {
@@ -221,14 +223,15 @@ function SettingsContent() {
       toast({ title: "Unsupported file type", description: "Only JPG, PNG, WebP allowed.", variant: "destructive" });
       return;
     }
-    if (file.size > MAX_SIZE_BYTES) {
-      toast({ title: "File too large", description: "Max 5 MB.", variant: "destructive" });
+    if (file.size > MAX_RAW_INPUT_BYTES) {
+      toast({ title: "File too large", description: "Max 25 MB.", variant: "destructive" });
       return;
     }
 
     setUploadingLogo(true);
     try {
-      const { objectPath } = await uploadLogoToApi(file);
+      const optimized = await optimizeImageForUpload(file);
+      const { objectPath } = await uploadLogoToApi(optimized);
       setBannerImageUrl(objectPath);
       toast({ title: "Logo uploaded — click Save to apply" });
     } catch (err: any) {
