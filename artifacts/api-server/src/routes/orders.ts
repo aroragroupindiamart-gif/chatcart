@@ -20,8 +20,8 @@ router.get("/orders", requireAuth, requireActiveSubscription, async (req, res) =
       page?: string;
       limit?: string;
     };
-    const pageNum = parseInt(page);
-    const limitNum = Math.min(parseInt(limit), 100);
+    const pageNum = Math.max(parseInt(page) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(limit) || 20, 1), 500);
     const offset = (pageNum - 1) * limitNum;
 
     const conditions = [eq(ordersTable.sellerId, req.seller!.sellerId)];
@@ -81,6 +81,7 @@ router.get("/orders", requireAuth, requireActiveSubscription, async (req, res) =
       total: totalRow.count,
       page: pageNum,
       limit: limitNum,
+      totalPages: Math.ceil(totalRow.count / limitNum),
     });
   } catch (err) {
     console.error(err);
