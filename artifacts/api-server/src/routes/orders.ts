@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { ordersTable, orderItemsTable, sellersTable } from "@workspace/db/schema";
-import { eq, and, desc, count, inArray, gte } from "drizzle-orm";
+import { eq, and, desc, count, inArray, gte, lte } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
 import { getSellerPlan, getPlanLimits, requireActiveSubscription } from "../lib/planLimits.js";
 
@@ -15,23 +15,39 @@ function generateOrderId(): string {
 
 router.get("/orders", requireAuth, requireActiveSubscription, async (req, res) => {
   try {
-    const { status, page = "1", limit = "20" } = req.query as {
+    const { status, page = "1", limit = "20", startDate, endDate } = req.query as {
       status?: string;
       page?: string;
       limit?: string;
+      startDate?: string;
+      endDate?: string;
     };
     const pageNum = Math.max(parseInt(page) || 1, 1);
     const limitNum = Math.min(Math.max(parseInt(limit) || 20, 1), 500);
     const offset = (pageNum - 1) * limitNum;
 
     const conditions = [eq(ordersTable.sellerId, req.seller!.sellerId)];
-    if (status) {
+    if (status && status !== "all") {
       conditions.push(
         eq(
           ordersTable.status,
           status as "pending" | "confirmed" | "fulfilled"
         )
       );
+    }
+
+    if (startDate) {
+      const parsedStart = new Date(startDate.includes("T") ? startDate : `${startDate}T00:00:00.000`);
+      if (!isNaN(parsedStart.getTime())) {
+        conditions.push(gte(ordersTable.createdAt, parsedStart));
+      }
+    }
+
+    if (endDate) {
+      const parsedEnd = new Date(endDate.includes("T") ? endDate : `${endDate}T23:59:59.999`);
+      if (!isNaN(parsedEnd.getTime())) {
+        conditions.push(lte(ordersTable.createdAt, parsedEnd));
+      }
     }
 
     const plan = await getSellerPlan(req.seller!.sellerId);

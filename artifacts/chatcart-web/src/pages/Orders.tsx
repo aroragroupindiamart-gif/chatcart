@@ -2,8 +2,9 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { Layout } from "@/components/Layout";
 import { useListOrders } from "@workspace/api-client-react";
 import { Link } from "wouter";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -16,6 +17,8 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Calendar,
+  X,
   Loader2,
 } from "lucide-react";
 
@@ -27,6 +30,15 @@ export default function Orders() {
       </Layout>
     </ProtectedRoute>
   );
+}
+
+type DatePreset = "all" | "today" | "yesterday" | "7days" | "30days" | "custom";
+
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function OrdersContent() {
@@ -57,7 +69,82 @@ function OrdersContent() {
     return "all";
   });
 
-  // Sync URL query params with current state
+  const [datePreset, setDatePreset] = useState<DatePreset>(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const dp = params.get("datePreset") as DatePreset;
+      if (dp && ["all", "today", "yesterday", "7days", "30days", "custom"].includes(dp)) {
+        return dp;
+      }
+    }
+    return "all";
+  });
+
+  const [customStartDate, setCustomStartDate] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("startDate") || "";
+    }
+    return "";
+  });
+
+  const [customEndDate, setCustomEndDate] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("endDate") || "";
+    }
+    return "";
+  });
+
+  // Calculate actual query start & end dates based on selected preset
+  const { queryStartDate, queryEndDate } = useMemo(() => {
+    const now = new Date();
+    if (datePreset === "today") {
+      const todayStr = formatLocalDate(now);
+      return {
+        queryStartDate: `${todayStr}T00:00:00.000`,
+        queryEndDate: `${todayStr}T23:59:59.999`,
+      };
+    }
+    if (datePreset === "yesterday") {
+      const yest = new Date(now);
+      yest.setDate(yest.getDate() - 1);
+      const yestStr = formatLocalDate(yest);
+      return {
+        queryStartDate: `${yestStr}T00:00:00.000`,
+        queryEndDate: `${yestStr}T23:59:59.999`,
+      };
+    }
+    if (datePreset === "7days") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 6);
+      const startStr = formatLocalDate(d);
+      const endStr = formatLocalDate(now);
+      return {
+        queryStartDate: `${startStr}T00:00:00.000`,
+        queryEndDate: `${endStr}T23:59:59.999`,
+      };
+    }
+    if (datePreset === "30days") {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 29);
+      const startStr = formatLocalDate(d);
+      const endStr = formatLocalDate(now);
+      return {
+        queryStartDate: `${startStr}T00:00:00.000`,
+        queryEndDate: `${endStr}T23:59:59.999`,
+      };
+    }
+    if (datePreset === "custom") {
+      return {
+        queryStartDate: customStartDate ? `${customStartDate}T00:00:00.000` : undefined,
+        queryEndDate: customEndDate ? `${customEndDate}T23:59:59.999` : undefined,
+      };
+    }
+    return { queryStartDate: undefined, queryEndDate: undefined };
+  }, [datePreset, customStartDate, customEndDate]);
+
+  // Sync state with URL query parameters
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
@@ -68,14 +155,34 @@ function OrdersContent() {
     } else {
       params.delete("status");
     }
+
+    if (datePreset !== "all") {
+      params.set("datePreset", datePreset);
+      if (datePreset === "custom") {
+        if (customStartDate) params.set("startDate", customStartDate);
+        else params.delete("startDate");
+        if (customEndDate) params.set("endDate", customEndDate);
+        else params.delete("endDate");
+      } else {
+        params.delete("startDate");
+        params.delete("endDate");
+      }
+    } else {
+      params.delete("datePreset");
+      params.delete("startDate");
+      params.delete("endDate");
+    }
+
     const newRelativePathQuery = window.location.pathname + "?" + params.toString();
     window.history.replaceState(null, "", newRelativePathQuery);
-  }, [page, pageSize, statusFilter]);
+  }, [page, pageSize, statusFilter, datePreset, customStartDate, customEndDate]);
 
   const { data, isLoading, isFetching } = useListOrders({
     page,
     limit: pageSize,
-    status: statusFilter === "all" ? undefined : (statusFilter as any),
+    status: statusFilter === "all" ? undefined : statusFilter,
+    startDate: queryStartDate,
+    endDate: queryEndDate,
   });
 
   const totalOrders = data?.total ?? 0;
@@ -97,6 +204,18 @@ function OrdersContent() {
 
   const handleStatusChange = (status: string) => {
     setStatusFilter(status);
+    setPage(1);
+  };
+
+  const handleDatePresetChange = (preset: string) => {
+    setDatePreset(preset as DatePreset);
+    setPage(1);
+  };
+
+  const handleClearDateFilter = () => {
+    setDatePreset("all");
+    setCustomStartDate("");
+    setCustomEndDate("");
     setPage(1);
   };
 
@@ -123,52 +242,159 @@ function OrdersContent() {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
+  const datePresetLabel = useMemo(() => {
+    switch (datePreset) {
+      case "today":
+        return "Today";
+      case "yesterday":
+        return "Yesterday";
+      case "7days":
+        return "Last 7 Days";
+      case "30days":
+        return "Last 30 Days";
+      case "custom":
+        if (customStartDate && customEndDate) {
+          return `${customStartDate} to ${customEndDate}`;
+        }
+        if (customStartDate) return `From ${customStartDate}`;
+        if (customEndDate) return `Until ${customEndDate}`;
+        return "Custom Range";
+      default:
+        return "All Time";
+    }
+  }, [datePreset, customStartDate, customEndDate]);
+
   return (
     <div className="space-y-6">
       {/* ── Top Header & Filter Controls ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Orders</h1>
-          <p className="text-slate-500 mt-1">Manage and fulfill your customer orders</p>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-slate-900">Orders</h1>
+            <p className="text-slate-500 mt-1">Manage and fulfill your customer orders</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Status Tabs */}
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+              {(["all", "pending", "confirmed", "fulfilled"] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => handleStatusChange(s)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-all cursor-pointer ${
+                    statusFilter === s
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+
+            {/* Date Range Selector */}
+            <div className="flex items-center gap-1.5">
+              <Select value={datePreset} onValueChange={handleDatePresetChange}>
+                <SelectTrigger className="w-[140px] h-9 text-xs bg-white border-slate-200">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <Calendar className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                    <SelectValue placeholder="Date Filter" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="yesterday">Yesterday</SelectItem>
+                  <SelectItem value="7days">Last 7 Days</SelectItem>
+                  <SelectItem value="30days">Last 30 Days</SelectItem>
+                  <SelectItem value="custom">Custom Range...</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Orders Per Page Selector */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-slate-500 whitespace-nowrap hidden sm:inline">Show:</span>
+              <Select value={String(pageSize)} onValueChange={handlePageSizeChange}>
+                <SelectTrigger className="w-[115px] h-9 text-xs bg-white border-slate-200">
+                  <SelectValue placeholder="Page size" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10 / page</SelectItem>
+                  <SelectItem value="20">20 / page</SelectItem>
+                  <SelectItem value="30">30 / page</SelectItem>
+                  <SelectItem value="50">50 / page</SelectItem>
+                  <SelectItem value="100">100 / page</SelectItem>
+                  <SelectItem value="500">500 / page</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Status Tabs */}
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
-            {(["all", "pending", "confirmed", "fulfilled"] as const).map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => handleStatusChange(s)}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium capitalize transition-all cursor-pointer ${
-                  statusFilter === s
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
+        {/* ── Custom Date Range Inputs (when 'custom' preset is selected) ── */}
+        {datePreset === "custom" && (
+          <div className="flex flex-wrap items-center gap-3 bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs">
+            <span className="font-medium text-slate-700 flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+              Custom Date Range:
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-500">From</span>
+              <Input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => {
+                  setCustomStartDate(e.target.value);
+                  setPage(1);
+                }}
+                className="h-8 w-36 text-xs bg-white"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-500">To</span>
+              <Input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => {
+                  setCustomEndDate(e.target.value);
+                  setPage(1);
+                }}
+                className="h-8 w-36 text-xs bg-white"
+              />
+            </div>
+            {(customStartDate || customEndDate) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleClearDateFilter}
+                className="h-8 px-2 text-xs text-slate-500 hover:text-slate-800"
               >
-                {s}
-              </button>
-            ))}
+                <X className="w-3.5 h-3.5 mr-1" />
+                Reset
+              </Button>
+            )}
           </div>
+        )}
 
-          {/* Orders Per Page Selector */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-slate-500 whitespace-nowrap hidden sm:inline">Show:</span>
-            <Select value={String(pageSize)} onValueChange={handlePageSizeChange}>
-              <SelectTrigger className="w-[115px] h-9 text-xs bg-white border-slate-200">
-                <SelectValue placeholder="Page size" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="10">10 / page</SelectItem>
-                <SelectItem value="20">20 / page</SelectItem>
-                <SelectItem value="30">30 / page</SelectItem>
-                <SelectItem value="50">50 / page</SelectItem>
-                <SelectItem value="100">100 / page</SelectItem>
-                <SelectItem value="500">500 / page</SelectItem>
-              </SelectContent>
-            </Select>
+        {/* ── Active Date Filter Badge (when not 'all' and not custom inputs) ── */}
+        {datePreset !== "all" && datePreset !== "custom" && (
+          <div className="flex items-center gap-2">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+              <Calendar className="w-3 h-3 text-indigo-500" />
+              <span>Showing: {datePresetLabel}</span>
+              <button
+                type="button"
+                onClick={handleClearDateFilter}
+                className="ml-1 text-indigo-500 hover:text-indigo-800 cursor-pointer"
+                title="Clear date filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* ── Orders Table / List ── */}
@@ -239,13 +465,26 @@ function OrdersContent() {
         ) : (
           <div className="p-12 text-center">
             <h3 className="text-lg font-medium text-slate-900">
-              {statusFilter !== "all" ? `No ${statusFilter} orders` : "No orders yet"}
+              No orders found
             </h3>
             <p className="text-slate-500 mt-1">
-              {statusFilter !== "all"
-                ? `There are no orders with status "${statusFilter}".`
+              {datePreset !== "all" || statusFilter !== "all"
+                ? "No orders match the selected status and date range filters."
                 : "When customers place orders, they will appear here."}
             </p>
+            {(datePreset !== "all" || statusFilter !== "all") && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  handleClearDateFilter();
+                  setStatusFilter("all");
+                }}
+                className="mt-4 text-xs"
+              >
+                Clear All Filters
+              </Button>
+            )}
           </div>
         )}
       </div>
