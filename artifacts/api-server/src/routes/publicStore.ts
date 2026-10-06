@@ -581,6 +581,7 @@ router.get("/public/orders/:orderId", async (req, res) => {
         enableShipping: sellersTable.enableShipping,
         shippingRatePerKg: sellersTable.shippingRatePerKg,
         shippingAmountPerKgStep: sellersTable.shippingAmountPerKgStep,
+        parentSellerId: sellersTable.parentSellerId,
       })
       .from(sellersTable)
       .where(eq(sellersTable.id, order.sellerId))
@@ -591,11 +592,13 @@ router.get("/public/orders/:orderId", async (req, res) => {
       .from(orderItemsTable)
       .where(eq(orderItemsTable.orderId, orderId));
 
-    // Fetch all products for this seller to crosscheck status
+    const targetCatalogSellerId = seller?.parentSellerId ?? order.sellerId;
+
+    // Fetch all products for this seller (or parent seller if child store) to crosscheck status
     const products = await db
       .select()
       .from(productsTable)
-      .where(eq(productsTable.sellerId, order.sellerId));
+      .where(eq(productsTable.sellerId, targetCatalogSellerId));
 
     const productMap = new Map<string, typeof productsTable.$inferSelect>();
     for (const p of products) {
