@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { categoriesTable, productsTable } from "@workspace/db/schema";
+import { categoriesTable, productsTable, sellersTable } from "@workspace/db/schema";
 import { eq, and, ne, count } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
 import { requireActiveSubscription } from "../lib/planLimits.js";
@@ -23,6 +23,14 @@ function serializeCategory(
 
 router.get("/categories", requireAuth, requireActiveSubscription, async (req, res) => {
   try {
+    const [seller] = await db
+      .select({ parentSellerId: sellersTable.parentSellerId })
+      .from(sellersTable)
+      .where(eq(sellersTable.id, req.seller!.sellerId))
+      .limit(1);
+
+    const targetSellerId = seller?.parentSellerId ?? req.seller!.sellerId;
+
     const categories = await db
       .select({
         id: categoriesTable.id,
@@ -41,7 +49,7 @@ router.get("/categories", requireAuth, requireActiveSubscription, async (req, re
           ne(productsTable.status, "deleted")
         )
       )
-      .where(eq(categoriesTable.sellerId, req.seller!.sellerId))
+      .where(eq(categoriesTable.sellerId, targetSellerId))
       .groupBy(categoriesTable.id)
       .orderBy(categoriesTable.name);
     res.json(categories.map((c) => serializeCategory(c)));

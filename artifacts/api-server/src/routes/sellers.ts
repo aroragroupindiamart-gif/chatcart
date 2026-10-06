@@ -36,6 +36,9 @@ router.patch("/sellers/me", requireAuth, requireActiveSubscription, async (req, 
       enableShipping,
       shippingRatePerKg,
       shippingAmountPerKgStep,
+      pricingMultiplier,
+      pricingFixedMarkup,
+      enableParentDozenDiscount,
     } = req.body as {
       storeName?: string;
       whatsappNumber?: string;
@@ -48,6 +51,9 @@ router.patch("/sellers/me", requireAuth, requireActiveSubscription, async (req, 
       enableShipping?: boolean;
       shippingRatePerKg?: number | string | null;
       shippingAmountPerKgStep?: number | string | null;
+      pricingMultiplier?: number | string | null;
+      pricingFixedMarkup?: number | string | null;
+      enableParentDozenDiscount?: boolean;
     };
 
     const hasBrandingUpdate = bannerImageUrl !== undefined || tagline !== undefined;
@@ -83,6 +89,17 @@ router.patch("/sellers/me", requireAuth, requireActiveSubscription, async (req, 
     if (shippingAmountPerKgStep !== undefined) {
       const parsedStep = parseFloat(String(shippingAmountPerKgStep));
       updates.shippingAmountPerKgStep = isNaN(parsedStep) || parsedStep < 0 ? "0" : parsedStep.toFixed(2);
+    }
+    if (pricingMultiplier !== undefined) {
+      const parsedMult = parseFloat(String(pricingMultiplier));
+      updates.pricingMultiplier = isNaN(parsedMult) || parsedMult <= 0 ? "1.00" : parsedMult.toFixed(2);
+    }
+    if (pricingFixedMarkup !== undefined) {
+      const parsedMarkup = parseFloat(String(pricingFixedMarkup));
+      updates.pricingFixedMarkup = isNaN(parsedMarkup) || parsedMarkup < 0 ? "0.00" : parsedMarkup.toFixed(2);
+    }
+    if (enableParentDozenDiscount !== undefined) {
+      updates.enableParentDozenDiscount = Boolean(enableParentDozenDiscount);
     }
 
     if (subdomain !== undefined) {

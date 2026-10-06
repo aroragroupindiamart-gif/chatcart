@@ -6,6 +6,7 @@ import {
   productVariantsTable,
   productCategoriesTable,
   categoriesTable,
+  sellersTable,
 } from "@workspace/db/schema";
 import { eq, and, ne, asc, desc, ilike, inArray, count, or } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
@@ -64,8 +65,25 @@ router.get("/products", requireAuth, requireActiveSubscription, async (req, res)
       status?: string;
       search?: string;
     };
+
+    const [seller] = await db
+      .select({
+        id: sellersTable.id,
+        parentSellerId: sellersTable.parentSellerId,
+        pricingMultiplier: sellersTable.pricingMultiplier,
+        pricingFixedMarkup: sellersTable.pricingFixedMarkup,
+      })
+      .from(sellersTable)
+      .where(eq(sellersTable.id, req.seller!.sellerId))
+      .limit(1);
+
+    const catalogSellerId = seller?.parentSellerId ?? req.seller!.sellerId;
+    const isChild = !!seller?.parentSellerId;
+    const mult = isChild ? (parseFloat(String(seller.pricingMultiplier || "1.00")) || 1) : 1;
+    const markup = isChild ? (parseFloat(String(seller.pricingFixedMarkup || "0.00")) || 0) : 0;
+
     const conditions = [
-      eq(productsTable.sellerId, req.seller!.sellerId),
+      eq(productsTable.sellerId, catalogSellerId),
       ne(productsTable.status, "deleted"),
     ];
     if (categoryId) {
@@ -122,7 +140,7 @@ router.get("/products", requireAuth, requireActiveSubscription, async (req, res)
       db
         .select()
         .from(categoriesTable)
-        .where(eq(categoriesTable.sellerId, req.seller!.sellerId)),
+        .where(eq(categoriesTable.sellerId, catalogSellerId)),
     ]);
 
     const catNameMap = new Map(sellerCategories.map((c) => [c.id, c.name]));
@@ -134,10 +152,23 @@ router.get("/products", requireAuth, requireActiveSubscription, async (req, res)
           .map((cm) => cm.categoryId);
         const primaryCatId = p.categoryId || pCats[0] || null;
         const categoryName = primaryCatId ? catNameMap.get(primaryCatId) || null : null;
-        return {
+        const formatted = {
           ...formatProduct(p, images, variants, pCats),
           categoryName,
         };
+        if (isChild) {
+          formatted.sellerId = req.seller!.sellerId;
+          if (formatted.price != null) {
+            formatted.price = Math.round((formatted.price * mult + markup) * 100) / 100;
+          }
+          if ((formatted as any).compareAtPrice != null) {
+            const rawComp = parseFloat(String((formatted as any).compareAtPrice));
+            if (!isNaN(rawComp)) {
+              (formatted as any).compareAtPrice = (Math.round((rawComp * mult + markup) * 100) / 100).toFixed(2);
+            }
+          }
+        }
+        return formatted;
       })
     );
   } catch (err) {

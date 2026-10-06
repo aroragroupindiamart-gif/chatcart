@@ -28,6 +28,10 @@ export const sellersTable = pgTable("sellers", {
   enableShipping: boolean("enable_shipping").default(false).notNull(),
   shippingRatePerKg: numeric("shipping_rate_per_kg", { precision: 10, scale: 2 }).default("0"),
   shippingAmountPerKgStep: numeric("shipping_amount_per_kg_step", { precision: 10, scale: 2 }).default("0"),
+  parentSellerId: integer("parent_seller_id"),
+  pricingMultiplier: numeric("pricing_multiplier", { precision: 6, scale: 2 }).default("1.00").notNull(),
+  pricingFixedMarkup: numeric("pricing_fixed_markup", { precision: 10, scale: 2 }).default("0.00").notNull(),
+  enableParentDozenDiscount: boolean("enable_parent_dozen_discount").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

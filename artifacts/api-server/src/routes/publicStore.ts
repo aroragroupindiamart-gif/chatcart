@@ -56,6 +56,28 @@ function formatProduct(
   };
 }
 
+function applyChildPricing(
+  product: any,
+  childSellerId: number,
+  multiplier: number,
+  markup: number
+) {
+  const transformed = { ...product, sellerId: childSellerId };
+  if (transformed.price != null) {
+    const rawPrice = parseFloat(String(transformed.price));
+    if (!isNaN(rawPrice)) {
+      transformed.price = Math.round((rawPrice * multiplier + markup) * 100) / 100;
+    }
+  }
+  if (transformed.compareAtPrice != null) {
+    const rawComp = parseFloat(String(transformed.compareAtPrice));
+    if (!isNaN(rawComp)) {
+      transformed.compareAtPrice = (Math.round((rawComp * multiplier + markup) * 100) / 100).toFixed(2);
+    }
+  }
+  return transformed;
+}
+
 function generateOrderId(): string {
   const timestamp = Date.now().toString(36).toUpperCase();
   const random = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -86,6 +108,8 @@ router.get("/public/sellers/:subdomain/categories", async (req, res) => {
         subscriptionPlan: sellersTable.subscriptionPlan,
         subscriptionStatus: sellersTable.subscriptionStatus,
         subscriptionEndDate: sellersTable.subscriptionEndDate,
+        parentSellerId: sellersTable.parentSellerId,
+        enableParentDozenDiscount: sellersTable.enableParentDozenDiscount,
       })
       .from(sellersTable)
       .where(eq(sellersTable.subdomain, subdomain))
@@ -104,6 +128,8 @@ router.get("/public/sellers/:subdomain/categories", async (req, res) => {
       return;
     }
 
+    const targetSellerId = seller.parentSellerId ?? seller.id;
+
     const categories = await db
       .select({
         id: categoriesTable.id,
@@ -112,18 +138,20 @@ router.get("/public/sellers/:subdomain/categories", async (req, res) => {
         bulkDiscountMinQty: categoriesTable.bulkDiscountMinQty,
       })
       .from(categoriesTable)
-      .where(eq(categoriesTable.sellerId, seller.id))
+      .where(eq(categoriesTable.sellerId, targetSellerId))
       .orderBy(asc(categoriesTable.id));
+
+    const allowDozenDiscount = !seller.parentSellerId || Boolean(seller.enableParentDozenDiscount);
 
     res.json(
       categories.map((c) => ({
         id: c.id,
         name: c.name,
         dozenDiscountPercent:
-          c.dozenDiscountPercent != null
+          allowDozenDiscount && c.dozenDiscountPercent != null
             ? parseFloat(c.dozenDiscountPercent as unknown as string)
             : null,
-        bulkDiscountMinQty: c.bulkDiscountMinQty ?? null,
+        bulkDiscountMinQty: allowDozenDiscount ? (c.bulkDiscountMinQty ?? null) : null,
       }))
     );
   } catch (err) {
@@ -151,6 +179,7 @@ router.get("/public/sellers/:subdomain", async (req, res) => {
         enableShipping: sellersTable.enableShipping,
         shippingRatePerKg: sellersTable.shippingRatePerKg,
         shippingAmountPerKgStep: sellersTable.shippingAmountPerKgStep,
+        parentSellerId: sellersTable.parentSellerId,
       })
       .from(sellersTable)
       .where(eq(sellersTable.subdomain, subdomain))
@@ -177,6 +206,9 @@ router.get("/public/sellers/:subdomain/products", async (req, res) => {
         subscriptionPlan: sellersTable.subscriptionPlan,
         subscriptionStatus: sellersTable.subscriptionStatus,
         subscriptionEndDate: sellersTable.subscriptionEndDate,
+        parentSellerId: sellersTable.parentSellerId,
+        pricingMultiplier: sellersTable.pricingMultiplier,
+        pricingFixedMarkup: sellersTable.pricingFixedMarkup,
       })
       .from(sellersTable)
       .where(eq(sellersTable.subdomain, subdomain))
@@ -195,12 +227,14 @@ router.get("/public/sellers/:subdomain/products", async (req, res) => {
       return;
     }
 
+    const targetSellerId = seller.parentSellerId ?? seller.id;
+
     const products = await db
       .select()
       .from(productsTable)
       .where(
         and(
-          eq(productsTable.sellerId, seller.id),
+          eq(productsTable.sellerId, targetSellerId),
           ne(productsTable.status, "deleted"),
           ne(productsTable.status, "hidden"),
           or(
@@ -233,12 +267,20 @@ router.get("/public/sellers/:subdomain/products", async (req, res) => {
         .where(inArray(productCategoriesTable.productId, productIds)),
     ]);
 
+    const isChild = !!seller.parentSellerId;
+    const mult = isChild ? (parseFloat(String(seller.pricingMultiplier || "1.00")) || 1) : 1;
+    const markup = isChild ? (parseFloat(String(seller.pricingFixedMarkup || "0.00")) || 0) : 0;
+
     res.json(
       products.map((p) => {
         const pCats = categoryMappings
           .filter((cm) => cm.productId === p.id)
           .map((cm) => cm.categoryId);
-        return formatProduct(p, images, variants, pCats);
+        const formatted = formatProduct(p, images, variants, pCats);
+        if (isChild) {
+          return applyChildPricing(formatted, seller.id, mult, markup);
+        }
+        return formatted;
       })
     );
   } catch (err) {
@@ -259,6 +301,9 @@ router.get("/public/sellers/:subdomain/products/:productId", async (req, res) =>
         subscriptionPlan: sellersTable.subscriptionPlan,
         subscriptionStatus: sellersTable.subscriptionStatus,
         subscriptionEndDate: sellersTable.subscriptionEndDate,
+        parentSellerId: sellersTable.parentSellerId,
+        pricingMultiplier: sellersTable.pricingMultiplier,
+        pricingFixedMarkup: sellersTable.pricingFixedMarkup,
       })
       .from(sellersTable)
       .where(eq(sellersTable.subdomain, subdomain))
@@ -277,13 +322,15 @@ router.get("/public/sellers/:subdomain/products/:productId", async (req, res) =>
       return;
     }
 
+    const targetSellerId = seller.parentSellerId ?? seller.id;
+
     const [product] = await db
       .select()
       .from(productsTable)
       .where(
         and(
           eq(productsTable.id, productId),
-          eq(productsTable.sellerId, seller.id),
+          eq(productsTable.sellerId, targetSellerId),
           ne(productsTable.status, "deleted"),
           ne(productsTable.status, "hidden")
         )
@@ -311,7 +358,14 @@ router.get("/public/sellers/:subdomain/products/:productId", async (req, res) =>
         .where(eq(productCategoriesTable.productId, productId)),
     ]);
 
-    res.json(formatProduct(product, images, variants, categoryMappings.map(cm => cm.categoryId)));
+    const formatted = formatProduct(product, images, variants, categoryMappings.map(cm => cm.categoryId));
+    if (seller.parentSellerId) {
+      const mult = parseFloat(String(seller.pricingMultiplier || "1.00")) || 1;
+      const markup = parseFloat(String(seller.pricingFixedMarkup || "0.00")) || 0;
+      res.json(applyChildPricing(formatted, seller.id, mult, markup));
+    } else {
+      res.json(formatted);
+    }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch product" });
@@ -350,6 +404,9 @@ router.post("/public/orders", orderRateLimit, async (req, res) => {
         enableShipping: sellersTable.enableShipping,
         shippingRatePerKg: sellersTable.shippingRatePerKg,
         shippingAmountPerKgStep: sellersTable.shippingAmountPerKgStep,
+        parentSellerId: sellersTable.parentSellerId,
+        pricingMultiplier: sellersTable.pricingMultiplier,
+        pricingFixedMarkup: sellersTable.pricingFixedMarkup,
       })
       .from(sellersTable)
       .where(eq(sellersTable.id, body.sellerId))
@@ -367,6 +424,11 @@ router.post("/public/orders", orderRateLimit, async (req, res) => {
       return;
     }
 
+    const targetCatalogSellerId = seller.parentSellerId ?? seller.id;
+    const isChild = !!seller.parentSellerId;
+    const mult = isChild ? (parseFloat(String(seller.pricingMultiplier || "1.00")) || 1) : 1;
+    const markup = isChild ? (parseFloat(String(seller.pricingFixedMarkup || "0.00")) || 0) : 0;
+
     // Server-side validation: sanitize quantities and verify product prices against database
     const dbProducts = await db
       .select({
@@ -378,7 +440,7 @@ router.post("/public/orders", orderRateLimit, async (req, res) => {
       .from(productsTable)
       .where(
         and(
-          eq(productsTable.sellerId, body.sellerId),
+          eq(productsTable.sellerId, targetCatalogSellerId),
           ne(productsTable.status, "deleted")
         )
       );
@@ -396,13 +458,16 @@ router.post("/public/orders", orderRateLimit, async (req, res) => {
       let safePrice = 0;
       
       if (matched && matched.price != null) {
-        const canonicalPrice = parseFloat(matched.price as unknown as string);
+        const canonicalBasePrice = parseFloat(matched.price as unknown as string);
+        const expectedPrice = isChild
+          ? Math.round((canonicalBasePrice * mult + markup) * 100) / 100
+          : canonicalBasePrice;
         const clientPrice = parseFloat(item.priceSnapshot);
-        // If client sends invalid or negative price, enforce canonical price
+        // If client sends invalid or negative price, enforce expected price
         if (isNaN(clientPrice) || clientPrice < 0) {
-          safePrice = canonicalPrice;
+          safePrice = expectedPrice;
         } else {
-          // Allow reasonable discounts (e.g. bulk dozen discount applied in storefront), but clamp minimum to 0
+          // Allow reasonable discounts, but clamp minimum to 0
           safePrice = Math.max(0, clientPrice);
         }
       } else {

@@ -295,6 +295,10 @@ router.get("/auth/me", requireAuth, async (req, res) => {
         enableShipping: sellersTable.enableShipping,
         shippingRatePerKg: sellersTable.shippingRatePerKg,
         shippingAmountPerKgStep: sellersTable.shippingAmountPerKgStep,
+        parentSellerId: sellersTable.parentSellerId,
+        pricingMultiplier: sellersTable.pricingMultiplier,
+        pricingFixedMarkup: sellersTable.pricingFixedMarkup,
+        enableParentDozenDiscount: sellersTable.enableParentDozenDiscount,
         createdAt: sellersTable.createdAt,
         updatedAt: sellersTable.updatedAt,
       })
