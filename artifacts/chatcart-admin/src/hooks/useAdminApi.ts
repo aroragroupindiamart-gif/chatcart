@@ -158,8 +158,8 @@ export const useReactivateSeller = () => {
   });
 };
 
-export const useOrders = (params?: { sellerId?: string; status?: string; page?: number; limit?: number }) => {
-  const clean = Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v !== undefined && v !== null));
+export const useOrders = (params?: { sellerId?: string; status?: string; from?: string; to?: string; page?: number; limit?: number }) => {
+  const clean = Object.fromEntries(Object.entries(params ?? {}).filter(([, v]) => v !== undefined && v !== null && v !== ''));
   const query = new URLSearchParams(clean as any).toString();
   return useQuery<GlobalOrder[]>({
     queryKey: ['admin', 'orders', params],

@@ -401,15 +401,31 @@ router.get("/admin/sellers/:id/orders", requireAdminAuth, async (req, res) => {
 // ── Platform-wide orders ──────────────────────────────────────────────────────
 
 router.get("/admin/orders", requireAdminAuth, async (req, res) => {
-  const { sellerId, status, from, to, page = "1", limit = "50" } = req.query as Record<string, string>;
+  const { sellerId, status, from, to, page = "1", limit = "100" } = req.query as Record<string, string>;
 
   const conditions = [];
-  if (sellerId) conditions.push(eq(ordersTable.sellerId, Number(sellerId)));
-  if (status) conditions.push(eq(ordersTable.status, status as never));
-  if (from) conditions.push(gte(ordersTable.createdAt, new Date(from)));
-  if (to) conditions.push(lte(ordersTable.createdAt, new Date(to)));
+  if (sellerId && sellerId !== "all" && !isNaN(Number(sellerId))) {
+    conditions.push(eq(ordersTable.sellerId, Number(sellerId)));
+  }
+  if (status && status !== "all") {
+    conditions.push(eq(ordersTable.status, status as never));
+  }
+  if (from) {
+    const parsedFrom = new Date(from.includes("T") ? from : `${from}T00:00:00.000`);
+    if (!isNaN(parsedFrom.getTime())) {
+      conditions.push(gte(ordersTable.createdAt, parsedFrom));
+    }
+  }
+  if (to) {
+    const parsedTo = new Date(to.includes("T") ? to : `${to}T23:59:59.999`);
+    if (!isNaN(parsedTo.getTime())) {
+      conditions.push(lte(ordersTable.createdAt, parsedTo));
+    }
+  }
 
-  const offset = (Number(page) - 1) * Number(limit);
+  const limitNum = Math.min(Math.max(parseInt(limit) || 100, 1), 1000);
+  const pageNum = Math.max(parseInt(page) || 1, 1);
+  const offset = (pageNum - 1) * limitNum;
 
   let q = db.select({
     order: ordersTable,
@@ -422,16 +438,99 @@ router.get("/admin/orders", requireAdminAuth, async (req, res) => {
 
   if (conditions.length > 0) q = q.where(and(...conditions));
 
-  const orders = await q.orderBy(desc(ordersTable.createdAt)).limit(Number(limit)).offset(offset);
+  const orders = await q.orderBy(desc(ordersTable.createdAt)).limit(limitNum).offset(offset);
 
-  // Fetch itemsCount and format for each order
-  const ordersWithDetails = await Promise.all(
-    orders.map(async (item) => {
-      const items = await db
-        .select()
+  // Optimized batch fetch of order items counts
+  const orderIds = orders.map((item) => item.order.id);
+  const itemCounts = orderIds.length > 0
+    ? await db
+        .select({ orderId: orderItemsTable.orderId, count: count() })
         .from(orderItemsTable)
-        .where(eq(orderItemsTable.orderId, item.order.id));
+        .where(inArray(orderItemsTable.orderId, orderIds))
+        .groupBy(orderItemsTable.orderId)
+    : [];
+  const countMap = new Map(itemCounts.map((ic) => [ic.orderId, ic.count]));
 
+  const ordersWithDetails = orders.map((item) => {
+    let customerName = "Guest";
+    let customerPhone = "-";
+    if (item.order.customerContact) {
+      const nameMatch = item.order.customerContact.match(/Name:\s*([^,]+)/i);
+      const phoneMatch = item.order.customerContact.match(/Phone:\s*(.+)/i);
+      customerName = nameMatch ? nameMatch[1].trim() : item.order.customerContact;
+      customerPhone = phoneMatch ? phoneMatch[1].trim() : "-";
+    }
+
+    return {
+      order: {
+        ...item.order,
+        total: parseFloat(item.order.totalAmount),
+        itemsCount: countMap.get(item.order.id) ?? 0,
+        customerName,
+        customerPhone,
+      },
+      storeName: item.storeName || "Unnamed Store",
+      phone: item.phone,
+    };
+  });
+
+  await audit(req.admin!.adminId, "viewed_platform_orders", req.ip ?? "unknown");
+  res.json(ordersWithDetails);
+});
+
+// ── Export platform-wide orders to CSV ───────────────────────────────────────
+
+router.get("/admin/orders/export", requireAdminAuth, async (req, res) => {
+  try {
+    const { sellerId, status, from, to } = req.query as Record<string, string>;
+
+    const conditions = [];
+    if (sellerId && sellerId !== "all" && !isNaN(Number(sellerId))) {
+      conditions.push(eq(ordersTable.sellerId, Number(sellerId)));
+    }
+    if (status && status !== "all") {
+      conditions.push(eq(ordersTable.status, status as never));
+    }
+    if (from) {
+      const parsedFrom = new Date(from.includes("T") ? from : `${from}T00:00:00.000`);
+      if (!isNaN(parsedFrom.getTime())) {
+        conditions.push(gte(ordersTable.createdAt, parsedFrom));
+      }
+    }
+    if (to) {
+      const parsedTo = new Date(to.includes("T") ? to : `${to}T23:59:59.999`);
+      if (!isNaN(parsedTo.getTime())) {
+        conditions.push(lte(ordersTable.createdAt, parsedTo));
+      }
+    }
+
+    let q = db.select({
+      order: ordersTable,
+      storeName: sellersTable.storeName,
+      phone: sellersTable.phone,
+    })
+      .from(ordersTable)
+      .leftJoin(sellersTable, eq(ordersTable.sellerId, sellersTable.id))
+      .$dynamic();
+
+    if (conditions.length > 0) q = q.where(and(...conditions));
+
+    const orders = await q.orderBy(desc(ordersTable.createdAt)).limit(5000);
+
+    const orderIds = orders.map((item) => item.order.id);
+    const itemCounts = orderIds.length > 0
+      ? await db
+          .select({ orderId: orderItemsTable.orderId, count: count() })
+          .from(orderItemsTable)
+          .where(inArray(orderItemsTable.orderId, orderIds))
+          .groupBy(orderItemsTable.orderId)
+      : [];
+    const countMap = new Map(itemCounts.map((ic) => [ic.orderId, ic.count]));
+
+    const header = ["Order ID", "Store Name", "Store Phone", "Customer Name", "Customer Phone", "Items Count", "Total (INR)", "Status", "Order Date"];
+    const rows = [header];
+
+    for (const item of orders) {
       let customerName = "Guest";
       let customerPhone = "-";
       if (item.order.customerContact) {
@@ -441,24 +540,33 @@ router.get("/admin/orders", requireAdminAuth, async (req, res) => {
         customerPhone = phoneMatch ? phoneMatch[1].trim() : "-";
       }
 
-      const itemsCount = items.reduce((sum, i) => sum + i.quantity, 0);
+      rows.push([
+        item.order.id,
+        item.storeName || "Unnamed Store",
+        item.phone || "",
+        customerName,
+        customerPhone,
+        String(countMap.get(item.order.id) ?? 0),
+        parseFloat(item.order.totalAmount).toFixed(2),
+        item.order.status,
+        new Date(item.order.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
+      ]);
+    }
 
-      return {
-        order: {
-          ...item.order,
-          total: parseFloat(item.order.totalAmount),
-          itemsCount,
-          customerName,
-          customerPhone,
-        },
-        storeName: item.storeName || "Unnamed Store",
-        phone: item.phone,
-      };
-    })
-  );
+    const csvData = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\r\n");
 
-  await audit(req.admin!.adminId, "viewed_platform_orders", req.ip ?? "unknown");
-  res.json(ordersWithDetails);
+    const dateSlug = new Date().toISOString().slice(0, 10);
+    const filename = `orders-export-${dateSlug}.csv`;
+
+    await audit(req.admin!.adminId, "exported_platform_orders", req.ip ?? "unknown");
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.status(200).send(csvData);
+  } catch (err) {
+    console.error("Failed to export orders:", err);
+    res.status(500).json({ error: "Failed to export orders" });
+  }
 });
 
 // ── Single order details ─────────────────────────────────────────────────────
