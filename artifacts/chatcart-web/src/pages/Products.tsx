@@ -12,7 +12,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
-import { Plus, Search, Package, Trash2, ArrowUp, QrCode, Loader2, Folder, Filter, Layers, ChevronDown, Link2, Check } from "lucide-react";
+import { Plus, Search, Package, Trash2, ArrowUp, QrCode, Loader2, Folder, Filter, Layers, ChevronDown, Link2, Check, X } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -337,17 +337,26 @@ function ProductsContent() {
     setImportCount(null);
   };
 
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   const params: ListProductsParams = {
     status:
       statusTab === "all"
         ? undefined
         : (statusTab as ListProductsParams["status"]),
-    search: search || undefined,
+    search: debouncedSearch.trim() || undefined,
   };
 
-  const { data: products, isLoading } = useListProducts(params, {
+  const { data: products, isLoading, isFetching } = useListProducts(params, {
     query: {
       queryKey: getListProductsQueryKey(params),
+      placeholderData: (previousData) => previousData,
     },
   });
 
@@ -468,14 +477,22 @@ function ProductsContent() {
     });
   }, [products, categories]);
 
-  // Filter products by selected category
+  // Filter products by selected category and instant search query
   const filteredProducts = useMemo(() => {
     if (!products) return [];
-    if (selectedCategory === "all") return products;
-    return products.filter(
-      (p) => getProductCategoryName(p) === selectedCategory
-    );
-  }, [products, selectedCategory, categories]);
+    let list = products;
+    if (selectedCategory !== "all") {
+      list = list.filter((p) => getProductCategoryName(p) === selectedCategory);
+    }
+    const q = search.trim().toLowerCase();
+    if (q) {
+      list = list.filter((p) =>
+        (p.name && p.name.toLowerCase().includes(q)) ||
+        (p.sku && p.sku.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [products, selectedCategory, categories, search]);
 
   // Group products by category
   const groupedProducts = useMemo(() => {
@@ -728,20 +745,34 @@ function ProductsContent() {
           )}
 
           <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            {isFetching ? (
+              <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 animate-spin" />
+            ) : (
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            )}
             <Input
               placeholder="Search products..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 bg-slate-50 border-slate-200"
+              className="pl-9 pr-8 bg-slate-50 border-slate-200"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                aria-label="Clear search"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
       </div>
 
       {/* Product List */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        {isLoading ? (
+        {isLoading && !products ? (
           <div className="p-8 text-center text-slate-500">
             Loading products...
           </div>
