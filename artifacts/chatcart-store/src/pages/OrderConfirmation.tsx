@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { CheckCircle, MessageCircle, Store, Loader2, X, AlertTriangle } from "lucide-react";
-import { api, formatPrice, imgSrc, type Order } from "@/lib/api";
+import { api, formatPrice as formatInr, imgSrc, type Order } from "@/lib/api";
+import { useCurrency } from "@/contexts/CurrencyContext";
+import { CurrencySelector } from "@/components/CurrencySelector";
 import { buildWhatsAppText, getWhatsAppUrl, formatWhatsAppPhone } from "@/lib/whatsapp";
 import { Button } from "@/components/ui/button";
 import { usePageMeta, absImgUrl } from "@/lib/usePageMeta";
@@ -47,7 +49,23 @@ function TappableImage({ src, alt, className }: { src: string; alt: string; clas
 export default function OrderConfirmation() {
   const { orderId } = useParams<{ orderId: string }>();
   const [, navigate] = useLocation();
+  const { currency, rates, formatPrice, isBaseInr } = useCurrency();
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+  const cachedCurrencyInfo = (() => {
+    try {
+      const raw = sessionStorage.getItem(`chatcart_order_currency_${orderId}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  const activeCurrencyPayload = cachedCurrencyInfo || (!isBaseInr && rates[currency.code] ? {
+    code: currency.code,
+    symbol: currency.symbol,
+    rate: rates[currency.code],
+  } : undefined);
 
   const [order, setOrder] = useState<Order | null>(() => {
     if (!orderId) return null;
@@ -110,7 +128,7 @@ export default function OrderConfirmation() {
     if (!phone) return;
     autoTriggered.current = true;
     const orderUrl = `${window.location.origin}${BASE}/orders/${order.id}`;
-    const waText = buildWhatsAppText(order, orderUrl);
+    const waText = buildWhatsAppText(order, orderUrl, activeCurrencyPayload);
     const url = getWhatsAppUrl(phone, waText);
     if (url) {
       try {
@@ -119,7 +137,7 @@ export default function OrderConfirmation() {
         // silently ignored — manual buttons remain the fallback
       }
     }
-  }, [order, BASE]);
+  }, [order, BASE, activeCurrencyPayload]);
 
   usePageMeta(
     order
@@ -155,7 +173,7 @@ export default function OrderConfirmation() {
   }
 
   const orderUrl = `${window.location.origin}${BASE}/orders/${order.id}`;
-  const waText = buildWhatsAppText(order, orderUrl);
+  const waText = buildWhatsAppText(order, orderUrl, activeCurrencyPayload);
   const waUrl = getWhatsAppUrl(order.sellerWhatsappNumber, waText);
 
   const payableTotal = order.payableTotalAmount ?? order.totalAmount;
@@ -166,7 +184,7 @@ export default function OrderConfirmation() {
   return (
     <div className="min-h-screen bg-background">
       <header className="bg-card border-b border-border shadow-sm">
-        <div className="max-w-lg mx-auto px-4 h-14 flex items-center gap-2">
+        <div className="max-w-lg mx-auto px-4 h-14 flex items-center justify-between gap-2">
           {order.sellerSubdomain ? (
             <a
               href={`${BASE}/${order.sellerSubdomain}`}
@@ -205,6 +223,7 @@ export default function OrderConfirmation() {
               </span>
             </div>
           )}
+          <CurrencySelector />
         </div>
       </header>
 
@@ -347,9 +366,16 @@ export default function OrderConfirmation() {
                   <span className="font-bold text-foreground">
                     Payable Balance ({inStockItemsCount} in-stock {inStockItemsCount === 1 ? "item" : "items"})
                   </span>
-                  <span className="font-extrabold text-primary text-base">
-                    {formatPrice(payableTotal)}
-                  </span>
+                  <div className="text-right">
+                    <span className="font-extrabold text-primary text-base">
+                      {formatPrice(payableTotal)}
+                    </span>
+                    {!isBaseInr && (
+                      <span className="block text-[11px] text-muted-foreground font-normal">
+                        (~ {formatInr(payableTotal)})
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             ) : (
@@ -378,9 +404,16 @@ export default function OrderConfirmation() {
                   <span className="font-semibold">
                     Total ({totalItemsCount} {totalItemsCount === 1 ? "item" : "items"})
                   </span>
-                  <span className="font-bold text-primary text-base">
-                    {formatPrice(order.totalAmount)}
-                  </span>
+                  <div className="text-right">
+                    <span className="font-bold text-primary text-base">
+                      {formatPrice(order.totalAmount)}
+                    </span>
+                    {!isBaseInr && (
+                      <span className="block text-[11px] text-muted-foreground font-normal">
+                        (~ {formatInr(order.totalAmount)})
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

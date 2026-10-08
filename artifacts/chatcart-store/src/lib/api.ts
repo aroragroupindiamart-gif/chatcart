@@ -132,6 +132,15 @@ export const api = {
 
   getOrder: (orderId: string) =>
     apiFetch<Order>(`/orders/${encodeURIComponent(orderId)}`),
+
+  getExchangeRates: () =>
+    apiFetch<{
+      base: string;
+      detectedCountry: string | null;
+      detectedCurrency: string;
+      rates: Record<string, number>;
+      updatedAt: string;
+    }>("/exchange-rates"),
 };
 
 export function imgSrc(storedUrl: string): string {

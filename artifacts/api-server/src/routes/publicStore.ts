@@ -723,6 +723,109 @@ router.get("/public/ltd-status", async (_req, res) => {
   }
 });
 
+interface CachedExchangeRates {
+  rates: Record<string, number>;
+  fetchedAt: number;
+}
+
+let cachedExchangeRates: CachedExchangeRates | null = null;
+
+const FALLBACK_EXCHANGE_RATES: Record<string, number> = {
+  INR: 1,
+  USD: 0.01032,
+  CAD: 0.01474,
+  AUD: 0.01484,
+  GBP: 0.00782,
+  EUR: 0.00924,
+  AED: 0.03793,
+  SGD: 0.01420,
+  NZD: 0.01750,
+};
+
+const COUNTRY_TO_CURRENCY_MAP: Record<string, string> = {
+  US: "USD",
+  CA: "CAD",
+  AU: "AUD",
+  GB: "GBP",
+  AE: "AED",
+  SG: "SGD",
+  NZ: "NZD",
+  // Eurozone
+  AT: "EUR", BE: "EUR", CY: "EUR", EE: "EUR", FI: "EUR",
+  FR: "EUR", DE: "EUR", GR: "EUR", IE: "EUR", IT: "EUR",
+  LV: "EUR", LT: "EUR", LU: "EUR", MT: "EUR", NL: "EUR",
+  PT: "EUR", SK: "EUR", SI: "EUR", ES: "EUR",
+  IN: "INR",
+};
+
+async function fetchLiveExchangeRates(): Promise<Record<string, number>> {
+  const now = Date.now();
+  // 6 hour in-memory cache
+  if (cachedExchangeRates && now - cachedExchangeRates.fetchedAt < 6 * 3600 * 1000) {
+    return cachedExchangeRates.rates;
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const response = await fetch("https://open.er-api.com/v6/latest/INR", {
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (response.ok) {
+      const data = (await response.json()) as any;
+      if (data && data.rates) {
+        const rates: Record<string, number> = {
+          INR: 1,
+          USD: Number(data.rates.USD) || FALLBACK_EXCHANGE_RATES.USD,
+          CAD: Number(data.rates.CAD) || FALLBACK_EXCHANGE_RATES.CAD,
+          AUD: Number(data.rates.AUD) || FALLBACK_EXCHANGE_RATES.AUD,
+          GBP: Number(data.rates.GBP) || FALLBACK_EXCHANGE_RATES.GBP,
+          EUR: Number(data.rates.EUR) || FALLBACK_EXCHANGE_RATES.EUR,
+          AED: Number(data.rates.AED) || FALLBACK_EXCHANGE_RATES.AED,
+          SGD: Number(data.rates.SGD) || FALLBACK_EXCHANGE_RATES.SGD,
+          NZD: Number(data.rates.NZD) || FALLBACK_EXCHANGE_RATES.NZD,
+        };
+        cachedExchangeRates = { rates, fetchedAt: now };
+        return rates;
+      }
+    }
+  } catch (err) {
+    console.warn("[Exchange Rates] Live fetch failed, using cached/fallback:", err);
+  }
+
+  return cachedExchangeRates?.rates ?? FALLBACK_EXCHANGE_RATES;
+}
+
+// GET /public/exchange-rates — Real-time currency exchange rates with Cloudflare GeoIP detection
+router.get("/public/exchange-rates", async (req, res) => {
+  try {
+    const rawCountry = (req.headers["cf-ipcountry"] || req.headers["x-country-code"] || "") as string;
+    const country = typeof rawCountry === "string" ? rawCountry.trim().toUpperCase() : "";
+    const detectedCurrency = COUNTRY_TO_CURRENCY_MAP[country] || "INR";
+
+    const rates = await fetchLiveExchangeRates();
+
+    res.json({
+      base: "INR",
+      detectedCountry: country || null,
+      detectedCurrency,
+      rates,
+      updatedAt: cachedExchangeRates ? new Date(cachedExchangeRates.fetchedAt).toISOString() : new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error("[Exchange Rates Route] Error:", err);
+    res.json({
+      base: "INR",
+      detectedCountry: null,
+      detectedCurrency: "INR",
+      rates: FALLBACK_EXCHANGE_RATES,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+});
+
 router.get("/public/storefront-html/:subdomain", async (req, res) => {
   try {
     const { subdomain } = req.params;

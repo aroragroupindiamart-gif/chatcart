@@ -25,19 +25,49 @@ export function formatWhatsAppPhone(phone: string | null | undefined): string | 
   return null;
 }
 
+export interface WhatsAppCurrencyInfo {
+  code: string;
+  symbol: string;
+  rate: number;
+}
+
 /**
  * Formats order details into a clean, structured WhatsApp message.
+ * Supports multi-currency display when an international currency is active.
  */
-export function buildWhatsAppText(order: Order, orderUrl: string): string {
+export function buildWhatsAppText(
+  order: Order,
+  orderUrl: string,
+  currencyInfo?: WhatsAppCurrencyInfo
+): string {
   const payableTotal = order.payableTotalAmount ?? order.totalAmount;
+  const isForeign = Boolean(currencyInfo && currencyInfo.code !== "INR" && currencyInfo.rate > 0);
+
+  const formatAmt = (amt: number): string => {
+    if (!isForeign || !currencyInfo) return formatPrice(amt);
+    const converted = amt * currencyInfo.rate;
+    const foreignStr = `${currencyInfo.symbol}${converted.toFixed(2)} ${currencyInfo.code}`;
+    return `${foreignStr} (~ ${formatPrice(amt)})`;
+  };
+
+  const formatUnit = (amt: number): string => {
+    if (!isForeign || !currencyInfo) return formatPrice(amt);
+    const converted = amt * currencyInfo.rate;
+    return `${currencyInfo.symbol}${converted.toFixed(2)}`;
+  };
+
   const lines: string[] = [
     `Hi! I'd like to confirm my order 🛍️`,
     ``,
     `*Order ID:* ${order.id}`,
     `*Store:* ${order.sellerStoreName ?? ""}`,
-    ``,
-    `*Items:*`,
   ];
+
+  if (isForeign && currencyInfo) {
+    lines.push(`*Selected Currency:* ${currencyInfo.code} (${currencyInfo.symbol})`);
+  }
+
+  lines.push(``, `*Items:*`);
 
   const maxItems = 5;
   const itemsToShow = order.items.slice(0, maxItems);
@@ -50,7 +80,7 @@ export function buildWhatsAppText(order: Order, orderUrl: string): string {
       );
     } else {
       lines.push(
-        `• ${item.quantity}× ${item.productNameSnapshot}${variant} (${formatPrice(item.priceSnapshot)} each) — ${formatPrice(item.priceSnapshot * item.quantity)}`
+        `• ${item.quantity}× ${item.productNameSnapshot}${variant} (${formatUnit(item.priceSnapshot)} each) — ${formatAmt(item.priceSnapshot * item.quantity)}`
       );
     }
   }
@@ -66,18 +96,18 @@ export function buildWhatsAppText(order: Order, orderUrl: string): string {
   const shippingKg = order.hasSoldOutItems ? (order.payableShippingKg ?? order.shippingKg) : order.shippingKg;
 
   if (subtotal != null && ((gst != null && gst > 0) || (shipping != null && shipping > 0))) {
-    lines.push(`*Items Subtotal:* ${formatPrice(subtotal)}`);
+    lines.push(`*Items Subtotal:* ${formatAmt(subtotal)}`);
     if (gst != null && gst > 0) {
       const pct = order.gstPercentage ?? 0;
-      lines.push(`*GST (${pct}%):* ${formatPrice(gst)}`);
+      lines.push(`*GST (${pct}%):* ${formatAmt(gst)}`);
     }
     if (shipping != null && shipping > 0) {
       const kgText = shippingKg != null && shippingKg > 0 ? ` (${shippingKg} kg shipping)` : "";
-      lines.push(`*Shipping:* ${formatPrice(shipping)}${kgText}`);
+      lines.push(`*Shipping:* ${formatAmt(shipping)}${kgText}`);
     }
   }
 
-  lines.push(`*Payable Balance: ${formatPrice(payableTotal)}*`);
+  lines.push(`*Payable Balance: ${formatAmt(payableTotal)}*`);
 
   if (order.customerContact) {
     lines.push(``);

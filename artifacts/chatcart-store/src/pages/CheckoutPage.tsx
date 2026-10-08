@@ -2,7 +2,9 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { ArrowLeft, Loader2, Tag, AlertTriangle, TrendingUp, Package } from "lucide-react";
 import { useCart, type CartItem } from "@/contexts/CartContext";
-import { api, formatPrice, imgSrc, type Seller, type Product } from "@/lib/api";
+import { useCurrency } from "@/contexts/CurrencyContext";
+import { CurrencySelector } from "@/components/CurrencySelector";
+import { api, formatPrice as formatInr, imgSrc, type Seller, type Product } from "@/lib/api";
 import { buildWhatsAppText, getWhatsAppUrl } from "@/lib/whatsapp";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,7 +94,7 @@ async function validateCart(
       issues.push({
         productName: item.product.name,
         reason: "price_changed",
-        detail: `Price changed from ${formatPrice(oldPrice)} to ${formatPrice(newPrice)}`,
+        detail: `Price changed from ${formatInr(oldPrice)} to ${formatInr(newPrice)}`,
       });
     }
 
@@ -120,6 +122,7 @@ async function validateCart(
 
 export default function CheckoutPage({ seller, onBack }: CheckoutPageProps) {
   const [, navigate] = useLocation();
+  const { currency, rates, formatPrice, isBaseInr } = useCurrency();
   const {
     items,
     subtotalAmount,
@@ -159,17 +162,28 @@ export default function CheckoutPage({ seller, onBack }: CheckoutPageProps) {
       });
       clearCart();
 
+      const currencyPayload = !isBaseInr && rates[currency.code]
+        ? {
+            code: currency.code,
+            symbol: currency.symbol,
+            rate: rates[currency.code],
+          }
+        : undefined;
+
       // Pre-cache order so OrderConfirmation renders instantly with zero loading spinner
       try {
         sessionStorage.setItem(`chatcart_order_${order.id}`, JSON.stringify(order));
         sessionStorage.setItem(`chatcart_fresh_order_${order.id}`, "1");
+        if (currencyPayload) {
+          sessionStorage.setItem(`chatcart_order_currency_${order.id}`, JSON.stringify(currencyPayload));
+        }
       } catch {
         // quota exceeded or disabled
       }
 
       // Build WhatsApp URL immediately
       const orderUrl = `${window.location.origin}${BASE}/orders/${order.id}`;
-      const waText = buildWhatsAppText(order, orderUrl);
+      const waText = buildWhatsAppText(order, orderUrl, currencyPayload);
       const targetPhone = order.sellerWhatsappNumber || seller.whatsappNumber;
       const waUrl = getWhatsAppUrl(targetPhone, waText);
 
@@ -250,14 +264,17 @@ export default function CheckoutPage({ seller, onBack }: CheckoutPageProps) {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border shrink-0">
-        <button
-          onClick={onBack}
-          className="text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <h2 className="font-semibold">Checkout</h2>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onBack}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <h2 className="font-semibold">Checkout</h2>
+        </div>
+        <CurrencySelector />
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-5">
@@ -352,9 +369,16 @@ export default function CheckoutPage({ seller, onBack }: CheckoutPageProps) {
               )}
               <div className="flex justify-between items-center pt-1 border-t border-border/60">
                 <span className="font-bold text-sm text-foreground">Total</span>
-                <span className="font-bold text-primary text-base">
-                  {formatPrice(totalAmount)}
-                </span>
+                <div className="text-right">
+                  <span className="font-bold text-primary text-base">
+                    {formatPrice(totalAmount)}
+                  </span>
+                  {!isBaseInr && (
+                    <span className="block text-[11px] text-muted-foreground font-normal">
+                      (~ {formatInr(totalAmount)})
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -458,7 +482,14 @@ export default function CheckoutPage({ seller, onBack }: CheckoutPageProps) {
                     )}
                     <div className="flex justify-between font-bold text-sm text-foreground pt-1 border-t border-border/60">
                       <span>Updated total:</span>
-                      <span className="text-primary">{formatPrice(adjustedTotal)}</span>
+                      <div className="text-right">
+                        <span className="text-primary">{formatPrice(adjustedTotal)}</span>
+                        {!isBaseInr && (
+                          <span className="block text-[10px] text-muted-foreground font-normal">
+                            (~ {formatInr(adjustedTotal)})
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}

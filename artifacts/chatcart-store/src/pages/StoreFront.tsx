@@ -2,7 +2,9 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
 import { ShoppingCart, Store, Search, X, ArrowUp, LayoutGrid, ZoomIn, Link2, Check } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
-import { api, imgSrc, formatPrice, type Seller, type Product, type Category } from "@/lib/api";
+import { useCurrency } from "@/contexts/CurrencyContext";
+import { CurrencySelector } from "@/components/CurrencySelector";
+import { api, imgSrc, type Seller, type Product, type Category } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 import CartSheet from "@/components/CartSheet";
 import ImageLightboxModal from "@/components/ImageLightboxModal";
@@ -343,18 +345,21 @@ export default function StoreFront() {
               {seller.storeName ?? subdomain}
             </span>
           </a>
-          <button
-            onClick={() => setCartOpen(true)}
-            className="relative p-2 rounded-lg hover:bg-muted transition-colors"
-            aria-label="Open cart"
-          >
-            <ShoppingCart className="w-5 h-5 text-foreground" />
-            {totalItems > 0 && (
-              <span className="absolute -top-1 -right-1 bg-primary text-white text-[10px] rounded-full min-w-4.5 h-4.5 px-1 flex items-center justify-center font-bold leading-none shadow-xs">
-                {totalItems}
-              </span>
-            )}
-          </button>
+          <div className="flex items-center gap-2">
+            <CurrencySelector />
+            <button
+              onClick={() => setCartOpen(true)}
+              className="relative p-2 rounded-lg hover:bg-muted transition-colors cursor-pointer"
+              aria-label="Open cart"
+            >
+              <ShoppingCart className="w-5 h-5 text-foreground" />
+              {totalItems > 0 && (
+                <span className="absolute -top-1 -right-1 bg-primary text-white text-[10px] rounded-full min-w-4.5 h-4.5 px-1 flex items-center justify-center font-bold leading-none shadow-xs">
+                  {totalItems}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -630,6 +635,7 @@ function ProductCard({
   const [imageError, setImageError] = useState(false);
   const [copied, setCopied] = useState(false);
   const { items, addToCart, updateQuantity } = useCart();
+  const { formatPrice, isBaseInr } = useCurrency();
   const { toast } = useToast();
   const isOutOfStock = product.status === "out_of_stock";
   const hasPrice = product.price != null;
@@ -747,9 +753,16 @@ function ProductCard({
             {product.name}
           </p>
           {hasPrice ? (
-            <span className="text-sm font-semibold text-primary">
-              {formatPrice(product.price!)}
-            </span>
+            <div className="flex items-baseline gap-1.5 flex-wrap">
+              <span className="text-sm font-semibold text-primary">
+                {formatPrice(product.price!)}
+              </span>
+              {!isBaseInr && (
+                <span className="text-[10px] text-muted-foreground">
+                  (~ ₹{product.price!.toLocaleString("en-IN")})
+                </span>
+              )}
+            </div>
           ) : (
             <span className="text-xs text-muted-foreground italic">Price on request</span>
           )}

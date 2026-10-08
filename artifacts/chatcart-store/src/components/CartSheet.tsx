@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { X, Plus, Minus, ShoppingCart, Tag } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
-import { formatPrice, imgSrc, type Seller } from "@/lib/api";
+import { useCurrency } from "@/contexts/CurrencyContext";
+import { CurrencySelector } from "@/components/CurrencySelector";
+import { imgSrc, type Seller } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -33,6 +35,7 @@ export default function CartSheet({ open, onClose, seller }: CartSheetProps) {
     getItemPricing,
     setSeller: setCartSeller,
   } = useCart();
+  const { formatPrice, isBaseInr } = useCurrency();
   const [checkout, setCheckout] = useState(false);
 
   useEffect(() => {
@@ -57,15 +60,18 @@ export default function CartSheet({ open, onClose, seller }: CartSheetProps) {
         ) : (
           <>
             <SheetHeader className="px-4 py-3 border-b border-border shrink-0">
-              <SheetTitle className="flex items-center gap-2">
-                <ShoppingCart className="w-4 h-4" />
-                Cart
-                {totalItems > 0 && (
-                  <span className="text-xs bg-primary text-white rounded-full px-2 py-0.5 font-medium">
-                    {totalItems}
-                  </span>
-                )}
-              </SheetTitle>
+              <div className="flex items-center justify-between">
+                <SheetTitle className="flex items-center gap-2">
+                  <ShoppingCart className="w-4 h-4" />
+                  Cart
+                  {totalItems > 0 && (
+                    <span className="text-xs bg-primary text-white rounded-full px-2 py-0.5 font-medium">
+                      {totalItems}
+                    </span>
+                  )}
+                </SheetTitle>
+                <CurrencySelector />
+              </div>
             </SheetHeader>
 
             <div className="flex-1 overflow-y-auto">
@@ -201,11 +207,18 @@ export default function CartSheet({ open, onClose, seller }: CartSheetProps) {
                       </span>
                     </div>
                   )}
-                  <div className="flex justify-between text-base font-bold pt-1 border-t border-border/60">
+                  <div className="flex justify-between items-center text-base font-bold pt-1 border-t border-border/60">
                     <span>Total</span>
-                    <span className="text-primary">
-                      {formatPrice(totalAmount)}
-                    </span>
+                    <div className="text-right">
+                      <span className="text-primary block">
+                        {formatPrice(totalAmount)}
+                      </span>
+                      {!isBaseInr && (
+                        <span className="text-[11px] text-muted-foreground font-normal block">
+                          ~ ₹{totalAmount.toLocaleString("en-IN")}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <Button

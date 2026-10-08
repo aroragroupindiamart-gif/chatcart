@@ -2,7 +2,9 @@ import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import { ArrowLeft, ShoppingCart, Plus, Minus, Store, MessageCircle, ZoomIn, Link2, Check } from "lucide-react";
 import { useCart } from "@/contexts/CartContext";
-import { api, imgSrc, formatPrice, type Seller, type Product } from "@/lib/api";
+import { useCurrency } from "@/contexts/CurrencyContext";
+import { CurrencySelector } from "@/components/CurrencySelector";
+import { api, imgSrc, type Seller, type Product } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import CartSheet from "@/components/CartSheet";
@@ -26,6 +28,7 @@ export default function ProductPage() {
   }>();
   const [, navigate] = useLocation();
   const { addToCart, totalItems, initForSeller, setSeller: setCartSeller } = useCart();
+  const { formatPrice, isBaseInr } = useCurrency();
   const { toast } = useToast();
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -198,6 +201,7 @@ export default function ProductPage() {
             >
               {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Link2 className="w-4 h-4 text-muted-foreground" />}
             </button>
+            <CurrencySelector />
             <button
               onClick={() => setCartOpen(true)}
               className="relative p-2 rounded-lg hover:bg-muted transition-colors cursor-pointer"
@@ -289,9 +293,16 @@ export default function ProductPage() {
             </div>
           </div>
           {hasPrice ? (
-            <p className="text-2xl font-bold text-primary">
-              {formatPrice(product.price!)}
-            </p>
+            <div className="space-y-0.5">
+              <p className="text-2xl font-bold text-primary">
+                {formatPrice(product.price!)}
+              </p>
+              {!isBaseInr && (
+                <p className="text-xs text-muted-foreground font-medium">
+                  Base price: ₹{product.price!.toLocaleString("en-IN")}
+                </p>
+              )}
+            </div>
           ) : (
             <p className="text-base text-muted-foreground italic">Price on request</p>
           )}
