@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { CheckCircle, MessageCircle, Store, Loader2, X, AlertTriangle } from "lucide-react";
 import { api, formatPrice, imgSrc, type Order } from "@/lib/api";
+import { buildWhatsAppText, getWhatsAppUrl, formatWhatsAppPhone } from "@/lib/whatsapp";
 import { Button } from "@/components/ui/button";
 import { usePageMeta, absImgUrl } from "@/lib/usePageMeta";
 
@@ -43,82 +44,28 @@ function TappableImage({ src, alt, className }: { src: string; alt: string; clas
   );
 }
 
-function normalizePhone(phone: string | null): string | null {
-  if (!phone) return null;
-  const digits = phone.replace(/\D/g, "");
-  if (digits.length >= 10) return digits;
-  return null;
-}
-
-function buildWhatsAppText(order: Order, orderUrl: string): string {
-  const payableTotal = order.payableTotalAmount ?? order.totalAmount;
-  const lines: string[] = [
-    `Hi! I'd like to confirm my order 🛍️`,
-    ``,
-    `*Order ID:* ${order.id}`,
-    `*Store:* ${order.sellerStoreName ?? ""}`,
-    ``,
-    `*Items:*`,
-  ];
-
-  const maxItems = 5;
-  const itemsToShow = order.items.slice(0, maxItems);
-
-  for (const item of itemsToShow) {
-    const variant = item.variantSnapshot ? ` (${item.variantSnapshot})` : "";
-    if (item.isSoldOut) {
-      lines.push(
-        `• ${item.quantity}× ${item.productNameSnapshot}${variant} (Sold Out) — ₹0.00`
-      );
-    } else {
-      lines.push(
-        `• ${item.quantity}× ${item.productNameSnapshot}${variant} (${formatPrice(item.priceSnapshot)} each) — ${formatPrice(item.priceSnapshot * item.quantity)}`
-      );
-    }
-  }
-
-  if (order.items.length > maxItems) {
-    lines.push(`• ... and ${order.items.length - maxItems} more items`);
-  }
-
-  lines.push(``);
-  const subtotal = order.hasSoldOutItems ? (order.payableSubtotalAmount ?? order.subtotalAmount) : order.subtotalAmount;
-  const gst = order.hasSoldOutItems ? (order.payableGstAmount ?? order.gstAmount) : order.gstAmount;
-  const shipping = order.hasSoldOutItems ? (order.payableShippingAmount ?? order.shippingAmount) : order.shippingAmount;
-  const shippingKg = order.hasSoldOutItems ? (order.payableShippingKg ?? order.shippingKg) : order.shippingKg;
-
-  if (subtotal != null && ((gst != null && gst > 0) || (shipping != null && shipping > 0))) {
-    lines.push(`*Items Subtotal:* ${formatPrice(subtotal)}`);
-    if (gst != null && gst > 0) {
-      const pct = order.gstPercentage ?? 0;
-      lines.push(`*GST (${pct}%):* ${formatPrice(gst)}`);
-    }
-    if (shipping != null && shipping > 0) {
-      const kgText = shippingKg != null && shippingKg > 0 ? ` (${shippingKg} kg shipping)` : "";
-      lines.push(`*Shipping:* ${formatPrice(shipping)}${kgText}`);
-    }
-  }
-
-  lines.push(`*Payable Balance: ${formatPrice(payableTotal)}*`);
-
-  if (order.customerContact) {
-    lines.push(``);
-    lines.push(`*My details:* ${order.customerContact}`);
-  }
-
-  lines.push(``);
-  lines.push(`📸 View order with photos: ${orderUrl}`);
-
-  return lines.join("\n");
-}
-
 export default function OrderConfirmation() {
   const { orderId } = useParams<{ orderId: string }>();
   const [, navigate] = useLocation();
   const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-  const [order, setOrder] = useState<Order | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [order, setOrder] = useState<Order | null>(() => {
+    if (!orderId) return null;
+    try {
+      const cached = sessionStorage.getItem(`chatcart_order_${orderId}`);
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (!orderId) return true;
+    try {
+      return !sessionStorage.getItem(`chatcart_order_${orderId}`);
+    } catch {
+      return true;
+    }
+  });
   const [error, setError] = useState<string | null>(null);
   const autoTriggered = useRef(false);
 
@@ -136,27 +83,41 @@ export default function OrderConfirmation() {
     if (!orderId) return;
     api
       .getOrder(orderId)
-      .then(setOrder)
-      .catch((err) => setError(err.message ?? "Failed to load order"))
+      .then((data) => {
+        setOrder(data);
+        try {
+          sessionStorage.setItem(`chatcart_order_${orderId}`, JSON.stringify(data));
+        } catch {
+          // ignore
+        }
+      })
+      .catch((err) => {
+        if (!order) {
+          setError(err.message ?? "Failed to load order");
+        }
+      })
       .finally(() => setLoading(false));
   }, [orderId]);
 
   useEffect(() => {
     if (!order || autoTriggered.current) return;
     const flagKey = `chatcart_fresh_order_${order.id}`;
-    const isFresh = sessionStorage.getItem(flagKey) === "1";
-    if (!isFresh) return;
+    const freshStatus = sessionStorage.getItem(flagKey);
+    // If flag is "1" (meaning auto-redirect was not completed in checkout), attempt once as fallback
+    if (freshStatus !== "1") return;
     sessionStorage.removeItem(flagKey);
-    const phone = normalizePhone(order.sellerWhatsappNumber);
+    const phone = formatWhatsAppPhone(order.sellerWhatsappNumber);
     if (!phone) return;
     autoTriggered.current = true;
     const orderUrl = `${window.location.origin}${BASE}/orders/${order.id}`;
     const waText = buildWhatsAppText(order, orderUrl);
-    const url = `https://wa.me/${phone}?text=${encodeURIComponent(waText)}`;
-    try {
-      window.location.href = url;
-    } catch {
-      // silently ignored — manual button remains the fallback
+    const url = getWhatsAppUrl(phone, waText);
+    if (url) {
+      try {
+        window.location.href = url;
+      } catch {
+        // silently ignored — manual buttons remain the fallback
+      }
     }
   }, [order, BASE]);
 
@@ -193,12 +154,9 @@ export default function OrderConfirmation() {
     );
   }
 
-  const phone = normalizePhone(order.sellerWhatsappNumber);
   const orderUrl = `${window.location.origin}${BASE}/orders/${order.id}`;
   const waText = buildWhatsAppText(order, orderUrl);
-  const waUrl = phone
-    ? `https://wa.me/${phone}?text=${encodeURIComponent(waText)}`
-    : null;
+  const waUrl = getWhatsAppUrl(order.sellerWhatsappNumber, waText);
 
   const payableTotal = order.payableTotalAmount ?? order.totalAmount;
   const inStockItems = order.items.filter((i) => !i.isSoldOut);
@@ -250,7 +208,7 @@ export default function OrderConfirmation() {
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto px-4 py-8 space-y-6">
+      <main className="max-w-lg mx-auto px-4 py-8 pb-28 sm:pb-12 space-y-6">
         <div className="text-center space-y-2">
           <CheckCircle className="w-14 h-14 text-green-500 mx-auto" />
           <h1 className="text-2xl font-bold">Order details</h1>
@@ -261,6 +219,30 @@ export default function OrderConfirmation() {
             </span>
           </p>
         </div>
+
+        {waUrl && (
+          <div className="bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50 border-2 border-emerald-500/80 rounded-2xl p-4 shadow-sm text-center space-y-3">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold tracking-wide uppercase">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              Final Step: Send on WhatsApp
+            </div>
+            
+            <p className="text-sm text-emerald-950 font-medium leading-relaxed px-1">
+              Your order is recorded! If WhatsApp did not open automatically, tap below to send your order directly to the seller:
+            </p>
+
+            <a
+              href={waUrl}
+              className="flex items-center justify-center gap-2.5 w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold rounded-xl shadow-md transition-all text-sm tracking-wide"
+            >
+              <MessageCircle className="w-5 h-5 fill-current" />
+              Send Order on WhatsApp
+            </a>
+          </div>
+        )}
 
         <div className="bg-card rounded-xl border border-border overflow-hidden">
           <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-center justify-between">
@@ -414,9 +396,9 @@ export default function OrderConfirmation() {
 
         <div className="space-y-3">
           {waUrl ? (
-            <a href={waUrl} target="_blank" rel="noopener noreferrer">
-              <Button className="w-full gap-2 bg-green-500 hover:bg-green-600 border-green-600 text-white">
-                <MessageCircle className="w-4 h-4" />
+            <a href={waUrl}>
+              <Button className="w-full gap-2.5 bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white font-bold py-6 text-base shadow-sm">
+                <MessageCircle className="w-5 h-5 fill-current" />
                 Send order on WhatsApp
               </Button>
             </a>
@@ -441,6 +423,20 @@ export default function OrderConfirmation() {
           </Button>
         </div>
       </main>
+
+      {waUrl && (
+        <div className="fixed bottom-0 inset-x-0 bg-background/95 backdrop-blur-md border-t border-border p-3 z-40 sm:hidden shadow-lg">
+          <div className="max-w-lg mx-auto">
+            <a
+              href={waUrl}
+              className="flex items-center justify-center gap-2 w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white font-bold rounded-xl shadow-md text-sm transition-all"
+            >
+              <MessageCircle className="w-5 h-5 fill-current" />
+              Send Order on WhatsApp
+            </a>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

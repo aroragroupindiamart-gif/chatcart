@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { ArrowLeft, Loader2, Tag, AlertTriangle, TrendingUp, Package } from "lucide-react";
 import { useCart, type CartItem } from "@/contexts/CartContext";
 import { api, formatPrice, imgSrc, type Seller, type Product } from "@/lib/api";
+import { buildWhatsAppText, getWhatsAppUrl } from "@/lib/whatsapp";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -145,6 +146,8 @@ export default function CheckoutPage({ seller, onBack }: CheckoutPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [validation, setValidation] = useState<ValidationResult | null>(null);
 
+  const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
   const placeOrder = async (orderItems: OrderLineItem[]) => {
     setSubmitting(true);
     setError(null);
@@ -155,8 +158,32 @@ export default function CheckoutPage({ seller, onBack }: CheckoutPageProps) {
         items: orderItems,
       });
       clearCart();
-      sessionStorage.setItem(`chatcart_fresh_order_${order.id}`, "1");
+
+      // Pre-cache order so OrderConfirmation renders instantly with zero loading spinner
+      try {
+        sessionStorage.setItem(`chatcart_order_${order.id}`, JSON.stringify(order));
+        sessionStorage.setItem(`chatcart_fresh_order_${order.id}`, "1");
+      } catch {
+        // quota exceeded or disabled
+      }
+
+      // Build WhatsApp URL immediately
+      const orderUrl = `${window.location.origin}${BASE}/orders/${order.id}`;
+      const waText = buildWhatsAppText(order, orderUrl);
+      const targetPhone = order.sellerWhatsappNumber || seller.whatsappNumber;
+      const waUrl = getWhatsAppUrl(targetPhone, waText);
+
+      // Navigate to order confirmation route
       navigate(`/orders/${order.id}`);
+
+      // Immediately redirect while touch gesture token is still valid in modern mobile browsers
+      if (waUrl) {
+        try {
+          window.location.href = waUrl;
+        } catch (e) {
+          console.error("Auto redirect to WhatsApp failed:", e);
+        }
+      }
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to place order. Try again."
