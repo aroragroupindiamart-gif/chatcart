@@ -130,9 +130,13 @@ function OrderDetailContent() {
     if (!order) return;
     setIsRestoring(true);
     try {
+      const token = localStorage.getItem("chatcart_token");
       const res = await fetch(`/api/orders/${order.id}/items`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         credentials: "include",
         body: JSON.stringify({ restoreAll: true }),
       });
@@ -160,6 +164,7 @@ function OrderDetailContent() {
     if (!order) return;
     setIsSavingQuantities(true);
     try {
+      const token = localStorage.getItem("chatcart_token");
       const payload = {
         items: order.items.map((item) => ({
           id: item.id,
@@ -169,7 +174,10 @@ function OrderDetailContent() {
 
       const res = await fetch(`/api/orders/${order.id}/items`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         credentials: "include",
         body: JSON.stringify(payload),
       });
