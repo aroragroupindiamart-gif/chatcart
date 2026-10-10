@@ -177,14 +177,21 @@ export default function OrderConfirmation() {
   const waUrl = getWhatsAppUrl(order.sellerWhatsappNumber, waText);
 
   const payableTotal = order.payableTotalAmount ?? order.totalAmount;
-  const inStockItems = order.items.filter((i) => !i.isSoldOut);
-  const inStockItemsCount = inStockItems.reduce((sum, item) => sum + item.quantity, 0);
+  const inStockItemsCount = order.items.reduce(
+    (sum, item) => sum + (item.effectiveQuantity ?? (item.isSoldOut ? 0 : item.quantity)),
+    0
+  );
   const totalItemsCount = order.items.reduce((sum, item) => sum + item.quantity, 0);
-  const soldOutItems = order.items.filter((i) => i.isSoldOut);
-  const soldOutItemsCount = soldOutItems.reduce((sum, item) => sum + item.quantity, 0);
-  const soldOutItemsTotal = soldOutItems.reduce((sum, item) => sum + item.priceSnapshot * item.quantity, 0);
+  const unavailableItemsCount = totalItemsCount - inStockItemsCount;
+  const unavailableItemsTotal = order.items.reduce(
+    (sum, item) =>
+      sum +
+      item.priceSnapshot *
+        (item.quantity - (item.effectiveQuantity ?? (item.isSoldOut ? 0 : item.quantity))),
+    0
+  );
   const gstDiff = Math.max(0, (order.gstAmount ?? 0) - (order.payableGstAmount ?? 0));
-  const totalDeduction = Math.max(0, order.totalAmount - payableTotal);
+  const totalDeduction = unavailableItemsTotal + gstDiff;
 
   return (
     <div className="min-h-screen bg-background">
@@ -309,11 +316,15 @@ export default function OrderConfirmation() {
                     <span className={item.isSoldOut ? "line-through text-muted-foreground" : ""}>
                       {item.quantity}× {item.productNameSnapshot}
                     </span>
-                    {item.isSoldOut && (
+                    {item.isSoldOut ? (
                       <span className="font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded text-[11px]">
                         (Sold Out)
                       </span>
-                    )}
+                    ) : item.isPartiallyAvailable ? (
+                      <span className="font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded text-[11px]">
+                        ({item.effectiveQuantity} available)
+                      </span>
+                    ) : null}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {formatPrice(item.priceSnapshot)} each
@@ -334,6 +345,15 @@ export default function OrderConfirmation() {
                         ₹0.00
                       </span>
                     </div>
+                  ) : item.isPartiallyAvailable ? (
+                    <div>
+                      <span className="text-xs text-muted-foreground line-through block">
+                        {formatPrice(item.priceSnapshot * item.quantity)}
+                      </span>
+                      <span className="text-sm font-semibold text-emerald-700 block">
+                        {formatPrice(item.priceSnapshot * (item.effectiveQuantity ?? item.quantity))}
+                      </span>
+                    </div>
                   ) : (
                     <span className="text-sm font-semibold">
                       {formatPrice(item.priceSnapshot * item.quantity)}
@@ -350,22 +370,16 @@ export default function OrderConfirmation() {
                     <span>Original Items Total ({totalItemsCount} {totalItemsCount === 1 ? "item" : "items"}):</span>
                     <span className="font-semibold text-foreground">{formatPrice(order.subtotalAmount ?? 0)}</span>
                   </div>
-                  {order.subtotalAmount != null && Boolean((order.gstAmount && order.gstAmount > 0) || (order.shippingAmount && order.shippingAmount > 0)) && (
-                    <div className="flex justify-between items-center text-[11px] text-muted-foreground">
-                      <span>Original Bill (with GST &amp; Shipping):</span>
-                      <span className="line-through">{formatPrice(order.totalAmount)}</span>
-                    </div>
-                  )}
                 </div>
 
                 {/* Deductions Breakdown */}
                 <div className="space-y-1.5 text-xs bg-red-50/80 p-2.5 rounded-lg border border-red-200/80">
                   <div className="font-semibold text-red-900 flex items-center justify-between">
                     <span>Unavailable Items Deduction:</span>
-                    <span>−{formatPrice(soldOutItemsTotal)}</span>
+                    <span>−{formatPrice(unavailableItemsTotal)}</span>
                   </div>
                   <p className="text-[11px] text-red-700">
-                    {soldOutItemsCount} {soldOutItemsCount === 1 ? "item was" : "items were"} out of stock and removed from bill.
+                    {unavailableItemsCount} {unavailableItemsCount === 1 ? "piece was" : "pieces were"} unavailable and removed from bill.
                   </p>
                   {gstDiff > 0 && (
                     <div className="flex justify-between text-red-800 text-[11px] pt-0.5">
@@ -419,7 +433,7 @@ export default function OrderConfirmation() {
                   </div>
                   {totalDeduction > 0 && (
                     <div className="mt-1.5 pt-1.5 border-t border-primary/10 flex items-center justify-between text-[11px] text-emerald-700 font-medium">
-                      <span>Total saved on out-of-stock items:</span>
+                      <span>Total saved on unavailable items:</span>
                       <span className="font-semibold">−{formatPrice(totalDeduction)}</span>
                     </div>
                   )}

@@ -107,6 +107,53 @@ function OrderDetailContent() {
     },
   });
 
+  const [quantities, setQuantities] = useState<Record<number, number>>({});
+  const [isSavingQuantities, setIsSavingQuantities] = useState(false);
+
+  const handleQtyChange = (itemId: number, newQty: number, maxQty: number) => {
+    const clamped = Math.max(0, Math.min(newQty, maxQty));
+    setQuantities((prev) => ({
+      ...prev,
+      [itemId]: clamped,
+    }));
+  };
+
+  const handleSaveQuantities = async () => {
+    if (!order) return;
+    setIsSavingQuantities(true);
+    try {
+      const payload = {
+        items: order.items.map((item) => ({
+          id: item.id,
+          availableQuantity: quantities[item.id] !== undefined ? quantities[item.id] : ((item as any).availableQuantity ?? item.quantity),
+        })),
+      };
+
+      const res = await fetch(`/api/orders/${order.id}/items`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || "Failed to update item quantities");
+      }
+
+      await queryClient.invalidateQueries({ queryKey: getGetOrderQueryKey(orderId) });
+      toast({ title: "Available quantities updated successfully" });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to update item quantities",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingQuantities(false);
+    }
+  };
+
   const updateStatus = useUpdateOrderStatus();
 
   const handleStatusChange = async (newStatus: string) => {
@@ -178,13 +225,23 @@ function OrderDetailContent() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-6">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle>Items</CardTitle>
+              <Button
+                size="sm"
+                onClick={handleSaveQuantities}
+                disabled={isSavingQuantities}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs h-8"
+              >
+                {isSavingQuantities ? "Saving..." : "Save Available Quantities"}
+              </Button>
             </CardHeader>
             <CardContent>
               <div className="divide-y divide-slate-100">
                 {order.items.map((item, idx) => {
                   const isSoldOut = Boolean((item as any).isSoldOut);
+                  const currentAvail = quantities[item.id] !== undefined ? quantities[item.id] : ((item as any).availableQuantity ?? item.quantity);
+                  const isPartiallyAvailable = !isSoldOut && currentAvail < item.quantity;
                   return (
                     <div
                       key={idx}
@@ -201,16 +258,52 @@ function OrderDetailContent() {
                           <p className={`font-medium ${isSoldOut ? "line-through text-slate-500" : "text-slate-900"}`}>
                             {item.productNameSnapshot}
                           </p>
-                          {isSoldOut && (
+                          {isSoldOut ? (
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700">
                               Sold Out ({(item as any).soldOutReason || "Unavailable"})
                             </span>
-                          )}
+                          ) : isPartiallyAvailable ? (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
+                              {currentAvail} of {item.quantity} Available
+                            </span>
+                          ) : null}
                         </div>
                         <p className="text-sm text-slate-500">
                           {item.quantity} × ₹{item.priceSnapshot}
                           {item.variantSnapshot && ` · ${item.variantSnapshot}`}
                         </p>
+
+                        {/* Inline Vendor Available Qty Stepper */}
+                        <div className="flex items-center gap-2 mt-2 pt-1">
+                          <span className="text-xs font-semibold text-slate-600">Available:</span>
+                          <div className="inline-flex items-center border border-slate-300 rounded bg-white shadow-xs">
+                            <button
+                              type="button"
+                              onClick={() => handleQtyChange(item.id, currentAvail - 1, item.quantity)}
+                              disabled={isSavingQuantities || currentAvail <= 0}
+                              className="px-2 py-0.5 text-slate-600 hover:bg-slate-100 disabled:opacity-30 text-xs font-bold"
+                            >
+                              −
+                            </button>
+                            <input
+                              type="number"
+                              min={0}
+                              max={item.quantity}
+                              value={currentAvail}
+                              onChange={(e) => handleQtyChange(item.id, parseInt(e.target.value) || 0, item.quantity)}
+                              className="w-10 text-center text-xs font-bold border-x border-slate-200 py-0.5 focus:outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleQtyChange(item.id, currentAvail + 1, item.quantity)}
+                              disabled={isSavingQuantities || currentAvail >= item.quantity}
+                              className="px-2 py-0.5 text-slate-600 hover:bg-slate-100 disabled:opacity-30 text-xs font-bold"
+                            >
+                              +
+                            </button>
+                          </div>
+                          <span className="text-[11px] text-slate-400">/ {item.quantity} ordered</span>
+                        </div>
                       </div>
                       <div className="text-right shrink-0">
                         {isSoldOut ? (
@@ -220,6 +313,15 @@ function OrderDetailContent() {
                             </span>
                             <span className="text-xs font-bold text-red-600 block">
                               ₹0.00
+                            </span>
+                          </div>
+                        ) : isPartiallyAvailable ? (
+                          <div>
+                            <span className="text-xs line-through text-slate-400 block">
+                              ₹{(item.quantity * item.priceSnapshot).toFixed(2)}
+                            </span>
+                            <span className="text-sm font-bold text-emerald-700 block">
+                              ₹{(currentAvail * item.priceSnapshot).toFixed(2)}
                             </span>
                           </div>
                         ) : (
@@ -239,18 +341,17 @@ function OrderDetailContent() {
                         <span>Original Items Total ({order.items.length} items):</span>
                         <span className="font-semibold text-slate-900">₹{Number((order as any).subtotalAmount || 0).toFixed(2)}</span>
                       </div>
-                      {((order as any).gstAmount > 0 || (order as any).shippingAmount > 0) && (
-                        <div className="flex justify-between items-center text-xs text-slate-400">
-                          <span>Original Bill (with GST &amp; Shipping):</span>
-                          <span className="line-through">₹{Number(order.totalAmount).toFixed(2)}</span>
-                        </div>
-                      )}
                     </div>
 
                     {/* Deductions breakdown */}
                     {(() => {
-                      const soldOutItems = order.items.filter((i: any) => i.isSoldOut);
-                      const soldOutTotal = soldOutItems.reduce((sum: number, i: any) => sum + i.priceSnapshot * i.quantity, 0);
+                      const unavailableItemsTotal = order.items.reduce(
+                        (sum: number, i: any) =>
+                          sum +
+                          i.priceSnapshot *
+                            (i.quantity - (i.effectiveQuantity ?? (i.isSoldOut ? 0 : i.quantity))),
+                        0
+                      );
                       const gstDiff = Math.max(0, Number((order as any).gstAmount || 0) - Number((order as any).payableGstAmount || 0));
                       const totalDiff = Math.max(0, Number(order.totalAmount || 0) - Number((order as any).payableTotalAmount || 0));
 
@@ -258,7 +359,7 @@ function OrderDetailContent() {
                         <div className="bg-red-50 p-2.5 rounded-lg border border-red-100 text-xs space-y-1">
                           <div className="flex justify-between font-semibold text-red-900">
                             <span>Unavailable Items Deducted:</span>
-                            <span>−₹{soldOutTotal.toFixed(2)}</span>
+                            <span>−₹{unavailableItemsTotal.toFixed(2)}</span>
                           </div>
                           {gstDiff > 0 && (
                             <div className="flex justify-between text-red-700 text-[11px]">

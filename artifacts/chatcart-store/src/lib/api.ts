@@ -52,6 +52,9 @@ export interface OrderItem {
   variantSnapshot: string | null;
   productImageSnapshot: string | null;
   quantity: number;
+  availableQuantity?: number | null;
+  effectiveQuantity?: number;
+  isPartiallyAvailable?: boolean;
   isSoldOut?: boolean;
   soldOutReason?: string | null;
 }

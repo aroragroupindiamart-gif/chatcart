@@ -78,6 +78,10 @@ export function buildWhatsAppText(
       lines.push(
         `• ${item.quantity}× ${item.productNameSnapshot}${variant} (Sold Out) — ₹0.00`
       );
+    } else if (item.isPartiallyAvailable) {
+      lines.push(
+        `• ${item.quantity}× ${item.productNameSnapshot}${variant} (${item.effectiveQuantity} available) — ${formatAmt(item.priceSnapshot * (item.effectiveQuantity ?? item.quantity))}`
+      );
     } else {
       lines.push(
         `• ${item.quantity}× ${item.productNameSnapshot}${variant} (${formatUnit(item.priceSnapshot)} each) — ${formatAmt(item.priceSnapshot * item.quantity)}`
@@ -96,17 +100,23 @@ export function buildWhatsAppText(
   const shippingKg = order.hasSoldOutItems ? (order.payableShippingKg ?? order.shippingKg) : order.shippingKg;
 
   if (order.hasSoldOutItems) {
-    const soldOutTotal = order.items
-      .filter((i) => i.isSoldOut)
-      .reduce((sum, i) => sum + i.priceSnapshot * i.quantity, 0);
-    const totalReduction = Math.max(0, order.totalAmount - payableTotal);
+    const unavailableTotal = order.items.reduce(
+      (sum, i) =>
+        sum +
+        i.priceSnapshot *
+          (i.quantity - (i.effectiveQuantity ?? (i.isSoldOut ? 0 : i.quantity))),
+      0
+    );
+    const gstDiff = Math.max(0, (order.gstAmount ?? 0) - (order.payableGstAmount ?? 0));
 
-    lines.push(`*Original Total:* ~${formatAmt(order.totalAmount)}~`);
-    if (soldOutTotal > 0) {
-      lines.push(`*Unavailable Items Deducted:* −${formatAmt(soldOutTotal)}`);
+    if (order.subtotalAmount != null) {
+      lines.push(`*Original Items Subtotal:* ${formatAmt(order.subtotalAmount)}`);
     }
-    if (totalReduction > soldOutTotal) {
-      lines.push(`*GST/Tax Adjustment:* −${formatAmt(totalReduction - soldOutTotal)}`);
+    if (unavailableTotal > 0) {
+      lines.push(`*Unavailable Items Deducted:* −${formatAmt(unavailableTotal)}`);
+    }
+    if (gstDiff > 0) {
+      lines.push(`*GST Adjustment:* −${formatAmt(gstDiff)}`);
     }
     lines.push(``);
     if (subtotal != null) {

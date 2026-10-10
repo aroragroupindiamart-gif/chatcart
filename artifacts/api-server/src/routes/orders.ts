@@ -149,19 +149,23 @@ router.get("/orders/:orderId", requireAuth, requireActiveSubscription, async (re
       .from(productsTable)
       .where(eq(productsTable.sellerId, targetCatalogSellerId));
 
-    const productMap = new Map<string, typeof productsTable.$inferSelect>();
+    // Map products by exact name+price, with name-only fallback
+    const exactProductMap = new Map<string, typeof productsTable.$inferSelect>();
+    const nameProductMap = new Map<string, typeof productsTable.$inferSelect>();
     for (const p of products) {
-      const key = p.name.trim().toLowerCase();
-      const existing = productMap.get(key);
+      const pPrice = p.price != null ? parseFloat(String(p.price)).toFixed(2) : "";
+      const exactKey = `${p.name.trim().toLowerCase()}__${pPrice}`;
+      exactProductMap.set(exactKey, p);
 
+      const nameKey = p.name.trim().toLowerCase();
+      const existing = nameProductMap.get(nameKey);
       if (!existing) {
-        productMap.set(key, p);
+        nameProductMap.set(nameKey, p);
       } else {
         const existingIsActive = existing.status === "active" && existing.deletedAt === null;
         const currentIsActive = p.status === "active" && p.deletedAt === null;
-
         if (!existingIsActive && currentIsActive) {
-          productMap.set(key, p);
+          nameProductMap.set(nameKey, p);
         }
       }
     }
@@ -190,41 +194,55 @@ router.get("/orders/:orderId", requireAuth, requireActiveSubscription, async (re
     let hasSoldOutItems = false;
 
     const enrichedItems = items.map((item) => {
-      const matchedProduct = productMap.get(item.productNameSnapshot.trim().toLowerCase());
+      const itemPriceVal = parseFloat(item.priceSnapshot as unknown as string);
+      const exactKey = `${item.productNameSnapshot.trim().toLowerCase()}__${itemPriceVal.toFixed(2)}`;
+      const nameKey = item.productNameSnapshot.trim().toLowerCase();
+      const matchedProduct = exactProductMap.get(exactKey) ?? nameProductMap.get(nameKey);
 
-      let isSoldOut = false;
+      let isCatalogUnavailable = false;
       let soldOutReason: string | null = null;
 
       if (!matchedProduct) {
-        isSoldOut = true;
+        isCatalogUnavailable = true;
         soldOutReason = "No longer available";
       } else if (matchedProduct.deletedAt !== null || matchedProduct.status === "deleted") {
-        isSoldOut = true;
+        isCatalogUnavailable = true;
         soldOutReason = "Deleted";
       } else if (matchedProduct.status === "hidden") {
-        isSoldOut = true;
+        isCatalogUnavailable = true;
         soldOutReason = "Hidden";
       } else if (matchedProduct.status === "out_of_stock") {
-        isSoldOut = true;
+        isCatalogUnavailable = true;
         soldOutReason = "Out of stock";
       }
 
-      if (isSoldOut) {
+      const orderedQty = item.quantity ?? 1;
+      // Vendor can edit availableQuantity. Null/undefined means defaults to orderedQty.
+      const rawVendorQty = item.availableQuantity != null
+        ? Math.max(0, Math.min(item.availableQuantity, orderedQty))
+        : orderedQty;
+
+      const effectiveQuantity = isCatalogUnavailable ? 0 : rawVendorQty;
+      const isSoldOut = effectiveQuantity === 0;
+
+      if (effectiveQuantity < orderedQty) {
         hasSoldOutItems = true;
-      } else {
-        const itemPrice = parseFloat(item.priceSnapshot as unknown as string);
-        payableSubtotal += itemPrice * (item.quantity ?? 1);
       }
+
+      payableSubtotal += itemPriceVal * effectiveQuantity;
 
       return {
         id: item.id,
         productNameSnapshot: item.productNameSnapshot,
-        priceSnapshot: parseFloat(item.priceSnapshot as unknown as string),
+        priceSnapshot: itemPriceVal,
         variantSnapshot: item.variantSnapshot,
         productImageSnapshot: item.productImageSnapshot ?? null,
-        quantity: item.quantity,
+        quantity: orderedQty,
+        availableQuantity: rawVendorQty,
+        effectiveQuantity,
         isSoldOut,
-        soldOutReason,
+        soldOutReason: isCatalogUnavailable ? soldOutReason : (effectiveQuantity === 0 ? "Unavailable" : null),
+        isPartiallyAvailable: effectiveQuantity > 0 && effectiveQuantity < orderedQty,
       };
     });
 
@@ -255,6 +273,61 @@ router.get("/orders/:orderId", requireAuth, requireActiveSubscription, async (re
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to get order" });
+  }
+});
+
+// PATCH /orders/:orderId/items — vendor adjusts available quantities per line item
+router.patch("/orders/:orderId/items", requireAuth, requireActiveSubscription, async (req, res) => {
+  try {
+    const orderId = String(req.params.orderId);
+    const { items: updates } = req.body as {
+      items: Array<{ id: number; availableQuantity: number }>;
+    };
+
+    if (!Array.isArray(updates)) {
+      res.status(400).json({ error: "items array required" });
+      return;
+    }
+
+    const [order] = await db
+      .select()
+      .from(ordersTable)
+      .where(
+        and(
+          eq(ordersTable.id, orderId),
+          eq(ordersTable.sellerId, req.seller!.sellerId)
+        )
+      )
+      .limit(1);
+
+    if (!order) {
+      res.status(404).json({ error: "Order not found" });
+      return;
+    }
+
+    const existingItems = await db
+      .select()
+      .from(orderItemsTable)
+      .where(eq(orderItemsTable.orderId, order.id));
+
+    const existingMap = new Map(existingItems.map((i) => [i.id, i]));
+
+    for (const u of updates) {
+      const existing = existingMap.get(u.id);
+      if (!existing) continue;
+      const maxQty = existing.quantity ?? 1;
+      const val = Math.max(0, Math.min(Math.floor(Number(u.availableQuantity) || 0), maxQty));
+
+      await db
+        .update(orderItemsTable)
+        .set({ availableQuantity: val })
+        .where(eq(orderItemsTable.id, existing.id));
+    }
+
+    res.json({ success: true, message: "Available quantities updated" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to update item quantities" });
   }
 });
 

@@ -605,7 +605,7 @@ export default function StoreFront() {
         </button>
       )}
 
-      <CartSheet open={cartOpen} onClose={() => setCartOpen(false)} seller={seller} />
+      <CartSheet open={cartOpen} onClose={() => setCartOpen(false)} seller={seller} activeProducts={products} />
       <ImageLightboxModal
         open={lightboxImages.length > 0}
         onClose={() => setLightboxImages([])}

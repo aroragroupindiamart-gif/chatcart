@@ -11,6 +11,7 @@ export const orderItemsTable = pgTable("order_items", {
   variantSnapshot: text("variant_snapshot"),
   productImageSnapshot: text("product_image_snapshot"),
   quantity: integer("quantity").default(1).notNull(),
+  availableQuantity: integer("available_quantity"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
