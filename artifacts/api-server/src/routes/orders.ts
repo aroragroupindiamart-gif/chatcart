@@ -217,15 +217,15 @@ router.get("/orders/:orderId", requireAuth, requireActiveSubscription, async (re
       }
 
       const orderedQty = item.quantity ?? 1;
-      // Vendor can edit availableQuantity. Null/undefined means defaults to orderedQty.
+      // Vendor can edit availableQuantity (reduce or increase). Null/undefined means defaults to orderedQty.
       const rawVendorQty = item.availableQuantity != null
-        ? Math.max(0, Math.min(item.availableQuantity, orderedQty))
+        ? Math.max(0, item.availableQuantity)
         : orderedQty;
 
       const effectiveQuantity = isCatalogUnavailable ? 0 : rawVendorQty;
       const isSoldOut = effectiveQuantity === 0;
 
-      if (effectiveQuantity < orderedQty) {
+      if (effectiveQuantity !== orderedQty) {
         hasSoldOutItems = true;
       }
 
@@ -243,6 +243,7 @@ router.get("/orders/:orderId", requireAuth, requireActiveSubscription, async (re
         isSoldOut,
         soldOutReason: isCatalogUnavailable ? soldOutReason : (effectiveQuantity === 0 ? "Unavailable" : null),
         isPartiallyAvailable: effectiveQuantity > 0 && effectiveQuantity < orderedQty,
+        isIncreasedByVendor: effectiveQuantity > orderedQty,
         isCustomizedByVendor: item.availableQuantity != null && item.availableQuantity !== orderedQty,
       };
     });
@@ -327,10 +328,9 @@ router.patch("/orders/:orderId/items", requireAuth, requireActiveSubscription, a
     for (const u of updates) {
       const existing = existingMap.get(u.id);
       if (!existing) continue;
-      const maxQty = existing.quantity ?? 1;
       const val = (u.availableQuantity === null || u.availableQuantity === undefined)
         ? null
-        : Math.max(0, Math.min(Math.floor(Number(u.availableQuantity) || 0), maxQty));
+        : Math.max(0, Math.floor(Number(u.availableQuantity) || 0));
 
       await db
         .update(orderItemsTable)

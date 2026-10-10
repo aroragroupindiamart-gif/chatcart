@@ -74,14 +74,20 @@ export function buildWhatsAppText(
 
   for (const item of itemsToShow) {
     const variant = item.variantSnapshot ? ` (${item.variantSnapshot})` : "";
-    if (item.isSoldOut) {
+    const eff = item.effectiveQuantity ?? (item.isSoldOut ? 0 : item.quantity);
+    if (item.isSoldOut || eff === 0) {
       lines.push(
         `• ${item.productNameSnapshot}${variant}: Ordered ${item.quantity} → Sold Out (0 Available) — ₹0.00`
       );
-    } else if (item.isPartiallyAvailable) {
-      const shortCount = item.quantity - (item.effectiveQuantity ?? item.quantity);
+    } else if (eff > item.quantity || item.isIncreasedByVendor) {
+      const added = eff - item.quantity;
       lines.push(
-        `• ${item.productNameSnapshot}${variant}: Ordered ${item.quantity} → Available ${item.effectiveQuantity} (${shortCount} short) — ${formatAmt(item.priceSnapshot * (item.effectiveQuantity ?? item.quantity))}`
+        `• ${item.productNameSnapshot}${variant}: Ordered ${item.quantity} → Updated ${eff} (+${added} added) — ${formatAmt(item.priceSnapshot * eff)}`
+      );
+    } else if (item.isPartiallyAvailable || eff < item.quantity) {
+      const shortCount = item.quantity - eff;
+      lines.push(
+        `• ${item.productNameSnapshot}${variant}: Ordered ${item.quantity} → Available ${eff} (${shortCount} short) — ${formatAmt(item.priceSnapshot * eff)}`
       );
     } else {
       lines.push(
@@ -95,20 +101,32 @@ export function buildWhatsAppText(
   }
 
   lines.push(``);
-  const subtotal = order.hasSoldOutItems ? (order.payableSubtotalAmount ?? order.subtotalAmount) : order.subtotalAmount;
-  const gst = order.hasSoldOutItems ? (order.payableGstAmount ?? order.gstAmount) : order.gstAmount;
-  const shipping = order.hasSoldOutItems ? (order.payableShippingAmount ?? order.shippingAmount) : order.shippingAmount;
-  const shippingKg = order.hasSoldOutItems ? (order.payableShippingKg ?? order.shippingKg) : order.shippingKg;
+  let addedTotal = 0;
+  let addedCount = 0;
+  let unavailableTotal = 0;
+  let unavailableCount = 0;
 
-  if (order.hasSoldOutItems) {
-    const unavailableTotal = order.items.reduce(
-      (sum, i) =>
-        sum +
-        i.priceSnapshot *
-          (i.quantity - (i.effectiveQuantity ?? (i.isSoldOut ? 0 : i.quantity))),
-      0
-    );
-    const gstDiff = Math.max(0, (order.gstAmount ?? 0) - (order.payableGstAmount ?? 0));
+  for (const i of order.items) {
+    const eff = i.effectiveQuantity ?? (i.isSoldOut ? 0 : i.quantity);
+    if (eff > i.quantity) {
+      const diff = eff - i.quantity;
+      addedCount += diff;
+      addedTotal += diff * i.priceSnapshot;
+    } else if (eff < i.quantity) {
+      const diff = i.quantity - eff;
+      unavailableCount += diff;
+      unavailableTotal += diff * i.priceSnapshot;
+    }
+  }
+
+  const hasModifications = Boolean(order.hasSoldOutItems || addedTotal > 0 || unavailableTotal > 0);
+  const subtotal = hasModifications ? (order.payableSubtotalAmount ?? order.subtotalAmount) : order.subtotalAmount;
+  const gst = hasModifications ? (order.payableGstAmount ?? order.gstAmount) : order.gstAmount;
+  const shipping = hasModifications ? (order.payableShippingAmount ?? order.shippingAmount) : order.shippingAmount;
+  const shippingKg = hasModifications ? (order.payableShippingKg ?? order.shippingKg) : order.shippingKg;
+
+  if (hasModifications) {
+    const gstDiff = (order.gstAmount ?? 0) - (order.payableGstAmount ?? 0);
 
     if (order.subtotalAmount != null) {
       lines.push(`*Original Items Subtotal:* ${formatAmt(order.subtotalAmount)}`);
@@ -116,12 +134,17 @@ export function buildWhatsAppText(
     if (unavailableTotal > 0) {
       lines.push(`*Unavailable Items Deducted:* −${formatAmt(unavailableTotal)}`);
     }
+    if (addedTotal > 0) {
+      lines.push(`*Additional Items Added:* +${formatAmt(addedTotal)}`);
+    }
     if (gstDiff > 0) {
       lines.push(`*GST Adjustment:* −${formatAmt(gstDiff)}`);
+    } else if (gstDiff < 0) {
+      lines.push(`*GST on Added Items:* +${formatAmt(-gstDiff)}`);
     }
     lines.push(``);
     if (subtotal != null) {
-      lines.push(`*In-Stock Items Subtotal:* ${formatAmt(subtotal)}`);
+      lines.push(`*Updated Items Subtotal:* ${formatAmt(subtotal)}`);
     }
     if (gst != null && gst > 0) {
       const pct = order.gstPercentage ?? 0;

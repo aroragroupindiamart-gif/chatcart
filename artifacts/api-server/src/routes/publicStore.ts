@@ -668,13 +668,13 @@ router.get("/public/orders/:orderId", async (req, res) => {
 
       const orderedQty = item.quantity ?? 1;
       const rawVendorQty = item.availableQuantity != null
-        ? Math.max(0, Math.min(item.availableQuantity, orderedQty))
+        ? Math.max(0, item.availableQuantity)
         : orderedQty;
 
       const effectiveQuantity = isCatalogUnavailable ? 0 : rawVendorQty;
       const isSoldOut = effectiveQuantity === 0;
 
-      if (effectiveQuantity < orderedQty) {
+      if (effectiveQuantity !== orderedQty) {
         hasSoldOutItems = true;
       }
 
@@ -692,6 +692,7 @@ router.get("/public/orders/:orderId", async (req, res) => {
         isSoldOut,
         soldOutReason: isCatalogUnavailable ? soldOutReason : (effectiveQuantity === 0 ? "Unavailable" : null),
         isPartiallyAvailable: effectiveQuantity > 0 && effectiveQuantity < orderedQty,
+        isIncreasedByVendor: effectiveQuantity > orderedQty,
         isCustomizedByVendor: item.availableQuantity != null && item.availableQuantity !== orderedQty,
       };
     });

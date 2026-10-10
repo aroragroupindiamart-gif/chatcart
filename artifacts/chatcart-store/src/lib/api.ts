@@ -58,6 +58,7 @@ export interface OrderItem {
   isSoldOut?: boolean;
   soldOutReason?: string | null;
   isCustomizedByVendor?: boolean;
+  isIncreasedByVendor?: boolean;
 }
 
 export interface Order {

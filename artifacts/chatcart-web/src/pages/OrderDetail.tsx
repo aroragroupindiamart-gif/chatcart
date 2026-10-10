@@ -111,8 +111,8 @@ function OrderDetailContent() {
   const [isSavingQuantities, setIsSavingQuantities] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
 
-  const handleQtyChange = (itemId: number, newQty: number, maxQty: number) => {
-    const clamped = Math.max(0, Math.min(newQty, maxQty));
+  const handleQtyChange = (itemId: number, newQty: number) => {
+    const clamped = Math.max(0, newQty);
     setQuantities((prev) => ({
       ...prev,
       [itemId]: clamped,
@@ -302,6 +302,7 @@ function OrderDetailContent() {
                   const isSoldOut = Boolean((item as any).isSoldOut);
                   const currentAvail = quantities[item.id] !== undefined ? quantities[item.id] : ((item as any).availableQuantity ?? item.quantity);
                   const isPartiallyAvailable = !isSoldOut && currentAvail < item.quantity;
+                  const isIncreased = !isSoldOut && currentAvail > item.quantity;
                   return (
                     <div
                       key={idx}
@@ -322,9 +323,13 @@ function OrderDetailContent() {
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700">
                               Sold Out ({(item as any).soldOutReason || "Unavailable"})
                             </span>
+                          ) : isIncreased ? (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800">
+                              {currentAvail} of {item.quantity} (+{currentAvail - item.quantity} added)
+                            </span>
                           ) : isPartiallyAvailable ? (
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
-                              {currentAvail} of {item.quantity} Available
+                              {currentAvail} of {item.quantity} Available ({item.quantity - currentAvail} short)
                             </span>
                           ) : null}
                         </div>
@@ -339,7 +344,7 @@ function OrderDetailContent() {
                           <div className="inline-flex items-center border border-slate-300 rounded bg-white shadow-xs">
                             <button
                               type="button"
-                              onClick={() => handleQtyChange(item.id, currentAvail - 1, item.quantity)}
+                              onClick={() => handleQtyChange(item.id, currentAvail - 1)}
                               disabled={isSavingQuantities || isRestoring || currentAvail <= 0}
                               className="px-2 py-0.5 text-slate-600 hover:bg-slate-100 disabled:opacity-30 text-xs font-bold"
                             >
@@ -348,15 +353,14 @@ function OrderDetailContent() {
                             <input
                               type="number"
                               min={0}
-                              max={item.quantity}
                               value={currentAvail}
-                              onChange={(e) => handleQtyChange(item.id, parseInt(e.target.value) || 0, item.quantity)}
-                              className="w-10 text-center text-xs font-bold border-x border-slate-200 py-0.5 focus:outline-none"
+                              onChange={(e) => handleQtyChange(item.id, parseInt(e.target.value) || 0)}
+                              className="w-12 text-center text-xs font-bold border-x border-slate-200 py-0.5 focus:outline-none"
                             />
                             <button
                               type="button"
-                              onClick={() => handleQtyChange(item.id, currentAvail + 1, item.quantity)}
-                              disabled={isSavingQuantities || isRestoring || currentAvail >= item.quantity}
+                              onClick={() => handleQtyChange(item.id, currentAvail + 1)}
+                              disabled={isSavingQuantities || isRestoring}
                               className="px-2 py-0.5 text-slate-600 hover:bg-slate-100 disabled:opacity-30 text-xs font-bold"
                             >
                               +
@@ -388,12 +392,12 @@ function OrderDetailContent() {
                               ₹0.00
                             </span>
                           </div>
-                        ) : isPartiallyAvailable ? (
+                        ) : currentAvail !== item.quantity ? (
                           <div>
                             <span className="text-xs line-through text-slate-400 block">
                               ₹{(item.quantity * item.priceSnapshot).toFixed(2)}
                             </span>
-                            <span className="text-sm font-bold text-emerald-700 block">
+                            <span className={`text-sm font-bold block ${currentAvail > item.quantity ? "text-indigo-700" : "text-emerald-700"}`}>
                               ₹{(currentAvail * item.priceSnapshot).toFixed(2)}
                             </span>
                           </div>
@@ -407,109 +411,143 @@ function OrderDetailContent() {
                   );
                 })}
 
-                {(order as any).hasSoldOutItems ? (
-                  <div className="pt-4 border-t border-slate-100 space-y-3">
-                    <div className="space-y-1 text-sm text-slate-500 pb-2 border-b border-slate-100">
-                      <div className="flex justify-between items-center">
-                        <span>Original Items Total ({order.items.length} items):</span>
-                        <span className="font-semibold text-slate-900">₹{Number((order as any).subtotalAmount || 0).toFixed(2)}</span>
-                      </div>
-                    </div>
+                {(() => {
+                  let addedTotal = 0;
+                  let addedCount = 0;
+                  let unavailableTotal = 0;
+                  let unavailableCount = 0;
 
-                    {/* Deductions breakdown */}
-                    {(() => {
-                      const unavailableItemsTotal = order.items.reduce(
-                        (sum: number, i: any) =>
-                          sum +
-                          i.priceSnapshot *
-                            (i.quantity - (i.effectiveQuantity ?? (i.isSoldOut ? 0 : i.quantity))),
-                        0
-                      );
-                      const gstDiff = Math.max(0, Number((order as any).gstAmount || 0) - Number((order as any).payableGstAmount || 0));
-                      const totalDiff = Math.max(0, Number(order.totalAmount || 0) - Number((order as any).payableTotalAmount || 0));
+                  for (const i of order.items as any[]) {
+                    const eff = i.effectiveQuantity ?? (i.isSoldOut ? 0 : i.quantity);
+                    if (eff > i.quantity) {
+                      const diff = eff - i.quantity;
+                      addedCount += diff;
+                      addedTotal += diff * i.priceSnapshot;
+                    } else if (eff < i.quantity) {
+                      const diff = i.quantity - eff;
+                      unavailableCount += diff;
+                      unavailableTotal += diff * i.priceSnapshot;
+                    }
+                  }
 
-                      return (
-                        <div className="bg-red-50 p-2.5 rounded-lg border border-red-100 text-xs space-y-1">
-                          <div className="flex justify-between font-semibold text-red-900">
-                            <span>Unavailable Items Deducted:</span>
-                            <span>−₹{unavailableItemsTotal.toFixed(2)}</span>
+                  const hasChanges = Boolean((order as any).hasSoldOutItems || addedTotal > 0 || unavailableTotal > 0);
+                  const originalSub = Number((order as any).subtotalAmount || 0);
+                  const payableSub = Number((order as any).payableSubtotalAmount ?? originalSub);
+                  const gstDiff = Number((order as any).gstAmount || 0) - Number((order as any).payableGstAmount || 0);
+
+                  if (hasChanges) {
+                    return (
+                      <div className="pt-4 border-t border-slate-100 space-y-3">
+                        <div className="space-y-1 text-sm text-slate-500 pb-2 border-b border-slate-100">
+                          <div className="flex justify-between items-center">
+                            <span>Original Items Total ({order.items.length} items):</span>
+                            <span className="font-semibold text-slate-900">₹{originalSub.toFixed(2)}</span>
                           </div>
-                          {gstDiff > 0 && (
-                            <div className="flex justify-between text-red-700 text-[11px]">
-                              <span>GST Refund on unavailable items:</span>
-                              <span>−₹{gstDiff.toFixed(2)}</span>
+                        </div>
+
+                        {/* Adjustments breakdown */}
+                        <div className="space-y-1.5 text-xs">
+                          {unavailableTotal > 0 && (
+                            <div className="bg-red-50 p-2.5 rounded-lg border border-red-100 space-y-1">
+                              <div className="flex justify-between font-semibold text-red-900">
+                                <span>Unavailable Items Deducted ({unavailableCount} pcs):</span>
+                                <span>−₹{unavailableTotal.toFixed(2)}</span>
+                              </div>
+                              {gstDiff > 0 && (
+                                <div className="flex justify-between text-red-700 text-[11px]">
+                                  <span>GST Refund on unavailable items:</span>
+                                  <span>−₹{gstDiff.toFixed(2)}</span>
+                                </div>
+                              )}
                             </div>
                           )}
-                          <div className="pt-1 border-t border-red-200/60 flex justify-between font-medium text-emerald-800 text-[11px]">
-                            <span>Total Bill Reduction:</span>
-                            <span>−₹{totalDiff.toFixed(2)}</span>
+
+                          {addedTotal > 0 && (
+                            <div className="bg-indigo-50 p-2.5 rounded-lg border border-indigo-100 space-y-1">
+                              <div className="flex justify-between font-semibold text-indigo-900">
+                                <span>Additional Items Added ({addedCount} pcs):</span>
+                                <span>+₹{addedTotal.toFixed(2)}</span>
+                              </div>
+                              {gstDiff < 0 && (
+                                <div className="flex justify-between text-indigo-700 text-[11px]">
+                                  <span>GST on additional items:</span>
+                                  <span>+₹{(-gstDiff).toFixed(2)}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* In-stock items subtotal & taxes */}
+                        <div className="space-y-1.5 text-sm text-slate-500 pt-1">
+                          <div className="flex justify-between items-center">
+                            <span>In-Stock Items Subtotal</span>
+                            <span className="font-medium text-slate-900">₹{payableSub.toFixed(2)}</span>
                           </div>
                         </div>
-                      );
-                    })()}
+                        {(order as any).payableGstAmount != null && (order as any).payableGstAmount > 0 && (
+                          <div className="flex justify-between items-center">
+                            <span>GST ({(order as any).gstPercentage}%)</span>
+                            <span className="font-medium text-slate-900">₹{Number((order as any).payableGstAmount).toFixed(2)}</span>
+                          </div>
+                        )}
+                        {(order as any).payableShippingAmount != null && (order as any).payableShippingAmount > 0 && (
+                          <div className="flex justify-between items-center">
+                            <span>Shipping ({(order as any).payableShippingKg ?? 1} kg shipping)</span>
+                            <span className="font-medium text-slate-900">₹{Number((order as any).payableShippingAmount).toFixed(2)}</span>
+                          </div>
+                        )}
 
-                    {/* In-stock items subtotal & taxes */}
-                    <div className="space-y-1.5 text-sm text-slate-500 pt-1">
-                      <div className="flex justify-between items-center">
-                        <span>In-Stock Items Subtotal</span>
-                        <span className="font-medium text-slate-900">₹{Number((order as any).payableSubtotalAmount).toFixed(2)}</span>
+                        {/* Final Payable Total Banner */}
+                        <div className="pt-3 border-t-2 border-primary/20 bg-primary/5 -mx-6 -mb-6 p-4 rounded-b-lg">
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <span className="text-base font-bold text-slate-900 block">Final Payable Balance</span>
+                              <span className="text-xs text-slate-500">Amount customer will pay for in-stock items</span>
+                            </div>
+                            <span className="text-xl font-extrabold text-primary">
+                              ₹{Number((order as any).payableTotalAmount).toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      {(order as any).payableGstAmount != null && (order as any).payableGstAmount > 0 && (
-                        <div className="flex justify-between items-center">
-                          <span>GST ({(order as any).gstPercentage}%)</span>
-                          <span className="font-medium text-slate-900">₹{Number((order as any).payableGstAmount).toFixed(2)}</span>
-                        </div>
-                      )}
-                      {(order as any).payableShippingAmount != null && (order as any).payableShippingAmount > 0 && (
-                        <div className="flex justify-between items-center">
-                          <span>Shipping ({(order as any).payableShippingKg ?? 1} kg shipping)</span>
-                          <span className="font-medium text-slate-900">₹{Number((order as any).payableShippingAmount).toFixed(2)}</span>
-                        </div>
-                      )}
-                    </div>
+                    );
+                  }
 
-                    {/* Final Payable Total Banner */}
-                    <div className="pt-3 border-t-2 border-primary/20 bg-primary/5 -mx-6 -mb-6 p-4 rounded-b-lg">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <span className="text-base font-bold text-slate-900 block">Final Payable Balance</span>
-                          <span className="text-xs text-slate-500">Amount customer will pay for in-stock items</span>
+                  if ((order as any).subtotalAmount != null && ((order as any).gstAmount > 0 || (order as any).shippingAmount > 0)) {
+                    return (
+                      <div className="pt-4 border-t border-slate-100 space-y-2">
+                        <div className="flex justify-between items-center text-sm text-slate-500">
+                          <span>Items Subtotal</span>
+                          <span>₹{Number((order as any).subtotalAmount).toFixed(2)}</span>
                         </div>
-                        <span className="text-xl font-extrabold text-primary">
-                          ₹{Number((order as any).payableTotalAmount).toFixed(2)}
-                        </span>
+                        {(order as any).gstAmount != null && (order as any).gstAmount > 0 && (
+                          <div className="flex justify-between items-center text-sm text-slate-500">
+                            <span>GST ({(order as any).gstPercentage}%)</span>
+                            <span>₹{Number((order as any).gstAmount).toFixed(2)}</span>
+                          </div>
+                        )}
+                        {(order as any).shippingAmount != null && (order as any).shippingAmount > 0 && (
+                          <div className="flex justify-between items-center text-sm text-slate-500">
+                            <span>Shipping ({(order as any).shippingKg ?? 1} kg shipping)</span>
+                            <span>₹{Number((order as any).shippingAmount).toFixed(2)}</span>
+                          </div>
+                        )}
+                        <div className="pt-2 flex justify-between items-center text-lg font-bold text-slate-900 border-t border-slate-100">
+                          <span>Total</span>
+                          <span>₹{order.totalAmount}</span>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                ) : (order as any).subtotalAmount != null && ((order as any).gstAmount > 0 || (order as any).shippingAmount > 0) ? (
-                  <div className="pt-4 border-t border-slate-100 space-y-2">
-                    <div className="flex justify-between items-center text-sm text-slate-500">
-                      <span>Items Subtotal</span>
-                      <span>₹{Number((order as any).subtotalAmount).toFixed(2)}</span>
-                    </div>
-                    {(order as any).gstAmount != null && (order as any).gstAmount > 0 && (
-                      <div className="flex justify-between items-center text-sm text-slate-500">
-                        <span>GST ({(order as any).gstPercentage}%)</span>
-                        <span>₹{Number((order as any).gstAmount).toFixed(2)}</span>
-                      </div>
-                    )}
-                    {(order as any).shippingAmount != null && (order as any).shippingAmount > 0 && (
-                      <div className="flex justify-between items-center text-sm text-slate-500">
-                        <span>Shipping ({(order as any).shippingKg ?? 1} kg shipping)</span>
-                        <span>₹{Number((order as any).shippingAmount).toFixed(2)}</span>
-                      </div>
-                    )}
-                    <div className="pt-2 flex justify-between items-center text-lg font-bold text-slate-900 border-t border-slate-100">
+                    );
+                  }
+
+                  return (
+                    <div className="pt-4 flex justify-between items-center text-lg font-bold text-slate-900 border-t border-slate-100">
                       <span>Total</span>
                       <span>₹{order.totalAmount}</span>
                     </div>
-                  </div>
-                ) : (
-                  <div className="pt-4 flex justify-between items-center text-lg font-bold text-slate-900 border-t border-slate-100">
-                    <span>Total</span>
-                    <span>₹{order.totalAmount}</span>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             </CardContent>
           </Card>
