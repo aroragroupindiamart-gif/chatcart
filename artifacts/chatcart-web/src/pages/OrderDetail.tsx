@@ -183,32 +183,123 @@ function OrderDetailContent() {
             </CardHeader>
             <CardContent>
               <div className="divide-y divide-slate-100">
-                {order.items.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="py-4 first:pt-0 last:pb-0 flex gap-3 items-start"
-                  >
-                    {item.productImageSnapshot && (
-                      <ProductImage
-                        url={item.productImageSnapshot}
-                        name={item.productNameSnapshot}
-                      />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-slate-900">
-                        {item.productNameSnapshot}
-                      </p>
-                      <p className="text-sm text-slate-500">
-                        {item.quantity} × ₹{item.priceSnapshot}
-                        {item.variantSnapshot && ` · ${item.variantSnapshot}`}
-                      </p>
+                {order.items.map((item, idx) => {
+                  const isSoldOut = Boolean((item as any).isSoldOut);
+                  return (
+                    <div
+                      key={idx}
+                      className={`py-4 first:pt-0 last:pb-0 flex gap-3 items-start ${isSoldOut ? "opacity-60 bg-red-50/40 p-2 rounded-lg" : ""}`}
+                    >
+                      {item.productImageSnapshot && (
+                        <ProductImage
+                          url={item.productImageSnapshot}
+                          name={item.productNameSnapshot}
+                        />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className={`font-medium ${isSoldOut ? "line-through text-slate-500" : "text-slate-900"}`}>
+                            {item.productNameSnapshot}
+                          </p>
+                          {isSoldOut && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700">
+                              Sold Out ({(item as any).soldOutReason || "Unavailable"})
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-slate-500">
+                          {item.quantity} × ₹{item.priceSnapshot}
+                          {item.variantSnapshot && ` · ${item.variantSnapshot}`}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        {isSoldOut ? (
+                          <div>
+                            <span className="text-xs line-through text-slate-400 block">
+                              ₹{(item.quantity * item.priceSnapshot).toFixed(2)}
+                            </span>
+                            <span className="text-xs font-bold text-red-600 block">
+                              ₹0.00
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="font-bold text-slate-900">
+                            ₹{(item.quantity * item.priceSnapshot).toFixed(2)}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div className="font-bold text-slate-900 shrink-0">
-                      ₹{(item.quantity * item.priceSnapshot).toFixed(2)}
+                  );
+                })}
+
+                {(order as any).hasSoldOutItems ? (
+                  <div className="pt-4 border-t border-slate-100 space-y-3">
+                    <div className="flex justify-between items-center text-sm text-slate-500">
+                      <span>Original Total ({order.items.length} items)</span>
+                      <span className="line-through">₹{Number(order.totalAmount).toFixed(2)}</span>
+                    </div>
+
+                    {/* Deductions breakdown */}
+                    {(() => {
+                      const soldOutItems = order.items.filter((i: any) => i.isSoldOut);
+                      const soldOutTotal = soldOutItems.reduce((sum: number, i: any) => sum + i.priceSnapshot * i.quantity, 0);
+                      const gstDiff = Math.max(0, Number((order as any).gstAmount || 0) - Number((order as any).payableGstAmount || 0));
+                      const totalDiff = Math.max(0, Number(order.totalAmount || 0) - Number((order as any).payableTotalAmount || 0));
+
+                      return (
+                        <div className="bg-red-50 p-2.5 rounded-lg border border-red-100 text-xs space-y-1">
+                          <div className="flex justify-between font-semibold text-red-900">
+                            <span>Unavailable Items Deducted:</span>
+                            <span>−₹{soldOutTotal.toFixed(2)}</span>
+                          </div>
+                          {gstDiff > 0 && (
+                            <div className="flex justify-between text-red-700 text-[11px]">
+                              <span>GST Refund on unavailable items:</span>
+                              <span>−₹{gstDiff.toFixed(2)}</span>
+                            </div>
+                          )}
+                          <div className="pt-1 border-t border-red-200/60 flex justify-between font-medium text-emerald-800 text-[11px]">
+                            <span>Total Bill Reduction:</span>
+                            <span>−₹{totalDiff.toFixed(2)}</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* In-stock items subtotal & taxes */}
+                    <div className="space-y-1.5 text-sm text-slate-500 pt-1">
+                      <div className="flex justify-between items-center">
+                        <span>In-Stock Items Subtotal</span>
+                        <span className="font-medium text-slate-900">₹{Number((order as any).payableSubtotalAmount).toFixed(2)}</span>
+                      </div>
+                      {(order as any).payableGstAmount != null && (order as any).payableGstAmount > 0 && (
+                        <div className="flex justify-between items-center">
+                          <span>GST ({(order as any).gstPercentage}%)</span>
+                          <span className="font-medium text-slate-900">₹{Number((order as any).payableGstAmount).toFixed(2)}</span>
+                        </div>
+                      )}
+                      {(order as any).payableShippingAmount != null && (order as any).payableShippingAmount > 0 && (
+                        <div className="flex justify-between items-center">
+                          <span>Shipping ({(order as any).payableShippingKg ?? 1} kg shipping)</span>
+                          <span className="font-medium text-slate-900">₹{Number((order as any).payableShippingAmount).toFixed(2)}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Final Payable Total Banner */}
+                    <div className="pt-3 border-t-2 border-primary/20 bg-primary/5 -mx-6 -mb-6 p-4 rounded-b-lg">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <span className="text-base font-bold text-slate-900 block">Final Payable Balance</span>
+                          <span className="text-xs text-slate-500">Amount customer will pay for in-stock items</span>
+                        </div>
+                        <span className="text-xl font-extrabold text-primary">
+                          ₹{Number((order as any).payableTotalAmount).toFixed(2)}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                ))}
-                {(order as any).subtotalAmount != null && ((order as any).gstAmount > 0 || (order as any).shippingAmount > 0) ? (
+                ) : (order as any).subtotalAmount != null && ((order as any).gstAmount > 0 || (order as any).shippingAmount > 0) ? (
                   <div className="pt-4 border-t border-slate-100 space-y-2">
                     <div className="flex justify-between items-center text-sm text-slate-500">
                       <span>Items Subtotal</span>

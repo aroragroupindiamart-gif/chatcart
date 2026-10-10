@@ -180,6 +180,11 @@ export default function OrderConfirmation() {
   const inStockItems = order.items.filter((i) => !i.isSoldOut);
   const inStockItemsCount = inStockItems.reduce((sum, item) => sum + item.quantity, 0);
   const totalItemsCount = order.items.reduce((sum, item) => sum + item.quantity, 0);
+  const soldOutItems = order.items.filter((i) => i.isSoldOut);
+  const soldOutItemsCount = soldOutItems.reduce((sum, item) => sum + item.quantity, 0);
+  const soldOutItemsTotal = soldOutItems.reduce((sum, item) => sum + item.priceSnapshot * item.quantity, 0);
+  const gstDiff = Math.max(0, (order.gstAmount ?? 0) - (order.payableGstAmount ?? 0));
+  const totalDeduction = Math.max(0, order.totalAmount - payableTotal);
 
   return (
     <div className="min-h-screen bg-background">
@@ -339,43 +344,77 @@ export default function OrderConfirmation() {
             ))}
 
             {order.hasSoldOutItems ? (
-              <div className="px-4 py-3 bg-muted/30 space-y-1.5 text-sm">
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>Original Total ({totalItemsCount} {totalItemsCount === 1 ? "item" : "items"})</span>
-                  <span className="line-through">{formatPrice(order.totalAmount)}</span>
+              <div className="px-4 py-3 bg-muted/30 space-y-2.5 text-sm">
+                <div className="flex justify-between items-center text-xs text-muted-foreground pb-2 border-b border-border/60">
+                  <span className="font-medium">Original Order Total ({totalItemsCount} {totalItemsCount === 1 ? "item" : "items"})</span>
+                  <span className="line-through font-semibold text-foreground/75">{formatPrice(order.totalAmount)}</span>
                 </div>
-                {order.payableSubtotalAmount != null && (
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>In-Stock Subtotal</span>
-                    <span>{formatPrice(order.payableSubtotalAmount)}</span>
+
+                {/* Deductions Breakdown */}
+                <div className="space-y-1.5 text-xs bg-red-50/80 p-2.5 rounded-lg border border-red-200/80">
+                  <div className="font-semibold text-red-900 flex items-center justify-between">
+                    <span>Unavailable Items Deduction:</span>
+                    <span>−{formatPrice(soldOutItemsTotal)}</span>
                   </div>
-                )}
-                {order.payableGstAmount != null && order.payableGstAmount > 0 && (
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>GST ({order.gstPercentage}%)</span>
-                    <span>{formatPrice(order.payableGstAmount)}</span>
+                  <p className="text-[11px] text-red-700">
+                    {soldOutItemsCount} {soldOutItemsCount === 1 ? "item was" : "items were"} out of stock and removed from bill.
+                  </p>
+                  {gstDiff > 0 && (
+                    <div className="flex justify-between text-red-800 text-[11px] pt-0.5">
+                      <span>GST Refund on unavailable items:</span>
+                      <span>−{formatPrice(gstDiff)}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* In-Stock Items Breakdown */}
+                <div className="space-y-1 text-xs text-muted-foreground pt-1">
+                  <div className="flex justify-between">
+                    <span>In-Stock Items Subtotal ({inStockItemsCount} items):</span>
+                    <span className="font-medium text-foreground">{formatPrice(order.payableSubtotalAmount ?? 0)}</span>
                   </div>
-                )}
-                {order.payableShippingAmount != null && order.payableShippingAmount > 0 && (
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>Shipping ({order.payableShippingKg ?? 1} kg shipping)</span>
-                    <span>{formatPrice(order.payableShippingAmount)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between items-center text-sm pt-1 border-t border-border/60">
-                  <span className="font-bold text-foreground">
-                    Payable Balance ({inStockItemsCount} in-stock {inStockItemsCount === 1 ? "item" : "items"})
-                  </span>
-                  <div className="text-right">
-                    <span className="font-extrabold text-primary text-base">
-                      {formatPrice(payableTotal)}
-                    </span>
-                    {!isBaseInr && (
-                      <span className="block text-[11px] text-muted-foreground font-normal">
-                        (~ {formatInr(payableTotal)})
+                  {order.payableGstAmount != null && order.payableGstAmount > 0 && (
+                    <div className="flex justify-between">
+                      <span>GST ({order.gstPercentage}%):</span>
+                      <span className="font-medium text-foreground">{formatPrice(order.payableGstAmount)}</span>
+                    </div>
+                  )}
+                  {order.payableShippingAmount != null && order.payableShippingAmount > 0 && (
+                    <div className="flex justify-between">
+                      <span>Shipping ({order.payableShippingKg ?? 1} kg shipping):</span>
+                      <span className="font-medium text-foreground">{formatPrice(order.payableShippingAmount)}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Final Payable Total Banner */}
+                <div className="pt-2 border-t-2 border-primary/20 bg-primary/5 -mx-4 -mb-3 p-3 px-4 rounded-b-xl">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <span className="font-bold text-sm text-foreground block">
+                        Final Payable Balance
                       </span>
-                    )}
+                      <span className="text-[11px] text-muted-foreground">
+                        Total for available {inStockItemsCount} items
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-extrabold text-primary text-base">
+                        {formatPrice(payableTotal)}
+                      </span>
+                      {!isBaseInr && (
+                        <span className="block text-[11px] text-muted-foreground font-normal">
+                          (~ {formatInr(payableTotal)})
+                        </span>
+                      )}
+                    </div>
                   </div>
+                  {totalDeduction > 0 && (
+                    <div className="mt-1.5 pt-1.5 border-t border-primary/10 flex items-center justify-between text-[11px] text-emerald-700 font-medium">
+                      <span>Total saved on out-of-stock items:</span>
+                      <span className="font-semibold">−{formatPrice(totalDeduction)}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (

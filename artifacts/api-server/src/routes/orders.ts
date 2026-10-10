@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { ordersTable, orderItemsTable, sellersTable } from "@workspace/db/schema";
+import { ordersTable, orderItemsTable, sellersTable, productsTable } from "@workspace/db/schema";
 import { eq, and, desc, count, inArray, gte, lte } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.js";
 import { getSellerPlan, getPlanLimits, requireActiveSubscription } from "../lib/planLimits.js";
@@ -134,11 +134,37 @@ router.get("/orders/:orderId", requireAuth, requireActiveSubscription, async (re
           enableShipping: sellersTable.enableShipping,
           shippingRatePerKg: sellersTable.shippingRatePerKg,
           shippingAmountPerKgStep: sellersTable.shippingAmountPerKgStep,
+          parentSellerId: sellersTable.parentSellerId,
         })
         .from(sellersTable)
         .where(eq(sellersTable.id, req.seller!.sellerId))
         .limit(1),
     ]);
+
+    const targetCatalogSellerId = seller?.parentSellerId ?? req.seller!.sellerId;
+
+    // Fetch all products for this seller (or parent seller if child store) to crosscheck status
+    const products = await db
+      .select()
+      .from(productsTable)
+      .where(eq(productsTable.sellerId, targetCatalogSellerId));
+
+    const productMap = new Map<string, typeof productsTable.$inferSelect>();
+    for (const p of products) {
+      const key = p.name.trim().toLowerCase();
+      const existing = productMap.get(key);
+
+      if (!existing) {
+        productMap.set(key, p);
+      } else {
+        const existingIsActive = existing.status === "active" && existing.deletedAt === null;
+        const currentIsActive = p.status === "active" && p.deletedAt === null;
+
+        if (!existingIsActive && currentIsActive) {
+          productMap.set(key, p);
+        }
+      }
+    }
 
     const subtotal = items.reduce(
       (sum, item) => sum + parseFloat(item.priceSnapshot as unknown as string) * (item.quantity ?? 1),
@@ -146,18 +172,65 @@ router.get("/orders/:orderId", requireAuth, requireActiveSubscription, async (re
     );
 
     const gstPct = (seller?.enableGst && seller?.gstPercentage != null) ? parseFloat(seller.gstPercentage) : 0;
-    const gstAmount = gstPct > 0 ? (subtotal * gstPct) / 100 : 0;
+    const originalGst = gstPct > 0 ? (subtotal * gstPct) / 100 : 0;
 
     const enableShipping = Boolean(seller?.enableShipping);
     const ratePerKg = seller?.shippingRatePerKg != null ? parseFloat(seller.shippingRatePerKg) : 0;
     const stepAmount = seller?.shippingAmountPerKgStep != null ? parseFloat(seller.shippingAmountPerKgStep) : 0;
 
-    let shippingAmount = 0;
-    let shippingKg = 0;
-    if (enableShipping && ratePerKg > 0 && subtotal > 0) {
-      shippingKg = stepAmount > 0 ? Math.max(1, Math.ceil(subtotal / stepAmount)) : 1;
-      shippingAmount = shippingKg * ratePerKg;
-    }
+    const computeShipping = (amt: number) => {
+      if (!enableShipping || ratePerKg <= 0 || amt <= 0) return { fee: 0, kg: 0 };
+      const kg = stepAmount > 0 ? Math.max(1, Math.ceil(amt / stepAmount)) : 1;
+      return { fee: parseFloat((kg * ratePerKg).toFixed(2)), kg };
+    };
+
+    const { fee: originalShipping, kg: originalKg } = computeShipping(subtotal);
+
+    let payableSubtotal = 0;
+    let hasSoldOutItems = false;
+
+    const enrichedItems = items.map((item) => {
+      const matchedProduct = productMap.get(item.productNameSnapshot.trim().toLowerCase());
+
+      let isSoldOut = false;
+      let soldOutReason: string | null = null;
+
+      if (!matchedProduct) {
+        isSoldOut = true;
+        soldOutReason = "No longer available";
+      } else if (matchedProduct.deletedAt !== null || matchedProduct.status === "deleted") {
+        isSoldOut = true;
+        soldOutReason = "Deleted";
+      } else if (matchedProduct.status === "hidden") {
+        isSoldOut = true;
+        soldOutReason = "Hidden";
+      } else if (matchedProduct.status === "out_of_stock") {
+        isSoldOut = true;
+        soldOutReason = "Out of stock";
+      }
+
+      if (isSoldOut) {
+        hasSoldOutItems = true;
+      } else {
+        const itemPrice = parseFloat(item.priceSnapshot as unknown as string);
+        payableSubtotal += itemPrice * (item.quantity ?? 1);
+      }
+
+      return {
+        id: item.id,
+        productNameSnapshot: item.productNameSnapshot,
+        priceSnapshot: parseFloat(item.priceSnapshot as unknown as string),
+        variantSnapshot: item.variantSnapshot,
+        productImageSnapshot: item.productImageSnapshot ?? null,
+        quantity: item.quantity,
+        isSoldOut,
+        soldOutReason,
+      };
+    });
+
+    const payableGst = gstPct > 0 && payableSubtotal > 0 ? parseFloat(((payableSubtotal * gstPct) / 100).toFixed(2)) : 0;
+    const { fee: payableShipping, kg: payableKg } = computeShipping(payableSubtotal);
+    const payableTotalAmount = payableSubtotal > 0 ? parseFloat((payableSubtotal + payableGst + payableShipping).toFixed(2)) : 0;
 
     res.json({
       id: order.id,
@@ -166,19 +239,18 @@ router.get("/orders/:orderId", requireAuth, requireActiveSubscription, async (re
       totalAmount: parseFloat(order.totalAmount as unknown as string),
       subtotalAmount: parseFloat(subtotal.toFixed(2)),
       gstPercentage: gstPct,
-      gstAmount: parseFloat(gstAmount.toFixed(2)),
-      shippingAmount: parseFloat(shippingAmount.toFixed(2)),
-      shippingKg,
+      gstAmount: parseFloat(originalGst.toFixed(2)),
+      shippingAmount: originalShipping,
+      shippingKg: originalKg,
+      payableSubtotalAmount: parseFloat(payableSubtotal.toFixed(2)),
+      payableGstAmount: payableGst,
+      payableShippingAmount: payableShipping,
+      payableShippingKg: payableKg,
+      payableTotalAmount,
+      hasSoldOutItems,
       itemCount: items.length,
       createdAt: order.createdAt,
-      items: items.map((item) => ({
-        id: item.id,
-        productNameSnapshot: item.productNameSnapshot,
-        priceSnapshot: parseFloat(item.priceSnapshot as unknown as string),
-        variantSnapshot: item.variantSnapshot,
-        productImageSnapshot: item.productImageSnapshot ?? null,
-        quantity: item.quantity,
-      })),
+      items: enrichedItems,
     });
   } catch (err) {
     console.error(err);

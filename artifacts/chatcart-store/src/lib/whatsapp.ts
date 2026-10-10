@@ -95,19 +95,47 @@ export function buildWhatsAppText(
   const shipping = order.hasSoldOutItems ? (order.payableShippingAmount ?? order.shippingAmount) : order.shippingAmount;
   const shippingKg = order.hasSoldOutItems ? (order.payableShippingKg ?? order.shippingKg) : order.shippingKg;
 
-  if (subtotal != null && ((gst != null && gst > 0) || (shipping != null && shipping > 0))) {
-    lines.push(`*Items Subtotal:* ${formatAmt(subtotal)}`);
+  if (order.hasSoldOutItems) {
+    const soldOutTotal = order.items
+      .filter((i) => i.isSoldOut)
+      .reduce((sum, i) => sum + i.priceSnapshot * i.quantity, 0);
+    const totalReduction = Math.max(0, order.totalAmount - payableTotal);
+
+    lines.push(`*Original Total:* ~${formatAmt(order.totalAmount)}~`);
+    if (soldOutTotal > 0) {
+      lines.push(`*Unavailable Items Deducted:* −${formatAmt(soldOutTotal)}`);
+    }
+    if (totalReduction > soldOutTotal) {
+      lines.push(`*GST/Tax Adjustment:* −${formatAmt(totalReduction - soldOutTotal)}`);
+    }
+    lines.push(``);
+    if (subtotal != null) {
+      lines.push(`*In-Stock Items Subtotal:* ${formatAmt(subtotal)}`);
+    }
     if (gst != null && gst > 0) {
       const pct = order.gstPercentage ?? 0;
       lines.push(`*GST (${pct}%):* ${formatAmt(gst)}`);
     }
     if (shipping != null && shipping > 0) {
-      const kgText = shippingKg != null && shippingKg > 0 ? ` (${shippingKg} kg shipping)` : "";
+      const kgText = shippingKg != null && shippingKg > 0 ? ` (${shippingKg} kg)` : "";
       lines.push(`*Shipping:* ${formatAmt(shipping)}${kgText}`);
     }
+    lines.push(``);
+    lines.push(`*👉 FINAL PAYABLE BALANCE: ${formatAmt(payableTotal)}*`);
+  } else {
+    if (subtotal != null && ((gst != null && gst > 0) || (shipping != null && shipping > 0))) {
+      lines.push(`*Items Subtotal:* ${formatAmt(subtotal)}`);
+      if (gst != null && gst > 0) {
+        const pct = order.gstPercentage ?? 0;
+        lines.push(`*GST (${pct}%):* ${formatAmt(gst)}`);
+      }
+      if (shipping != null && shipping > 0) {
+        const kgText = shippingKg != null && shippingKg > 0 ? ` (${shippingKg} kg shipping)` : "";
+        lines.push(`*Shipping:* ${formatAmt(shipping)}${kgText}`);
+      }
+    }
+    lines.push(`*Payable Balance: ${formatAmt(payableTotal)}*`);
   }
-
-  lines.push(`*Payable Balance: ${formatAmt(payableTotal)}*`);
 
   if (order.customerContact) {
     lines.push(``);
