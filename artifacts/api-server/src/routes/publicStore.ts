@@ -692,6 +692,7 @@ router.get("/public/orders/:orderId", async (req, res) => {
         isSoldOut,
         soldOutReason: isCatalogUnavailable ? soldOutReason : (effectiveQuantity === 0 ? "Unavailable" : null),
         isPartiallyAvailable: effectiveQuantity > 0 && effectiveQuantity < orderedQty,
+        isCustomizedByVendor: item.availableQuantity != null && item.availableQuantity !== orderedQty,
       };
     });
 

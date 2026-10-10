@@ -57,6 +57,7 @@ export interface OrderItem {
   isPartiallyAvailable?: boolean;
   isSoldOut?: boolean;
   soldOutReason?: string | null;
+  isCustomizedByVendor?: boolean;
 }
 
 export interface Order {

@@ -243,6 +243,7 @@ router.get("/orders/:orderId", requireAuth, requireActiveSubscription, async (re
         isSoldOut,
         soldOutReason: isCatalogUnavailable ? soldOutReason : (effectiveQuantity === 0 ? "Unavailable" : null),
         isPartiallyAvailable: effectiveQuantity > 0 && effectiveQuantity < orderedQty,
+        isCustomizedByVendor: item.availableQuantity != null && item.availableQuantity !== orderedQty,
       };
     });
 
@@ -276,18 +277,14 @@ router.get("/orders/:orderId", requireAuth, requireActiveSubscription, async (re
   }
 });
 
-// PATCH /orders/:orderId/items — vendor adjusts available quantities per line item
+// PATCH /orders/:orderId/items — vendor adjusts available quantities per line item (or restores all)
 router.patch("/orders/:orderId/items", requireAuth, requireActiveSubscription, async (req, res) => {
   try {
     const orderId = String(req.params.orderId);
-    const { items: updates } = req.body as {
-      items: Array<{ id: number; availableQuantity: number }>;
+    const { items: updates, restoreAll } = req.body as {
+      items?: Array<{ id: number; availableQuantity: number | null }>;
+      restoreAll?: boolean;
     };
-
-    if (!Array.isArray(updates)) {
-      res.status(400).json({ error: "items array required" });
-      return;
-    }
 
     const [order] = await db
       .select()
@@ -305,6 +302,21 @@ router.patch("/orders/:orderId/items", requireAuth, requireActiveSubscription, a
       return;
     }
 
+    if (restoreAll) {
+      await db
+        .update(orderItemsTable)
+        .set({ availableQuantity: null })
+        .where(eq(orderItemsTable.orderId, order.id));
+
+      res.json({ success: true, message: "All item quantities restored to original" });
+      return;
+    }
+
+    if (!Array.isArray(updates)) {
+      res.status(400).json({ error: "items array or restoreAll required" });
+      return;
+    }
+
     const existingItems = await db
       .select()
       .from(orderItemsTable)
@@ -316,7 +328,9 @@ router.patch("/orders/:orderId/items", requireAuth, requireActiveSubscription, a
       const existing = existingMap.get(u.id);
       if (!existing) continue;
       const maxQty = existing.quantity ?? 1;
-      const val = Math.max(0, Math.min(Math.floor(Number(u.availableQuantity) || 0), maxQty));
+      const val = (u.availableQuantity === null || u.availableQuantity === undefined)
+        ? null
+        : Math.max(0, Math.min(Math.floor(Number(u.availableQuantity) || 0), maxQty));
 
       await db
         .update(orderItemsTable)

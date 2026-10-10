@@ -76,11 +76,12 @@ export function buildWhatsAppText(
     const variant = item.variantSnapshot ? ` (${item.variantSnapshot})` : "";
     if (item.isSoldOut) {
       lines.push(
-        `• ${item.quantity}× ${item.productNameSnapshot}${variant} (Sold Out) — ₹0.00`
+        `• ${item.productNameSnapshot}${variant}: Ordered ${item.quantity} → Sold Out (0 Available) — ₹0.00`
       );
     } else if (item.isPartiallyAvailable) {
+      const shortCount = item.quantity - (item.effectiveQuantity ?? item.quantity);
       lines.push(
-        `• ${item.quantity}× ${item.productNameSnapshot}${variant} (${item.effectiveQuantity} available) — ${formatAmt(item.priceSnapshot * (item.effectiveQuantity ?? item.quantity))}`
+        `• ${item.productNameSnapshot}${variant}: Ordered ${item.quantity} → Available ${item.effectiveQuantity} (${shortCount} short) — ${formatAmt(item.priceSnapshot * (item.effectiveQuantity ?? item.quantity))}`
       );
     } else {
       lines.push(

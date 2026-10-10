@@ -311,26 +311,46 @@ export default function OrderConfirmation() {
                     className={`w-12 h-12 rounded-lg object-cover shrink-0 border border-border/40 ${item.isSoldOut ? "opacity-50 grayscale" : ""}`}
                   />
                 )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium flex items-center gap-1.5 flex-wrap">
-                    <span className={item.isSoldOut ? "line-through text-muted-foreground" : ""}>
-                      {item.quantity}× {item.productNameSnapshot}
-                    </span>
-                    {item.isSoldOut ? (
-                      <span className="font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded text-[11px]">
-                        (Sold Out)
-                      </span>
-                    ) : item.isPartiallyAvailable ? (
-                      <span className="font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded text-[11px]">
-                        ({item.effectiveQuantity} available)
-                      </span>
-                    ) : null}
+                <div className="flex-1 min-w-0 space-y-1">
+                  <p className="text-sm font-semibold text-foreground">
+                    {item.productNameSnapshot}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
+                  
+                  {/* Quantity Comparison Row */}
+                  {item.isSoldOut ? (
+                    <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                      <span className="text-muted-foreground font-medium">
+                        Ordered: <span className="line-through">{item.quantity} pcs</span>
+                      </span>
+                      <span className="text-muted-foreground font-bold">→</span>
+                      <span className="font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded text-[11px]">
+                        0 Available (Sold Out)
+                      </span>
+                    </div>
+                  ) : item.isPartiallyAvailable ? (
+                    <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                      <span className="text-muted-foreground font-medium">
+                        Ordered: <span className="text-foreground">{item.quantity} pcs</span>
+                      </span>
+                      <span className="text-muted-foreground font-bold">→</span>
+                      <span className="font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded text-[11px]">
+                        Packed/Available: {item.effectiveQuantity} pcs
+                      </span>
+                      <span className="text-amber-700 font-medium text-[11px]">
+                        ({item.quantity - (item.effectiveQuantity ?? 0)} short)
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Quantity: <span className="font-medium text-foreground">{item.quantity} pcs</span>
+                    </p>
+                  )}
+
+                  <p className="text-xs text-muted-foreground">
                     {formatPrice(item.priceSnapshot)} each
                   </p>
                   {item.variantSnapshot && (
-                    <p className="text-xs text-muted-foreground mt-0.5">
+                    <p className="text-xs text-muted-foreground">
                       {item.variantSnapshot}
                     </p>
                   )}
