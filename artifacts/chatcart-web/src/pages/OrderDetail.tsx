@@ -234,9 +234,17 @@ function OrderDetailContent() {
 
                 {(order as any).hasSoldOutItems ? (
                   <div className="pt-4 border-t border-slate-100 space-y-3">
-                    <div className="flex justify-between items-center text-sm text-slate-500">
-                      <span>Original Total ({order.items.length} items)</span>
-                      <span className="line-through">₹{Number(order.totalAmount).toFixed(2)}</span>
+                    <div className="space-y-1 text-sm text-slate-500 pb-2 border-b border-slate-100">
+                      <div className="flex justify-between items-center">
+                        <span>Original Items Total ({order.items.length} items):</span>
+                        <span className="font-semibold text-slate-900">₹{Number((order as any).subtotalAmount || 0).toFixed(2)}</span>
+                      </div>
+                      {((order as any).gstAmount > 0 || (order as any).shippingAmount > 0) && (
+                        <div className="flex justify-between items-center text-xs text-slate-400">
+                          <span>Original Bill (with GST &amp; Shipping):</span>
+                          <span className="line-through">₹{Number(order.totalAmount).toFixed(2)}</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Deductions breakdown */}

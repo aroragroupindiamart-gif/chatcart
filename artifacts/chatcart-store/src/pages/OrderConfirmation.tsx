@@ -345,9 +345,17 @@ export default function OrderConfirmation() {
 
             {order.hasSoldOutItems ? (
               <div className="px-4 py-3 bg-muted/30 space-y-2.5 text-sm">
-                <div className="flex justify-between items-center text-xs text-muted-foreground pb-2 border-b border-border/60">
-                  <span className="font-medium">Original Order Total ({totalItemsCount} {totalItemsCount === 1 ? "item" : "items"})</span>
-                  <span className="line-through font-semibold text-foreground/75">{formatPrice(order.totalAmount)}</span>
+                <div className="space-y-1 text-xs pb-2 border-b border-border/60">
+                  <div className="flex justify-between items-center text-muted-foreground">
+                    <span>Original Items Total ({totalItemsCount} {totalItemsCount === 1 ? "item" : "items"}):</span>
+                    <span className="font-semibold text-foreground">{formatPrice(order.subtotalAmount ?? 0)}</span>
+                  </div>
+                  {order.subtotalAmount != null && Boolean((order.gstAmount && order.gstAmount > 0) || (order.shippingAmount && order.shippingAmount > 0)) && (
+                    <div className="flex justify-between items-center text-[11px] text-muted-foreground">
+                      <span>Original Bill (with GST &amp; Shipping):</span>
+                      <span className="line-through">{formatPrice(order.totalAmount)}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Deductions Breakdown */}
